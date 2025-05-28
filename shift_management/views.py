@@ -7,8 +7,8 @@ from django.db.models import Q
 import json
 import datetime
 import calendar
-from shift_management.models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
-from shift_management.forms import (
+from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from .forms import (
     StaffForm, ShiftTypeForm, ShiftForm, ShiftTemplateForm, 
     ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm
 )
