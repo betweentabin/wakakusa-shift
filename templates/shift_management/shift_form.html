@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}シフト{% if is_create %}登録{% else %}編集{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">シフト{% if is_create %}登録{% else %}編集{% endif %}</h1>
+  
+  <div class="card">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+          <label for="id_staff" class="form-label">スタッフ</label>
+          {{ form.staff }}
+          {% if form.staff.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.staff.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_shift_type" class="form-label">シフト種別</label>
+          {{ form.shift_type }}
+          {% if form.shift_type.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.shift_type.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_date" class="form-label">日付</label>
+          {{ form.date }}
+          {% if form.date.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.date.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="id_start_time" class="form-label">開始時間</label>
+            {{ form.start_time }}
+            {% if form.start_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in form.start_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="col-md-6 mb-3">
+            <label for="id_end_time" class="form-label">終了時間</label>
+            {{ form.end_time }}
+            {% if form.end_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in form.end_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_notes" class="form-label">備考</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.notes.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'shift_management:calendar' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> カレンダーに戻る
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i> 保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

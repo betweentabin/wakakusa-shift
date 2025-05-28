@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}テンプレート{% if is_create %}作成{% else %}編集{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">シフトテンプレート{% if is_create %}作成{% else %}編集{% endif %}</h1>
+  
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="card-title">テンプレート情報</h5>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% if is_create %}{% url 'shift_management:template_create' %}{% else %}?update_template=1{% endif %}">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+          <label for="id_name" class="form-label">テンプレート名</label>
+          {{ form.name }}
+          {% if form.name.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.name.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_description" class="form-label">説明</label>
+          {{ form.description }}
+          {% if form.description.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.description.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="mb-3 form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="id_is_active">有効</label>
+          {% if form.is_active.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.is_active.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'shift_management:template_list' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 戻る
+          </a>
+          <button type="submit" name="update_template" class="btn btn-primary">
+            <i class="fas fa-save"></i> 保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  {% if not is_create %}
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="card-title">テンプレート詳細</h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive mb-4">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>スタッフ</th>
+              <th>曜日</th>
+              <th>シフト種別</th>
+              <th>開始時間</th>
+              <th>終了時間</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for detail in details %}
+            <tr>
+              <td>{{ detail.staff.name }}</td>
+              <td>{{ detail.get_weekday_display }}</td>
+              <td>{{ detail.shift_type.name }}</td>
+              <td>{{ detail.start_time }}</td>
+              <td>{{ detail.end_time }}</td>
+              <td>
+                <form method="post" action="{% url 'shift_management:template_detail_delete' detail.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-danger">
+                    <i class="fas fa-trash"></i> 削除
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center">テンプレート詳細が登録されていません</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      
+      <h5 class="mb-3">詳細を追加</h5>
+      <form method="post" action="?add_detail=1">
+        {% csrf_token %}
+        
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="id_staff" class="form-label">スタッフ</label>
+            {{ detail_form.staff }}
+            {% if detail_form.staff.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in detail_form.staff.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="col-md-6 mb-3">
+            <label for="id_weekday" class="form-label">曜日</label>
+            {{ detail_form.weekday }}
+            {% if detail_form.weekday.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in detail_form.weekday.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <div class="row">
+          <div class="col-md-4 mb-3">
+            <label for="id_shift_type" class="form-label">シフト種別</label>
+            {{ detail_form.shift_type }}
+            {% if detail_form.shift_type.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in detail_form.shift_type.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="col-md-4 mb-3">
+            <label for="id_start_time" class="form-label">開始時間</label>
+            {{ detail_form.start_time }}
+            {% if detail_form.start_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in detail_form.start_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="col-md-4 mb-3">
+            <label for="id_end_time" class="form-label">終了時間</label>
+            {{ detail_form.end_time }}
+            {% if detail_form.end_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in detail_form.end_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <div class="text-end">
+          <button type="submit" name="add_detail" class="btn btn-success">
+            <i class="fas fa-plus"></i> 詳細を追加
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

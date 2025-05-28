@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}シフト種別{% if is_create %}登録{% else %}編集{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">シフト種別{% if is_create %}登録{% else %}編集{% endif %}</h1>
+  
+  <div class="card">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+          <label for="id_name" class="form-label">名前</label>
+          {{ form.name }}
+          {% if form.name.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.name.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_color" class="form-label">表示色</label>
+          {{ form.color }}
+          {% if form.color.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.color.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="id_start_time" class="form-label">デフォルト開始時間</label>
+            {{ form.start_time }}
+            {% if form.start_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in form.start_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          
+          <div class="col-md-6 mb-3">
+            <label for="id_end_time" class="form-label">デフォルト終了時間</label>
+            {{ form.end_time }}
+            {% if form.end_time.errors %}
+            <div class="invalid-feedback d-block">
+              {% for error in form.end_time.errors %}
+              {{ error }}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label for="id_description" class="form-label">説明</label>
+          {{ form.description }}
+          {% if form.description.errors %}
+          <div class="invalid-feedback d-block">
+            {% for error in form.description.errors %}
+            {{ error }}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 戻る
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i> 保存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

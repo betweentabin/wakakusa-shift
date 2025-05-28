@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}シフトカレンダー{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
+<style>
+  .calendar-container {
+    margin-bottom: 30px;
+  }
+  .fc-event {
+    cursor: pointer;
+  }
+  .shift-legend {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .shift-type-item {
+    display: flex;
+    align-items: center;
+    margin-right: 15px;
+    margin-bottom: 5px;
+  }
+  .shift-type-color {
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
+    border-radius: 3px;
+  }
+  .filter-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+  }
+  .action-buttons {
+    margin-bottom: 20px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="mb-4">シフトカレンダー</h1>
+  
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title">シフト表示期間</h5>
+        </div>
+        <div class="card-body">
+          <form method="get" class="row g-3">
+            <div class="col-md-4">
+              <label for="id_start_date" class="form-label">開始日</label>
+              {{ form.start_date }}
+            </div>
+            <div class="col-md-4">
+              <label for="id_end_date" class="form-label">終了日</label>
+              {{ form.end_date }}
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary">表示期間を変更</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="row mt-4">
+    <div class="col-md-12">
+      <div class="action-buttons">
+        <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success">
+          <i class="fas fa-plus"></i> 新規シフト登録
+        </a>
+        <a href="{% url 'shift_management:template_list' %}" class="btn btn-info">
+          <i class="fas fa-clipboard-list"></i> テンプレート管理
+        </a>
+        <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary">
+          <i class="fas fa-users"></i> スタッフ管理
+        </a>
+        <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning">
+          <i class="fas fa-tags"></i> シフト種別管理
+        </a>
+      </div>
+      
+      <div class="filter-section">
+        <h5>表示フィルター</h5>
+        <div class="row">
+          <div class="col-md-6">
+            <label class="form-label">スタッフ</label>
+            <div class="staff-filter">
+              {% for staff in staff_list %}
+              <div class="form-check form-check-inline">
+                <input class="form-check-input staff-checkbox" type="checkbox" id="staff-{{ staff.id }}" value="{{ staff.id }}" checked>
+                <label class="form-check-label" for="staff-{{ staff.id }}">{{ staff.name }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">シフト種別</label>
+            <div class="shift-legend">
+              {% for type in shift_types %}
+              <div class="shift-type-item">
+                <div class="shift-type-color" style="background-color: {{ type.color }};"></div>
+                <span>{{ type.name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="calendar-container">
+        <div id="calendar"></div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- シフト詳細モーダル -->
+  <div class="modal fade" id="shiftDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">シフト詳細</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="shiftDetailContent">
+          <!-- シフト詳細がJSで挿入される -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+          <a href="#" class="btn btn-primary" id="editShiftBtn">編集</a>
+          <a href="#" class="btn btn-danger" id="deleteShiftBtn">削除</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/locales/ja.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'dayGridMonth',
+      locale: 'ja',
+      headerToolbar: {
+        left: 'prev,next today',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+      },
+      events: function(info, successCallback, failureCallback) {
+        // APIからシフトデータを取得
+        fetch(`{% url 'shift_management:api_shifts' %}?start=${info.startStr}&end=${info.endStr}`)
+          .then(response => response.json())
+          .then(data => {
+            successCallback(data);
+          })
+          .catch(error => {
+            console.error('Error fetching shifts:', error);
+            failureCallback(error);
+          });
+      },
+      eventClick: function(info) {
+        // シフト詳細モーダルを表示
+        const shiftId = info.event.id;
+        const staffId = info.event.extendedProps.staff_id;
+        const shiftTypeId = info.event.extendedProps.shift_type_id;
+        const title = info.event.title;
+        const start = info.event.start;
+        const end = info.event.end;
+        
+        // モーダル内容を設定
+        const modalContent = document.getElementById('shiftDetailContent');
+        modalContent.innerHTML = `
+          <p><strong>スタッフ:</strong> ${title.split(' (')[0]}</p>
+          <p><strong>シフト種別:</strong> ${title.split(' (')[1].replace(')', '')}</p>
+          <p><strong>日付:</strong> ${start.toLocaleDateString()}</p>
+          <p><strong>時間:</strong> ${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 〜 ${end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+        `;
+        
+        // 編集・削除ボタンのリンクを設定
+        document.getElementById('editShiftBtn').href = `/shift-management/shift/${shiftId}/edit/`;
+        document.getElementById('deleteShiftBtn').href = `/shift-management/shift/${shiftId}/delete/`;
+        
+        // モーダルを表示
+        const modal = new bootstrap.Modal(document.getElementById('shiftDetailModal'));
+        modal.show();
+      },
+      // その他のカレンダー設定
+      dayMaxEvents: true,
+      eventTimeFormat: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }
+    });
+    
+    calendar.render();
+    
+    // スタッフフィルター機能
+    document.querySelectorAll('.staff-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', function() {
+        const staffId = this.value;
+        const isChecked = this.checked;
+        
+        calendar.getEvents().forEach(event => {
+          if (event.extendedProps.staff_id == staffId) {
+            if (isChecked) {
+              event.setProp('display', 'auto');
+            } else {
+              event.setProp('display', 'none');
+            }
+          }
+        });
+      });
+    });
+  });
+</script>
+{% endblock %}
