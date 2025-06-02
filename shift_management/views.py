@@ -560,19 +560,31 @@ def shift_export(request):
 
 def api_shifts(request):
     """シフトデータをJSON形式で返すAPI"""
-    start_date = request.GET.get('start')
-    end_date = request.GET.get('end')
+    print("[DEBUG] api_shifts called") # DEBUG
+    start_date_str = request.GET.get('start')
+    end_date_str = request.GET.get('end')
     
-    if not start_date or not end_date:
+    print(f"[DEBUG] Received start_date_str: {start_date_str}, end_date_str: {end_date_str}") # DEBUG
+
+    if not start_date_str or not end_date_str:
+        print("[DEBUG] Error: Start date or end date not provided") # DEBUG
         return JsonResponse({'error': '開始日と終了日を指定してください'}, status=400)
     
     try:
-        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+        print(f"[DEBUG] Attempting to parse dates: start={start_date_str}, end={end_date_str}") # DEBUG
+        # ISO形式の日付文字列から日付部分のみを抽出
+        start_date_iso = start_date_str.split('T')[0]
+        end_date_iso = end_date_str.split('T')[0]
+        start_date = datetime.datetime.strptime(start_date_iso, '%Y-%m-%d').date()
+        end_date = datetime.datetime.strptime(end_date_iso, '%Y-%m-%d').date()
+        print(f"[DEBUG] Parsed dates: start_date={start_date}, end_date={end_date}") # DEBUG
     except ValueError:
+        print(f"[DEBUG] Error: Date format incorrect for start={start_date_str} or end={end_date_str}") # DEBUG
         return JsonResponse({'error': '日付形式が正しくありません'}, status=400)
     
+    print(f"[DEBUG] Querying shifts between {start_date} and {end_date}") # DEBUG
     shifts = Shift.objects.filter(date__range=[start_date, end_date]).select_related('staff', 'shift_type')
+    print(f"[DEBUG] Found {shifts.count()} shifts") # DEBUG
     
     events = []
     for shift in shifts:
@@ -586,6 +598,11 @@ def api_shifts(request):
             'shift_type_id': shift.shift_type.id if shift.shift_type else None,
         })
     
+    if events: # DEBUG
+        print(f"[DEBUG] First event example: {events[0]}") # DEBUG
+    else: # DEBUG
+        print("[DEBUG] No events generated") # DEBUG
+        
     return JsonResponse(events, safe=False)
 
 @require_POST
