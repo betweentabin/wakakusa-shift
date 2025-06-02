@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}シフト表印刷・エクスポート{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="mb-4">シフト表印刷・エクスポート</h1>
+  
+  <div class="card">
+    <div class="card-header">
+      <h5 class="card-title">出力設定</h5>
+    </div>
+    <div class="card-body">
+      <form method="post" class="needs-validation" novalidate>
+        {% csrf_token %}
+        
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="{{ form.start_date.id_for_label }}" class="form-label">{{ form.start_date.label }}</label>
+            {{ form.start_date }}
+            {% if form.start_date.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.start_date.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label for="{{ form.end_date.id_for_label }}" class="form-label">{{ form.end_date.label }}</label>
+            {{ form.end_date }}
+            {% if form.end_date.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.end_date.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="{{ form.staff.id_for_label }}" class="form-label">{{ form.staff.label }}</label>
+            {{ form.staff }}
+            <div class="form-text">Ctrlキーを押しながら複数選択できます。未選択の場合は全スタッフが対象になります。</div>
+            {% if form.staff.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.staff.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">{{ form.format_type.label }}</label>
+            <div class="format-selector">
+              {% for choice in form.format_type %}
+                <div class="form-check">
+                  {{ choice.tag }}
+                  <label class="form-check-label" for="{{ choice.id_for_label }}">
+                    {{ choice.choice_label }}
+                  </label>
+                </div>
+              {% endfor %}
+            </div>
+            {% if form.format_type.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.format_type.errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+        
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}
+              {{ error }}
+            {% endfor %}
+          </div>
+        {% endif %}
+        
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'shift_management:calendar' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> カレンダーに戻る
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-file-export"></i> 出力
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // スタッフ選択の全選択/全解除ボタンの追加
+    const staffSelect = document.getElementById('{{ form.staff.id_for_label }}');
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.type = 'button';
+    selectAllBtn.className = 'btn btn-sm btn-outline-secondary mt-2 me-2';
+    selectAllBtn.textContent = '全て選択';
+    selectAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      for (let i = 0; i < staffSelect.options.length; i++) {
+        staffSelect.options[i].selected = true;
+      }
+    });
+    
+    const deselectAllBtn = document.createElement('button');
+    deselectAllBtn.type = 'button';
+    deselectAllBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
+    deselectAllBtn.textContent = '全て解除';
+    deselectAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      for (let i = 0; i < staffSelect.options.length; i++) {
+        staffSelect.options[i].selected = false;
+      }
+    });
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'mt-2';
+    buttonContainer.appendChild(selectAllBtn);
+    buttonContainer.appendChild(deselectAllBtn);
+    staffSelect.parentNode.insertBefore(buttonContainer, staffSelect.nextSibling.nextSibling);
+  });
+</script>
+{% endblock %}

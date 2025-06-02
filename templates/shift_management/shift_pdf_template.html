@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>シフト表</title>
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+        h1 {
+            text-align: center;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .shift-entry {
+            margin-bottom: 2px;
+            padding: 2px;
+            border-radius: 3px;
+        }
+        .weekend {
+            background-color: #f8f8f8;
+        }
+    </style>
+</head>
+<body>
+    <h1>シフト表 ({{ start_date|date:"Y/m/d" }} 〜 {{ end_date|date:"Y/m/d" }})</h1>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>スタッフ名</th>
+                {% for date in date_list %}
+                <th {% if date.weekday == 5 or date.weekday == 6 %}class="weekend"{% endif %}>
+                    {{ date|date:"m/d" }}<br>
+                    ({{ date|date:"D"|slice:":1" }})
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for staff in staff_list %}
+            <tr>
+                <td>{{ staff.name }}</td>
+                {% for date in date_list %}
+                <td {% if date.weekday == 5 or date.weekday == 6 %}class="weekend"{% endif %}>
+                    {% for shift in shifts %}
+                        {% if shift.staff_id == staff.id and shift.date == date %}
+                        <div class="shift-entry" style="background-color: {{ shift.shift_type.color|default:'#3498db' }}20;">
+                            {{ shift.shift_type.name|default:"未設定" }}<br>
+                            {{ shift.start_time|time:"H:i" }}-{{ shift.end_time|time:"H:i" }}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div style="margin-top: 20px; font-size: 10px; text-align: right;">
+        出力日時: {% now "Y/m/d H:i" %}
+    </div>
+</body>
+</html>

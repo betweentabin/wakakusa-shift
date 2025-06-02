@@ -1,16 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Q
+from django.urls import reverse
+from django.template.loader import render_to_string
 import json
 import datetime
 import calendar
+import csv
+from io import StringIO
+import tempfile
+import os
+from weasyprint import HTML, CSS
 from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 from .forms import (
     StaffForm, ShiftTypeForm, ShiftForm, ShiftTemplateForm, 
-    ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm
+    ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
+    BulkShiftForm, ShiftExportForm  # 新規追加フォーム
 )
 
 def shift_calendar(request):
@@ -124,7 +132,8 @@ def shift_create(request):
         if form.is_valid():
             form.save()
             messages.success(request, 'シフトを登録しました。')
-            return redirect('shift_management:calendar')
+            # カレンダー更新フラグを追加してリダイレクト
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     else:
         # GETパラメータから初期値を設定
         initial = {}
@@ -145,7 +154,8 @@ def shift_edit(request, pk):
         if form.is_valid():
             form.save()
             messages.success(request, 'シフトを更新しました。')
-            return redirect('shift_management:calendar')
+            # カレンダー更新フラグを追加してリダイレクト
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     else:
         form = ShiftForm(instance=shift)
     
@@ -157,9 +167,85 @@ def shift_delete(request, pk):
     if request.method == 'POST':
         shift.delete()
         messages.success(request, 'シフトを削除しました。')
-        return redirect('shift_management:calendar')
+        # カレンダー更新フラグを追加してリダイレクト
+        return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     
     return render(request, 'shift_management/shift_delete.html', {'shift': shift})
+
+def bulk_shift_create(request):
+    """複数シフト一括登録（新規追加）"""
+    if request.method == 'POST':
+        form = BulkShiftForm(request.POST)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            staff_list = form.cleaned_data['staff']
+            shift_type = form.cleaned_data['shift_type']
+            weekdays = form.cleaned_data['weekdays']
+            start_time = form.cleaned_data['start_time']
+            end_time = form.cleaned_data['end_time']
+            overwrite = form.cleaned_data['overwrite']
+            
+            # 日付範囲内の各日に対してシフトを作成
+            current_date = start_date
+            shifts_created = 0
+            
+            while current_date <= end_date:
+                weekday = current_date.weekday()
+                
+                # 選択された曜日のみ処理
+                if str(weekday) in weekdays:
+                    for staff in staff_list:
+                        # 既存のシフトをチェック
+                        existing_shifts = Shift.objects.filter(
+                            staff=staff,
+                            date=current_date
+                        )
+                        
+                        if existing_shifts.exists() and not overwrite:
+                            # 既存のシフトがあり、上書きしない設定の場合はスキップ
+                            continue
+                        
+                        # 既存のシフトを削除（上書きする場合）
+                        if existing_shifts.exists() and overwrite:
+                            existing_shifts.delete()
+                        
+                        # 新しいシフトを作成
+                        Shift.objects.create(
+                            staff=staff,
+                            shift_type=shift_type,
+                            date=current_date,
+                            start_time=start_time,
+                            end_time=end_time
+                        )
+                        shifts_created += 1
+                
+                current_date += datetime.timedelta(days=1)
+            
+            messages.success(request, f'{shifts_created}件のシフトを一括登録しました。')
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
+    else:
+        # デフォルトでは今日から1週間を設定
+        today = timezone.now().date()
+        next_week = today + datetime.timedelta(days=7)
+        
+        # GETパラメータから初期値を設定
+        initial = {
+            'start_date': request.GET.get('start_date', today),
+            'end_date': request.GET.get('end_date', next_week)
+        }
+        
+        form = BulkShiftForm(initial=initial)
+    
+    # シフト種別にデフォルト時間のデータ属性を追加
+    for field in form.fields['shift_type'].choices:
+        if hasattr(field, 'instance') and field.instance:
+            field.attrs = {
+                'data-start-time': field.instance.start_time.strftime('%H:%M'),
+                'data-end-time': field.instance.end_time.strftime('%H:%M')
+            }
+    
+    return render(request, 'shift_management/bulk_shift_form.html', {'form': form})
 
 def shift_type_list(request):
     """シフト種別一覧表示"""
@@ -321,7 +407,7 @@ def template_apply(request, pk):
                 current_date += datetime.timedelta(days=1)
             
             messages.success(request, f'テンプレートを適用し、{shifts_created}件のシフトを作成しました。')
-            return redirect('shift_management:calendar')
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     else:
         # デフォルトでは翌週の月曜から日曜までを設定
         today = timezone.now().date()
@@ -337,6 +423,140 @@ def template_apply(request, pk):
         })
     
     return render(request, 'shift_management/template_apply.html', {'form': form, 'template': template})
+
+def shift_export(request):
+    """シフト表の印刷・エクスポート（新規追加）"""
+    if request.method == 'POST':
+        form = ShiftExportForm(request.POST)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            selected_staff = form.cleaned_data['staff']
+            format_type = form.cleaned_data['format_type']
+            
+            # スタッフフィルター
+            if selected_staff:
+                staff_list = selected_staff
+            else:
+                staff_list = Staff.objects.filter(is_active=True)
+            
+            # シフトデータ取得
+            shifts = Shift.objects.filter(
+                date__range=[start_date, end_date],
+                staff__in=staff_list
+            ).select_related('staff', 'shift_type').order_by('date', 'start_time')
+            
+            # 日付範囲の全日付リスト作成
+            date_list = []
+            current_date = start_date
+            while current_date <= end_date:
+                date_list.append(current_date)
+                current_date += datetime.timedelta(days=1)
+            
+            # 出力形式に応じた処理
+            if format_type == 'pdf':
+                # PDF出力
+                context = {
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'staff_list': staff_list,
+                    'date_list': date_list,
+                    'shifts': shifts,
+                }
+                
+                # HTMLテンプレートをレンダリング
+                html_string = render_to_string('shift_management/shift_pdf_template.html', context)
+                
+                # WeasyPrintでPDF生成
+                html = HTML(string=html_string)
+                css = CSS(string='''
+                    @page {
+                        size: A4 landscape;
+                        margin: 1cm;
+                    }
+                    body {
+                        font-family: sans-serif;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 4px;
+                        text-align: center;
+                        font-size: 12px;
+                    }
+                    th {
+                        background-color: #f2f2f2;
+                    }
+                    .shift-entry {
+                        margin-bottom: 2px;
+                        padding: 2px;
+                        border-radius: 3px;
+                    }
+                ''')
+                
+                # PDFファイル生成
+                pdf_file = html.write_pdf(stylesheets=[css])
+                
+                # レスポンス作成
+                response = HttpResponse(pdf_file, content_type='application/pdf')
+                filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.pdf'
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                
+                return response
+                
+            elif format_type == 'csv':
+                # CSV出力
+                response = HttpResponse(content_type='text/csv')
+                filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.csv'
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                
+                # CSVライター設定
+                response.write('\ufeff')  # BOMを追加してExcelでの文字化け対策
+                writer = csv.writer(response)
+                
+                # ヘッダー行
+                header = ['スタッフ名']
+                for date in date_list:
+                    header.append(f'{date.strftime("%Y/%m/%d")}({["月","火","水","木","金","土","日"][date.weekday()]})')
+                writer.writerow(header)
+                
+                # スタッフごとの行
+                for staff in staff_list:
+                    row = [staff.name]
+                    for date in date_list:
+                        # その日のシフトを取得
+                        day_shifts = [s for s in shifts if s.staff_id == staff.id and s.date == date]
+                        if day_shifts:
+                            shift_texts = []
+                            for shift in day_shifts:
+                                shift_type_name = shift.shift_type.name if shift.shift_type else "未設定"
+                                shift_texts.append(f'{shift_type_name} {shift.start_time.strftime("%H:%M")}-{shift.end_time.strftime("%H:%M")}')
+                            row.append('\n'.join(shift_texts))
+                        else:
+                            row.append('')
+                    writer.writerow(row)
+                
+                return response
+    else:
+        # デフォルトでは今月の1日から末日までを設定
+        today = timezone.now().date()
+        year = today.year
+        month = today.month
+        _, last_day = calendar.monthrange(year, month)
+        
+        start_date = datetime.date(year, month, 1)
+        end_date = datetime.date(year, month, last_day)
+        
+        form = ShiftExportForm(initial={
+            'start_date': start_date,
+            'end_date': end_date,
+            'format_type': 'pdf'
+        })
+    
+    return render(request, 'shift_management/shift_export.html', {'form': form})
 
 def api_shifts(request):
     """シフトデータをJSON形式で返すAPI"""
@@ -367,3 +587,38 @@ def api_shifts(request):
         })
     
     return JsonResponse(events, safe=False)
+
+@require_POST
+def api_shift_update(request):
+    """ドラッグ＆ドロップでシフトを更新するAPI（新規追加）"""
+    shift_id = request.POST.get('shift_id')
+    new_date = request.POST.get('new_date')
+    new_start_time = request.POST.get('new_start_time')
+    new_end_time = request.POST.get('new_end_time')
+    
+    if not all([shift_id, new_date, new_start_time, new_end_time]):
+        return JsonResponse({'error': '必要なパラメータが不足しています'}, status=400)
+    
+    try:
+        shift = Shift.objects.get(pk=shift_id)
+        shift.date = datetime.datetime.strptime(new_date, '%Y-%m-%d').date()
+        
+        # 時間の変換
+        from django.utils.dateparse import parse_time
+        shift.start_time = parse_time(new_start_time)
+        shift.end_time = parse_time(new_end_time)
+        
+        shift.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'シフトを更新しました',
+            'shift_id': shift.id,
+            'date': shift.date.isoformat(),
+            'start_time': shift.start_time.isoformat(),
+            'end_time': shift.end_time.isoformat()
+        })
+    except Shift.DoesNotExist:
+        return JsonResponse({'error': '指定されたシフトが見つかりません'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': f'エラーが発生しました: {str(e)}'}, status=500)
