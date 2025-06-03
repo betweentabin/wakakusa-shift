@@ -33,6 +33,8 @@ urlpatterns = [
     path('template/<int:pk>/edit/', views.template_edit, name='template_edit'),
     path('template/<int:pk>/delete/', views.template_delete, name='template_delete'),
     path('template/<int:pk>/apply/', views.template_apply, name='template_apply'),
+    # シフトテンプレート詳細の削除（新規追加）
+    path('template/detail/<int:pk>/delete/', views.template_detail_delete, name='template_detail_delete'),
     
     # シフト印刷・エクスポート（新規追加）
     path('export/', views.shift_export, name='shift_export'),
@@ -41,4 +43,5 @@ urlpatterns = [
     path('api/shifts/', views.api_shifts, name='api_shifts'),
     # ドラッグ＆ドロップ用API（新規追加）
     path('api/shift-update/', views.api_shift_update, name='api_shift_update'),
+    path('api/shift-delete/', views.api_shift_delete, name='api_shift_delete'),
 ]

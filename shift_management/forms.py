@@ -1,6 +1,18 @@
 from django import forms
 from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 
+# 時間選択肢を生成するヘルパー関数
+def get_time_choices(interval_minutes=30):
+    choices = []
+    # 00:00 から 23:59 まで指定された間隔で選択肢を生成
+    for hour in range(24):
+        for minute in range(0, 60, interval_minutes):
+            time_val = f"{hour:02d}:{minute:02d}"
+            choices.append((time_val, time_val))
+    return choices
+
+TIME_CHOICES = get_time_choices(30) # 30分刻みの選択肢
+
 class StaffForm(forms.ModelForm):
     class Meta:
         model = Staff
@@ -14,27 +26,70 @@ class StaffForm(forms.ModelForm):
         }
 
 class ShiftTypeForm(forms.ModelForm):
+    start_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='デフォルト開始時間'
+    )
+    end_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='デフォルト終了時間'
+    )
+
     class Meta:
         model = ShiftType
         fields = ['name', 'color', 'start_time', 'end_time', 'description']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'color': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
-            'start_time': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '09:00'}),
-            'end_time': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '17:00'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def clean_start_time(self):
+        """開始時間のバリデーションと変換"""
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(start_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+
+    def clean_end_time(self):
+        """終了時間のバリデーションと変換"""
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(end_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        
+        if start_time and end_time and start_time >= end_time:
+            raise forms.ValidationError('終了時間は開始時間より後である必要があります。')
+        
+        return cleaned_data
 
 class ShiftForm(forms.ModelForm):
     # 明示的にフィールドを定義して必須属性を制御
     date = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
     )
-    start_time = forms.CharField(
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '09:00'})
+    start_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
-    end_time = forms.CharField(
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '17:00'})
+    end_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     class Meta:
@@ -48,18 +103,18 @@ class ShiftForm(forms.ModelForm):
     
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
-        start_time = self.cleaned_data.get('start_time')
-        if not start_time:
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', start_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', start_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(start_time)
+        time_obj = parse_time(start_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         
@@ -67,18 +122,18 @@ class ShiftForm(forms.ModelForm):
     
     def clean_end_time(self):
         """終了時間のバリデーションと変換"""
-        end_time = self.cleaned_data.get('end_time')
-        if not end_time:
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', end_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', end_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(end_time)
+        time_obj = parse_time(end_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         
@@ -130,13 +185,15 @@ class BulkShiftForm(forms.Form):
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
         required=False
     )
-    start_time = forms.CharField(
+    start_time = forms.ChoiceField(
         label='開始時間',
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '09:00'})
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
-    end_time = forms.CharField(
+    end_time = forms.ChoiceField(
         label='終了時間',
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '17:00'})
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     overwrite = forms.BooleanField(
         label='既存のシフトを上書きする',
@@ -147,18 +204,18 @@ class BulkShiftForm(forms.Form):
     
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
-        start_time = self.cleaned_data.get('start_time')
-        if not start_time:
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', start_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', start_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(start_time)
+        time_obj = parse_time(start_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         
@@ -166,18 +223,18 @@ class BulkShiftForm(forms.Form):
     
     def clean_end_time(self):
         """終了時間のバリデーションと変換"""
-        end_time = self.cleaned_data.get('end_time')
-        if not end_time:
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', end_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', end_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(end_time)
+        time_obj = parse_time(end_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         
@@ -217,11 +274,13 @@ class ShiftTemplateForm(forms.ModelForm):
 
 class ShiftTemplateDetailForm(forms.ModelForm):
     # 明示的にフィールドを定義して必須属性を制御
-    start_time = forms.CharField(
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '09:00'})
+    start_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
-    end_time = forms.CharField(
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '17:00'})
+    end_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     
     class Meta:
@@ -235,18 +294,18 @@ class ShiftTemplateDetailForm(forms.ModelForm):
     
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
-        start_time = self.cleaned_data.get('start_time')
-        if not start_time:
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', start_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', start_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 09:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(start_time)
+        time_obj = parse_time(start_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         
@@ -254,18 +313,18 @@ class ShiftTemplateDetailForm(forms.ModelForm):
     
     def clean_end_time(self):
         """終了時間のバリデーションと変換"""
-        end_time = self.cleaned_data.get('end_time')
-        if not end_time:
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
             return None
         
-        # HH:MM形式のバリデーション
-        import re
-        if not re.match(r'^\d{1,2}:\d{2}$', end_time):
-            raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
+        # HH:MM形式のバリデーションはChoiceFieldにより不要に
+        # import re
+        # if not re.match(r'^\\d{1,2}:\\d{2}$', end_time):
+        #     raise forms.ValidationError('時間は「HH:MM」形式で入力してください（例: 17:00）')
         
         # Djangoのtimeフィールド用に変換
         from django.utils.dateparse import parse_time
-        time_obj = parse_time(end_time)
+        time_obj = parse_time(end_time_str)
         if not time_obj:
             raise forms.ValidationError('無効な時間形式です。「HH:MM」形式で入力してください')
         

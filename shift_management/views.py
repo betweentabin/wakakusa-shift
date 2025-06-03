@@ -424,6 +424,20 @@ def template_apply(request, pk):
     
     return render(request, 'shift_management/template_apply.html', {'form': form, 'template': template})
 
+def template_detail_delete(request, pk):
+    """シフトテンプレート詳細を削除"""
+    detail = get_object_or_404(ShiftTemplateDetail, pk=pk)
+    template_pk = detail.template.pk # Get parent template's PK for redirection
+
+    if request.method == 'POST':
+        detail.delete()
+        messages.success(request, 'テンプレート詳細を削除しました。')
+        # Redirect back to the template edit page
+        return redirect('shift_management:template_edit', pk=template_pk)
+    
+    # For GET request, display confirmation page
+    return render(request, 'shift_management/template_detail_delete.html', {'detail': detail})
+
 def shift_export(request):
     """シフト表の印刷・エクスポート（新規追加）"""
     if request.method == 'POST':
@@ -639,3 +653,16 @@ def api_shift_update(request):
         return JsonResponse({'error': '指定されたシフトが見つかりません'}, status=404)
     except Exception as e:
         return JsonResponse({'error': f'エラーが発生しました: {str(e)}'}, status=500)
+
+@require_POST
+def api_shift_delete(request):
+    """Ajax用シフト削除API"""
+    shift_id = request.POST.get('shift_id')
+    if not shift_id:
+        return JsonResponse({'error': 'shift_idが指定されていません'}, status=400)
+    try:
+        shift = Shift.objects.get(pk=shift_id)
+        shift.delete()
+        return JsonResponse({'success': True})
+    except Shift.DoesNotExist:
+        return JsonResponse({'error': 'シフトが存在しません'}, status=404)

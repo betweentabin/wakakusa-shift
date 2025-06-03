@@ -177,7 +177,7 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
           <a href="#" class="btn btn-primary" id="editShiftBtn">編集</a>
-          <a href="#" class="btn btn-danger" id="deleteShiftBtn">削除</a>
+          <button type="button" class="btn btn-danger" id="deleteShiftBtn" data-shift-id="">削除</button>
         </div>
       </div>
     </div>
@@ -265,7 +265,7 @@
           
           // 編集・削除ボタンのリンクを設定
           document.getElementById('editShiftBtn').href = `/shift-management/shift/${shiftId}/edit/`;
-          document.getElementById('deleteShiftBtn').href = `/shift-management/shift/${shiftId}/delete/`;
+          document.getElementById('deleteShiftBtn').dataset.shiftId = shiftId;
           
           // モーダルを表示
           const modal = new bootstrap.Modal(document.getElementById('shiftDetailModal'));
@@ -277,9 +277,13 @@
           document.getElementById('selectedDate').textContent = info.dateStr;
           
           // 各ボタンのリンクを設定
-          document.getElementById('singleShiftBtn').href = `/shift-management/shift/create/?date=${info.dateStr}`;
-          document.getElementById('bulkShiftBtn').href = `/shift-management/shift/bulk-create/?start_date=${info.dateStr}&end_date=${info.dateStr}`;
-          document.getElementById('templateBtn').href = `/shift-management/template/`;
+          const singleShiftBaseUrl = "{% url 'shift_management:shift_create' %}";
+          document.getElementById('singleShiftBtn').href = `${singleShiftBaseUrl}?date=${info.dateStr}`;
+
+          const bulkShiftBaseUrl = "{% url 'shift_management:bulk_shift_create' %}";
+          document.getElementById('bulkShiftBtn').href = `${bulkShiftBaseUrl}?start_date=${info.dateStr}&end_date=${info.dateStr}`;
+          
+          document.getElementById('templateBtn').href = "{% url 'shift_management:template_list' %}"; 
           
           // モーダルを表示
           const modal = new bootstrap.Modal(document.getElementById('newShiftModal'));
@@ -350,7 +354,9 @@
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('refresh_calendar') && urlParams.get('refresh_calendar') === 'true') {
         // カレンダーを更新
-        calendar.refetchEvents();
+        if (calendar) {
+          calendar.refetchEvents();
+        }
         
         // URLからパラメータを削除（ブラウザの戻るボタンで戻ったときに再度更新されないように）
         const newUrl = window.location.pathname;
@@ -358,21 +364,31 @@
         
         // 更新完了メッセージを表示
         const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-success alert-dismissible fade show';
+        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3'; // mt-3を追加
         alertDiv.setAttribute('role', 'alert');
         alertDiv.innerHTML = `
           <strong>更新完了!</strong> カレンダーが最新の情報に更新されました。
           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
         
-        // アラートを表示
-        const calendarContainer = document.querySelector('.calendar-container');
-        calendarContainer.insertBefore(alertDiv, calendarContainer.firstChild);
+        // アラートを表示 (h1タグの後に挿入)
+        const mainHeading = document.querySelector('.container-fluid.py-4 > h1');
+        if (mainHeading) {
+          mainHeading.parentNode.insertBefore(alertDiv, mainHeading.nextSibling);
+        } else {
+          // h1が見つからない場合はコンテナの最初に追加
+           const container = document.querySelector('.container-fluid.py-4');
+           if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+           }
+        }
         
         // 5秒後にアラートを自動的に閉じる
         setTimeout(() => {
-          const bsAlert = new bootstrap.Alert(alertDiv);
-          bsAlert.close();
+          const bsAlert = bootstrap.Alert.getOrCreateInstance(alertDiv);
+          if (bsAlert) {
+            bsAlert.close();
+          }
         }, 5000);
       }
     }
@@ -386,34 +402,119 @@
         const staffId = this.value;
         const isChecked = this.checked;
         
-        calendar.getEvents().forEach(event => {
-          if (event.extendedProps.staff_id == staffId) {
-            if (isChecked) {
-              event.setProp('display', 'auto');
-            } else {
-              event.setProp('display', 'none');
-            }
-          }
-        });
+        if (calendar) {
+            calendar.getEvents().forEach(event => {
+              if (event.extendedProps.staff_id == staffId) {
+                if (isChecked) {
+                  event.setProp('display', 'auto');
+                } else {
+                  event.setProp('display', 'none');
+                }
+              }
+            });
+        }
       });
     });
     
     // 全選択/全解除ボタンの機能（新規追加）
     document.getElementById('selectAllStaff').addEventListener('click', function() {
       document.querySelectorAll('.staff-checkbox').forEach(checkbox => {
-        checkbox.checked = true;
-        // イベントを発火させて表示を更新
-        checkbox.dispatchEvent(new Event('change'));
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change'));
+        }
       });
     });
     
     document.getElementById('deselectAllStaff').addEventListener('click', function() {
       document.querySelectorAll('.staff-checkbox').forEach(checkbox => {
-        checkbox.checked = false;
-        // イベントを発火させて表示を更新
-        checkbox.dispatchEvent(new Event('change'));
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change'));
+        }
       });
     });
+
+    // Ajaxによるシフト削除処理
+    const deleteShiftButton = document.getElementById('deleteShiftBtn');
+    if (deleteShiftButton) {
+      deleteShiftButton.addEventListener('click', function() {
+        const shiftId = this.dataset.shiftId;
+        if (!shiftId) {
+          alert('削除対象のシフトIDが取得できませんでした。');
+          return;
+        }
+
+        if (!confirm('本当にこのシフトを削除しますか？')) {
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('shift_id', shiftId);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        fetch(`/api/shift-delete/`, { 
+          method: 'POST',
+          body: formData
+        })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || '削除に失敗しました。'); });
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success) {
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('shiftDetailModal'));
+            if (modalInstance) {
+              modalInstance.hide();
+            }
+            if (calendar) {
+              calendar.refetchEvents();
+            }
+          } else {
+            alert(data.error || '削除に失敗しました。');
+          }
+        })
+        .catch(error => {
+          console.error('Error deleting shift:', error);
+          alert('エラーが発生しました: ' + error.message);
+        });
+      });
+    }
+
+    // 表示期間変更フォームの処理
+    const dateRangeForm = document.querySelector('.card-body form'); 
+    if (dateRangeForm) {
+      dateRangeForm.addEventListener('submit', function(event) {
+        event.preventDefault(); 
+
+        const startDateInput = document.getElementById('id_start_date'); 
+        const endDateInput = document.getElementById('id_end_date');     
+
+        if (!startDateInput || !endDateInput) {
+          console.error('日付入力フィールドが見つかりません。');
+          return;
+        }
+
+        const startDate = startDateInput.value;
+        const endDate = endDateInput.value;
+
+        if (startDate && calendar) {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('start_date', startDate);
+          if (endDate) {
+            currentUrl.searchParams.set('end_date', endDate);
+          } else {
+            currentUrl.searchParams.delete('end_date');
+          }
+          window.history.pushState({path: currentUrl.href}, '', currentUrl.href);
+
+          calendar.gotoDate(startDate);
+          calendar.refetchEvents();
+        }
+      });
+    }
   });
 </script>
 {% endblock %}
