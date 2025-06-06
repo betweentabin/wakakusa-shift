@@ -1,0 +1,79 @@
+/* 基本的なフォントサイズを画面幅に応じて調整 */
+html {
+  font-size: 16px; /* デフォルトのフォントサイズ */
+}
+
+/* 中程度の画面 (例: 992px未満) */
+@media (max-width: 991.98px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* 小さな画面 (例: 768px未満) */
+@media (max-width: 767.98px) {
+  html {
+    font-size: 14px; /* 少し小さくする */
+  }
+
+  h1, .h1 { font-size: calc(1.3rem + 0.6vw); } /* Bootstrap 5 の RFS に近い考え方 */
+  h2, .h2 { font-size: calc(1.25rem + 0.3vw); }
+  h3, .h3 { font-size: calc(1.2rem + 0.15vw); }
+
+  /* コンテナの左右パディングを少し減らす */
+  .container, .container-fluid {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
+/* さらに小さな画面 (例: 576px未満) */
+@media (max-width: 575.98px) {
+  html {
+    font-size: 13px;
+  }
+
+  h1, .h1 { font-size: 1.5rem; }
+  h2, .h2 { font-size: 1.3rem; }
+  h3, .h3 { font-size: 1.15rem; }
+
+  /* ボタン群が縦積みになるように調整 */
+  .btn-toolbar,
+  .btn-group {
+    flex-direction: column;
+    align-items: stretch; /* ボタン幅を親に合わせる */
+  }
+
+  .btn-toolbar > .btn,
+  .btn-toolbar > .btn-group,
+  .btn-group > .btn {
+    width: 100%; /* 幅を100%に */
+    margin-bottom: 0.5rem;
+  }
+
+  /* 最後の要素以外のマージンを調整 */
+  .btn-toolbar > .btn:not(:last-child),
+  .btn-toolbar > .btn-group:not(:last-child),
+  .btn-group > .btn:not(:last-child) {
+    margin-right: 0;
+  }
+   .btn-group > .btn:not(:first-child) {
+    margin-left: 0;
+  }
+
+  /* フォーム要素のラベルと入力欄のレイアウト調整 */
+  .form-label {
+    margin-bottom: 0.25rem;
+  }
+  .form-control, .form-select {
+    margin-bottom: 0.75rem; /* 下に少しマージンを追加して連続する場合の間隔を確保 */
+  }
+}
+
+/* 汎用的なテーブルレスポンシブ対応のクラス */
+.table-responsive-custom {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* iOSでの慣性スクロール */
+} 

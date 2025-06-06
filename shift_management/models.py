@@ -39,6 +39,15 @@ class ShiftType(models.Model):
 
 class Shift(models.Model):
     """シフト情報モデル"""
+    DELETION_REASON_CHOICES = [
+        ('public_holiday', '公休'),
+        ('paid_leave', '有給休暇'),
+        ('paid_leave_am', '有給休暇(午前)'),
+        ('paid_leave_pm', '有給休暇(午後)'),
+        ('absenteeism', '欠勤'),
+        ('other', 'その他'),
+    ]
+
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
     shift_type = models.ForeignKey(ShiftType, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="シフト種別")
     date = models.DateField(verbose_name="日付")
@@ -48,6 +57,15 @@ class Shift(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
+    is_deleted_with_reason = models.BooleanField(default=False, verbose_name="事由付き削除フラグ")
+    deletion_reason = models.CharField(
+        max_length=50,
+        choices=DELETION_REASON_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name="削除事由"
+    )
+
     class Meta:
         verbose_name = "シフト"
         verbose_name_plural = "シフト"
@@ -55,7 +73,10 @@ class Shift(models.Model):
         unique_together = ['staff', 'date', 'start_time']
 
     def __str__(self):
-        return f"{self.staff.name} - {self.date} ({self.start_time}〜{self.end_time})"
+        status = ""
+        if self.is_deleted_with_reason:
+            status = f" (削除事由: {self.get_deletion_reason_display()})"
+        return f"{self.staff.name} - {self.date} ({self.start_time}〜{self.end_time}){status}"
 
 
 class ShiftTemplate(models.Model):

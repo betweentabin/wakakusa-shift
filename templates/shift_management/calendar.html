@@ -67,6 +67,62 @@
     .extended-action-buttons .btn {
       margin-bottom: 5px;
     }
+    /* スタッフフィルター用レスポンシブ対応 */
+    .staff-filter .form-check-inline {
+      display: block;
+      margin-right: 0; /* form-check-inlineによる右マージンをリセット */
+      margin-bottom: 0.5rem; /* 適度な間隔 */
+    }
+  }
+
+  /* FullCalendarのレスポンシブ対応強化 */
+  @media (max-width: 767.98px) { /* Bootstrapのsmブレークポイント未満 */
+    /* ヘッダーツールバーの要素が縦積みになるように調整 */
+    .fc-header-toolbar {
+      flex-direction: column;
+      align-items: stretch; /* 各要素を親の幅に合わせる */
+      gap: 10px; /* 各ツールバーセクション間の間隔 */
+    }
+
+    .fc-header-toolbar .fc-toolbar-chunk {
+      display: flex;
+      justify-content: center; /* 中央揃え */
+      margin-bottom: 5px; /* 各チャンクの下マージン */
+    }
+
+    /* タイトルを少し小さく */
+    .fc-header-toolbar .fc-toolbar-title {
+      font-size: 1.1rem; /* 現在のhtmlフォントサイズ(14px想定)に対して調整 */
+      margin: 0 0 5px 0; /* タイトルの上下マージン調整 */
+    }
+
+    /* ボタンのフォントサイズ調整 */
+    .fc-button {
+      font-size: 0.8rem; /* ボタンの文字を少し小さく */
+      padding: 0.3em 0.5em; /* ボタンのパディングを調整 */
+    }
+
+    /* 日付セルの "+X more" リンクのスタイル調整 */
+    .fc-daygrid-day-bottom .fc-daygrid-more-link {
+      font-size: 0.75rem; /* 文字を小さく */
+      padding: 1px 3px; /* パディングを調整 */
+    }
+  }
+
+  @media (max-width: 400px) { /* さらに小さい画面用の調整 */
+    .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group { /* 右端のボタングループ (月/週/日) */
+      display: flex;
+      flex-direction: column; /* 超小型画面では縦積みに */
+      width: 100%;
+    }
+    .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group .fc-button {
+        width: 100%;
+        margin-bottom: 3px;
+        box-sizing: border-box;
+    }
+     .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group .fc-button:not(:last-child) {
+        margin-right: 0; /* ボタングループ内のマージンリセット */
+    }
   }
 </style>
 {% endblock %}
@@ -225,13 +281,29 @@
     
     // カレンダーインスタンスを初期化
     function initCalendar() {
+      let initialView = 'dayGridMonth';
+      if (window.innerWidth < 768) {
+        initialView = 'listWeek';
+      }
+
       calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
+        initialView: initialView,
         locale: 'ja',
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay'
+          right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        windowResize: function(arg) {
+          if (window.innerWidth < 768) {
+            if (calendar.view.type !== 'listWeek') {
+              calendar.changeView('listWeek');
+            }
+          } else {
+            if (calendar.view.type === 'listWeek') {
+              calendar.changeView('dayGridMonth');
+            }
+          }
         },
         events: function(info, successCallback, failureCallback) {
           // APIからシフトデータを取得
