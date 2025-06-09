@@ -18,21 +18,21 @@ source venv/bin/activate
 
 # 4. 必要なパッケージをインストール
 pip install -r requirements.txt
-```
+
 
 ## 🗄️ データベース準備
 
 ```bash
 # データベースを作成
 python manage.py migrate
-```
+
 
 ## ▶️ サーバー起動
 
 ```bash
 # サーバーを起動
 python manage.py runserver
-```
+
 
 ## 🌐 ブラウザで確認
 
