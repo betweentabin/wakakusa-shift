@@ -51,8 +51,8 @@ class Shift(models.Model):
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
     shift_type = models.ForeignKey(ShiftType, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="シフト種別")
     date = models.DateField(verbose_name="日付")
-    start_time = models.TimeField(verbose_name="開始時間")
-    end_time = models.TimeField(verbose_name="終了時間")
+    start_time = models.TimeField(null=True, blank=True, verbose_name="開始時間")
+    end_time = models.TimeField(null=True, blank=True, verbose_name="終了時間")
     notes = models.TextField(blank=True, null=True, verbose_name="備考")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
@@ -70,13 +70,16 @@ class Shift(models.Model):
         verbose_name = "シフト"
         verbose_name_plural = "シフト"
         ordering = ['date', 'start_time']
-        unique_together = ['staff', 'date', 'start_time']
+        # unique_together = ['staff', 'date', 'start_time']  # 事由登録でstart_timeがNullになるため一時的にコメントアウト
 
     def __str__(self):
-        status = ""
         if self.is_deleted_with_reason:
-            status = f" (削除事由: {self.get_deletion_reason_display()})"
-        return f"{self.staff.name} - {self.date} ({self.start_time}〜{self.end_time}){status}"
+            return f"{self.staff.name} - {self.date} (事由: {self.get_deletion_reason_display()})"
+        else:
+            time_str = ""
+            if self.start_time and self.end_time:
+                time_str = f" ({self.start_time}〜{self.end_time})"
+            return f"{self.staff.name} - {self.date}{time_str}"
 
 
 class ShiftTemplate(models.Model):

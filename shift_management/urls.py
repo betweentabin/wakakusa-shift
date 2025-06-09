@@ -18,6 +18,9 @@ urlpatterns = [
     path('shift/<int:pk>/edit/', views.shift_edit, name='shift_edit'),
     path('shift/<int:pk>/delete/', views.shift_delete, name='shift_delete'),
     
+    # 事由登録
+    path('shift/reason/create/', views.shift_reason_create, name='shift_reason_create'),
+    
     # 複数シフト一括登録（新規追加）
     path('shift/bulk-create/', views.bulk_shift_create, name='bulk_shift_create'),
     
@@ -44,4 +47,7 @@ urlpatterns = [
     # ドラッグ＆ドロップ用API（新規追加）
     path('api/shift-update/', views.api_shift_update, name='api_shift_update'),
     path('api/shift-delete/', views.api_shift_delete, name='api_shift_delete'),
+    
+    # 時間チャート
+    path('time-chart/', views.time_chart, name='time_chart'),
 ]

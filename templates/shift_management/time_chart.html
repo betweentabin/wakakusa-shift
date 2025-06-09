@@ -1,0 +1,712 @@
+{% extends "base.html" %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}時間チャート{% endblock %}
+
+{% block extra_css %}
+<style>
+  .time-chart-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+  }
+  
+  .time-chart-table {
+    min-width: 800px;
+    font-size: 0.8rem;
+  }
+  
+  .time-chart-table th,
+  .time-chart-table td {
+    padding: 4px 2px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+    white-space: nowrap;
+  }
+  
+  .time-chart-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .time-chart-table .date-header {
+    background-color: #e9ecef;
+    font-weight: 600;
+    min-width: 80px;
+    position: sticky;
+    left: 0;
+    z-index: 11;
+  }
+  
+  .date-cell {
+    text-align: center;
+    padding: 4px;
+  }
+  
+  .date-main {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  
+  .date-sub {
+    font-size: 0.7rem;
+    color: #6c757d;
+  }
+  
+  .time-chart-table .time-header {
+    background-color: #f8f9fa;
+    font-weight: 500;
+    min-width: 50px;
+  }
+  
+  /* 勤務人数に応じた色分け */
+  .staff-count-0 { background-color: #f8f9fa; color: #6c757d; }
+  .staff-count-1 { background-color: #d1ecf1; color: #0c5460; }
+  .staff-count-2 { background-color: #b3d7ff; color: #004085; }
+  .staff-count-3 { background-color: #80bdff; color: #004085; }
+  .staff-count-4 { background-color: #4da6ff; color: #ffffff; }
+  .staff-count-5 { background-color: #1a8cff; color: #ffffff; }
+  .staff-count-6 { background-color: #0066cc; color: #ffffff; }
+  .staff-count-7 { background-color: #004499; color: #ffffff; }
+  .staff-count-8 { background-color: #003366; color: #ffffff; }
+  .staff-count-9 { background-color: #002244; color: #ffffff; }
+  .staff-count-high { background-color: #001122; color: #ffffff; }
+  
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+  }
+  
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  
+  .legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #dee2e6;
+  }
+  
+  /* 統計サマリー */
+  .chart-summary {
+    background-color: #f8f9fa;
+  }
+  
+  .summary-item {
+    padding: 10px;
+  }
+  
+  .summary-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #495057;
+  }
+  
+  .summary-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+  
+  /* チャートセル */
+  .chart-cell {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  
+  .chart-cell:hover {
+    transform: scale(1.1);
+    z-index: 5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border: 2px solid #007bff !important;
+  }
+  
+  /* スティッキーヘッダー */
+  .sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+  }
+  
+  .sticky-column {
+    position: sticky;
+    left: 0;
+    z-index: 11;
+  }
+  
+  @media (max-width: 768px) {
+    .time-chart-table {
+      font-size: 0.7rem;
+    }
+    
+    .time-chart-table th,
+    .time-chart-table td {
+      padding: 2px 1px;
+    }
+    
+    .date-header {
+      min-width: 60px !important;
+      font-size: 0.65rem;
+    }
+    
+    .summary-value {
+      font-size: 1.2rem;
+    }
+    
+    .summary-item {
+      padding: 8px;
+    }
+    
+    .time-header {
+      min-width: 35px !important;
+      font-size: 0.65rem;
+    }
+    
+    .chart-legend {
+      padding: 10px;
+    }
+    
+    .legend-item {
+      font-size: 0.8rem;
+    }
+  }
+  
+  .period-form {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  
+  @media (max-width: 768px) {
+    .period-form {
+      padding: 10px;
+    }
+  }
+  
+  /* ガントチャート関連スタイル */
+  .gantt-chart-container {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+  
+  .gantt-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+  }
+  
+  .gantt-row-header {
+    width: 120px;
+    min-width: 120px;
+    padding: 12px;
+    border-right: 1px solid #dee2e6;
+    background: #e9ecef;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+  }
+  
+  .gantt-timeline-container {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+  
+  .gantt-time-axis {
+    display: flex;
+    height: 40px;
+    border-bottom: 1px solid #dee2e6;
+  }
+  
+  .gantt-time-label {
+    flex: 1;
+    padding: 12px 4px;
+    text-align: center;
+    border-right: 1px solid #dee2e6;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  
+  .gantt-time-label:last-child {
+    border-right: none;
+  }
+  
+  .gantt-timeline-track {
+    position: relative;
+    height: 50px;
+    background: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+  }
+  
+  .gantt-body {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  
+  .gantt-row {
+    display: flex;
+    border-bottom: 1px solid #dee2e6;
+    min-height: 50px;
+  }
+  
+  .gantt-row:last-child {
+    border-bottom: none;
+  }
+  
+  .gantt-row:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .gantt-shift-bar {
+    position: absolute;
+    top: 5px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+  
+  .gantt-shift-bar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    z-index: 10;
+  }
+  
+  .shift-label {
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* 勤務人数レベル別の色分け */
+  .staff-level-1, .staff-level-2 {
+    background: linear-gradient(135deg, #28a745, #20c997);
+  }
+  
+  .staff-level-3, .staff-level-4 {
+    background: linear-gradient(135deg, #17a2b8, #007bff);
+  }
+  
+  .staff-level-5, .staff-level-6 {
+    background: linear-gradient(135deg, #ffc107, #fd7e14);
+  }
+  
+  .staff-level-7, .staff-level-8 {
+    background: linear-gradient(135deg, #fd7e14, #dc3545);
+  }
+  
+  .staff-level-9, .staff-level-10, .staff-level-11, .staff-level-12 {
+    background: linear-gradient(135deg, #dc3545, #6f42c1);
+  }
+  
+  /* 凡例 */
+  .gantt-legend {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+  }
+  
+  .legend-title {
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #495057;
+  }
+  
+  .legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+  
+  .legend-bar {
+    width: 30px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+  }
+  
+  @media (max-width: 768px) {
+    .gantt-row-header {
+      width: 80px;
+      min-width: 80px;
+      padding: 8px;
+      font-size: 12px;
+    }
+    
+    .gantt-time-slot {
+      padding: 8px 2px;
+      font-size: 10px;
+    }
+    
+    .gantt-time-cell {
+      min-height: 40px;
+      padding: 2px;
+    }
+    
+    .gantt-bar {
+      min-height: 16px;
+    }
+    
+    .staff-count {
+      font-size: 9px;
+    }
+    
+    .legend-items {
+      gap: 10px;
+    }
+    
+    .legend-item {
+      font-size: 12px;
+    }
+    
+    .legend-bar {
+      width: 20px;
+      height: 16px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <h1 class="mb-4 d-none d-md-block">時間チャート</h1>
+  
+  <!-- モバイル専用ヘッダー -->
+  <div class="d-md-none mb-3">
+    <div style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%); color: white; padding: 10px 16px; border-radius: 8px; text-align: center;">
+      <h3 style="margin: 0; font-size: 1.1rem; font-weight: 500;">時間チャート</h3>
+      <div style="font-size: 0.75rem; opacity: 0.85; margin-top: 2px;">勤務人数の時間別推移</div>
+    </div>
+  </div>
+  
+  <!-- 期間設定 -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="period-form">
+        <h5 class="mb-3 d-none d-md-block">
+          <i class="fas fa-calendar-alt me-2"></i>
+          表示期間設定
+        </h5>
+        <h6 class="mb-2 d-md-none" style="font-size: 0.9rem;">
+          <i class="fas fa-calendar-alt me-1"></i>
+          期間設定
+        </h6>
+        
+        <form method="get" class="row g-3">
+          <div class="col-md-4 col-5">
+            <label for="start_date" class="form-label text-white">開始日</label>
+            <input type="date" class="form-control form-control-sm" id="start_date" name="start_date" 
+                   value="{{ form_data.start_date|date:'Y-m-d' }}">
+          </div>
+          <div class="col-md-4 col-5">
+            <label for="end_date" class="form-label text-white">終了日</label>
+            <input type="date" class="form-control form-control-sm" id="end_date" name="end_date" 
+                   value="{{ form_data.end_date|date:'Y-m-d' }}">
+          </div>
+          <div class="col-md-4 col-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-light btn-sm w-100">
+              <i class="fas fa-search d-md-none"></i>
+              <span class="d-none d-md-inline">更新</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 凡例 -->
+  <div class="chart-legend">
+    <div class="legend-item">
+      <div class="legend-color staff-count-0"></div>
+      <span>0人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-1"></div>
+      <span>1人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-2"></div>
+      <span>2人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-3"></div>
+      <span>3人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-4"></div>
+      <span>4人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-5"></div>
+      <span>5人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-6"></div>
+      <span>6人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-7"></div>
+      <span>7人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-8"></div>
+      <span>8人</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color staff-count-high"></div>
+      <span>9人以上</span>
+    </div>
+  </div>
+  
+  <!-- 時間チャート -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="card-title mb-0">
+              <i class="fas fa-chart-bar me-2"></i>
+              時間別勤務人数チャート
+            </h5>
+            <small class="text-muted">{{ start_date|date:'Y年m月d日' }} 〜 {{ end_date|date:'Y年m月d日' }}</small>
+          </div>
+          <div class="d-none d-md-block">
+            <button class="btn btn-sm btn-outline-secondary me-2" onclick="exportChart()">
+              <i class="fas fa-download me-1"></i>
+              エクスポート
+            </button>
+            <button class="btn btn-sm btn-outline-primary" onclick="printChart()">
+              <i class="fas fa-print me-1"></i>
+              印刷
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <!-- 統計サマリー -->
+          <div class="chart-summary p-3 border-bottom">
+            <div class="row text-center">
+              <div class="col-md-3 col-6">
+                <div class="summary-item">
+                  <div class="summary-value">{{ total_days }}</div>
+                  <div class="summary-label">対象日数</div>
+                </div>
+              </div>
+              <div class="col-md-3 col-6">
+                <div class="summary-item">
+                  <div class="summary-value">{{ max_staff_count }}人</div>
+                  <div class="summary-label">最大勤務人数</div>
+                </div>
+              </div>
+              <div class="col-md-3 col-6">
+                <div class="summary-item">
+                  <div class="summary-value">{{ avg_staff_count }}人</div>
+                  <div class="summary-label">平均勤務人数</div>
+                </div>
+              </div>
+              <div class="col-md-3 col-6">
+                <div class="summary-item">
+                  <div class="summary-value">{{ peak_time }}</div>
+                  <div class="summary-label">ピーク時間</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- ガントチャート風時間表示 -->
+          <div class="gantt-chart-container">
+            <!-- 時間軸ヘッダー -->
+            <div class="gantt-header">
+              <div class="gantt-row-header">日付</div>
+              <div class="gantt-timeline-container">
+                <div class="gantt-time-axis">
+                  {% for time_label in time_labels %}
+                  <div class="gantt-time-label">{{ time_label }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            
+            <!-- ガントチャート本体 -->
+            <div class="gantt-body">
+              {% for date in date_list %}
+              <div class="gantt-row">
+                <div class="gantt-row-header">
+                  <div class="date-main">{{ date|date:'m/d' }}</div>
+                  <div class="date-sub">({{ date|date:'D' }})</div>
+                </div>
+                <div class="gantt-timeline-container">
+                  <div class="gantt-timeline-track">
+                    {% with shifts=chart_data|lookup:date %}
+                    {% for shift in shifts %}
+                                         <div class="gantt-shift-bar" 
+                          style="left: {{ shift.left_percent }}%; 
+                                 width: {{ shift.width_percent }}%; 
+                                 background-color: {{ shift.color }};"
+                          title="{{ shift.staff_name }} - {{ shift.shift_type }} ({{ shift.start_time|time:'H:i' }}-{{ shift.end_time|time:'H:i' }})">
+                       <span class="shift-label">{{ shift.staff_name }}</span>
+                     </div>
+                    {% endfor %}
+                    {% endwith %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          
+          <!-- 凡例 -->
+          <div class="gantt-legend mt-3">
+            <div class="legend-title">勤務人数レベル</div>
+            <div class="legend-items">
+              <div class="legend-item">
+                <div class="legend-bar staff-level-1"></div>
+                <span>1-2人</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-bar staff-level-3"></div>
+                <span>3-4人</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-bar staff-level-5"></div>
+                <span>5-6人</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-bar staff-level-7"></div>
+                <span>7-8人</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-bar staff-level-9"></div>
+                <span>9人以上</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 戻るボタン -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="d-flex gap-2">
+        <a href="{% url 'shift_management:calendar' %}" class="btn btn-secondary">
+          <i class="fas fa-arrow-left me-2"></i>
+          カレンダーに戻る
+        </a>
+        <a href="{% url 'shift_management:shift_export' %}" class="btn btn-primary">
+          <i class="fas fa-file-export me-2"></i>
+          シフト表エクスポート
+        </a>
+      </div>
+    </div>
+  </div>
+  </div>
+  
+  {% endblock %}
+  
+  {% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // シフトバーのクリックイベント
+    document.querySelectorAll('.gantt-shift-bar').forEach(bar => {
+      bar.addEventListener('click', function() {
+        const title = this.getAttribute('title');
+        alert(title);
+      });
+    });
+  });
+    
+
+    
+    function exportChart() {
+      // CSV形式でエクスポート
+      const table = document.querySelector('.time-chart-table');
+      let csv = '';
+      
+      // ヘッダー行
+      const headers = table.querySelectorAll('thead th');
+      const headerRow = Array.from(headers).map(th => th.textContent.trim()).join(',');
+      csv += headerRow + '\n';
+      
+      // データ行
+      const rows = table.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const rowData = Array.from(cells).map(td => {
+          const text = td.textContent.trim();
+          return text === '-' ? '0' : text;
+        }).join(',');
+        csv += rowData + '\n';
+      });
+      
+      // ダウンロード
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'time_chart.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    
+    function printChart() {
+      window.print();
+    }
+  </script>
+  
+  <style media="print">
+    .btn, .period-form, .chart-legend {
+      display: none !important;
+    }
+    
+    .time-chart-table {
+      font-size: 10px;
+    }
+    
+    .chart-cell:hover {
+      transform: none;
+      box-shadow: none;
+      border: 1px solid #dee2e6 !important;
+    }
+  </style>
+  {% endblock %} 

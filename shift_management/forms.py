@@ -85,11 +85,13 @@ class ShiftForm(forms.ModelForm):
     )
     start_time = forms.ChoiceField(
         choices=TIME_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
     )
     end_time = forms.ChoiceField(
         choices=TIME_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
     )
     
     class Meta:
@@ -100,6 +102,62 @@ class ShiftForm(forms.ModelForm):
             'shift_type': forms.Select(attrs={'class': 'form-select'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['shift_type'].required = False
+
+class ShiftReasonForm(forms.ModelForm):
+    """事由登録フォーム（公休、有給等）"""
+    class Meta:
+        model = Shift
+        fields = ['staff', 'date', 'deletion_reason', 'notes']
+        widgets = {
+            'staff': forms.Select(attrs={'class': 'form-select'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'deletion_reason': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考があれば入力してください'}),
+        }
+        labels = {
+            'staff': 'スタッフ',
+            'date': '日付',
+            'deletion_reason': '事由',
+            'notes': '備考',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['deletion_reason'].required = True
+        self.fields['deletion_reason'].empty_label = "選択してください"
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # 同じスタッフ・同じ日付の既存シフトを削除
+        if commit:
+            # 既存の通常シフト（事由なし）を削除
+            Shift.objects.filter(
+                staff=instance.staff,
+                date=instance.date,
+                is_deleted_with_reason=False
+            ).delete()
+            
+            # 既存の事由付きシフトも削除（重複防止）
+            Shift.objects.filter(
+                staff=instance.staff,
+                date=instance.date,
+                is_deleted_with_reason=True
+            ).delete()
+        
+        # 事由登録の場合は特別な値を設定
+        instance.is_deleted_with_reason = True
+        instance.shift_type = None  # シフト種別は不要
+        instance.start_time = None  # 開始時間は不要
+        instance.end_time = None    # 終了時間は不要
+        
+        if commit:
+            instance.save()
+        return instance
     
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
@@ -143,6 +201,11 @@ class ShiftForm(forms.ModelForm):
         cleaned_data = super().clean()
         start_time = cleaned_data.get('start_time')
         end_time = cleaned_data.get('end_time')
+        shift_type = cleaned_data.get('shift_type')
+        
+        # 通常のシフトの場合は時間が必須
+        if shift_type and (not start_time or not end_time):
+            raise forms.ValidationError('シフト種別が選択されている場合、開始時間と終了時間は必須です。')
         
         # 時間フィールドのバリデーション
         if start_time and end_time and start_time >= end_time:

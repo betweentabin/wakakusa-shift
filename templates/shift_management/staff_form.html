@@ -1,86 +1,257 @@
 {% extends "base.html" %}
 
-{% block title %}スタッフ{% if is_create %}登録{% else %}編集{% endif %}{% endblock %}
+{% block title %}
+  {% if form.instance.pk %}スタッフ編集{% else %}スタッフ新規登録{% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-  <h1 class="mb-4">スタッフ{% if is_create %}登録{% else %}編集{% endif %}</h1>
-  
-  <div class="card">
-    <div class="card-body">
-      <form method="post">
-        {% csrf_token %}
-        
-        <div class="mb-3">
-          <label for="id_name" class="form-label">名前</label>
-          {{ form.name }}
-          {% if form.name.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.name.errors %}
-            {{ error }}
-            {% endfor %}
-          </div>
+<div class="container-fluid py-4">
+  <!-- ページヘッダー -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h2 mb-0">
+          <i class="fas fa-user-plus me-2 text-primary"></i>
+          {% if form.instance.pk %}
+            スタッフ編集
+          {% else %}
+            スタッフ新規登録
           {% endif %}
+        </h1>
+        <a href="{% url 'shift_management:staff_list' %}" class="btn btn-outline-secondary">
+          <i class="fas fa-arrow-left me-2"></i>
+          <span class="d-none d-sm-inline">スタッフ一覧に戻る</span>
+          <span class="d-sm-none">戻る</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-edit me-2"></i>
+            {% if form.instance.pk %}
+              {{ form.instance.name }} の情報を編集
+            {% else %}
+              新しいスタッフの情報を入力
+            {% endif %}
+          </h5>
         </div>
-        
-        <div class="mb-3">
-          <label for="id_position" class="form-label">役職/担当</label>
-          {{ form.position }}
-          {% if form.position.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.position.errors %}
-            {{ error }}
-            {% endfor %}
+        <div class="card-body">
+          <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- 名前フィールド -->
+            <div class="mb-4">
+              <label for="{{ form.name.id_for_label }}" class="form-label required">
+                <i class="fas fa-user me-2 text-muted"></i>
+                スタッフ名
+              </label>
+              {{ form.name }}
+              {% if form.name.errors %}
+                <div class="invalid-feedback d-block">
+                  {% for error in form.name.errors %}
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                <i class="fas fa-info-circle me-1"></i>
+                フルネームで入力してください（例：山田 太郎）
+              </div>
+            </div>
+
+            <!-- メールアドレスフィールド -->
+            <div class="mb-4">
+              <label for="{{ form.email.id_for_label }}" class="form-label">
+                <i class="fas fa-envelope me-2 text-muted"></i>
+                メールアドレス
+              </label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <div class="invalid-feedback d-block">
+                  {% for error in form.email.errors %}
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                <i class="fas fa-info-circle me-1"></i>
+                シフト通知などに使用されます（任意）
+              </div>
+            </div>
+
+            <!-- 電話番号フィールド -->
+            <div class="mb-4">
+              <label for="{{ form.phone.id_for_label }}" class="form-label">
+                <i class="fas fa-phone me-2 text-muted"></i>
+                電話番号
+              </label>
+              {{ form.phone }}
+              {% if form.phone.errors %}
+                <div class="invalid-feedback d-block">
+                  {% for error in form.phone.errors %}
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                <i class="fas fa-info-circle me-1"></i>
+                ハイフンありなしどちらでも可（例：090-1234-5678）
+              </div>
+            </div>
+
+            <!-- アクティブフィールド -->
+            <div class="mb-4">
+              <div class="form-check form-switch">
+                {{ form.is_active }}
+                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                  <i class="fas fa-toggle-on me-2 text-success"></i>
+                  アクティブ（シフトに参加可能）
+                </label>
+              </div>
+              {% if form.is_active.errors %}
+                <div class="invalid-feedback d-block">
+                  {% for error in form.is_active.errors %}
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                <i class="fas fa-info-circle me-1"></i>
+                無効にするとシフト登録時に表示されなくなります
+              </div>
+            </div>
+
+            <!-- 送信ボタン -->
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+              <a href="{% url 'shift_management:staff_list' %}" class="btn btn-outline-secondary me-md-2">
+                <i class="fas fa-times me-2"></i>
+                キャンセル
+              </a>
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-2"></i>
+                {% if form.instance.pk %}
+                  更新する
+                {% else %}
+                  登録する
+                {% endif %}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- 削除ボタン（編集時のみ表示） -->
+      {% if form.instance.pk %}
+        <div class="card mt-4 border-danger">
+          <div class="card-header bg-danger text-white">
+            <h6 class="card-title mb-0">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              危険な操作
+            </h6>
           </div>
-          {% endif %}
-        </div>
-        
-        <div class="mb-3">
-          <label for="id_phone" class="form-label">電話番号</label>
-          {{ form.phone }}
-          {% if form.phone.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.phone.errors %}
-            {{ error }}
-            {% endfor %}
+          <div class="card-body">
+            <p class="text-muted mb-3">
+              <i class="fas fa-info-circle me-2"></i>
+              このスタッフを削除すると、関連するシフトデータも削除される可能性があります。
+            </p>
+            <form method="post" action="{% url 'shift_management:staff_delete' form.instance.pk %}" 
+                  onsubmit="return confirm('本当に「{{ form.instance.name }}」を削除しますか？この操作は取り消せません。');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger">
+                <i class="fas fa-trash-alt me-2"></i>
+                このスタッフを削除
+              </button>
+            </form>
           </div>
-          {% endif %}
         </div>
-        
-        <div class="mb-3">
-          <label for="id_email" class="form-label">メールアドレス</label>
-          {{ form.email }}
-          {% if form.email.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.email.errors %}
-            {{ error }}
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-        
-        <div class="mb-3 form-check">
-          {{ form.is_active }}
-          <label class="form-check-label" for="id_is_active">有効</label>
-          {% if form.is_active.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.is_active.errors %}
-            {{ error }}
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-        
-        <div class="d-grid gap-2 d-sm-flex justify-content-sm-between">
-          <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary w-100 w-sm-auto">
-            <i class="fas fa-arrow-left"></i> 戻る
-          </a>
-          <button type="submit" class="btn btn-primary w-100 w-sm-auto mt-2 mt-sm-0">
-            <i class="fas fa-save"></i> 保存
-          </button>
-        </div>
-      </form>
+      {% endif %}
     </div>
   </div>
 </div>
+
+<style>
+  /* フォーム専用のスタイル調整 */
+  .required::after {
+    content: " *";
+    color: #dc3545;
+    font-weight: bold;
+  }
+  
+  .form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    transition: all 0.2s ease;
+  }
+  
+  .form-control:focus, .form-select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+  }
+  
+  .form-check-input:checked {
+    background-color: #007bff;
+    border-color: #007bff;
+  }
+  
+  .invalid-feedback {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+  }
+  
+  .form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+  }
+  
+  /* レスポンシブ調整 */
+  @media (max-width: 768px) {
+    .card-body {
+      padding: 1.25rem;
+    }
+    
+    .mb-4 {
+      margin-bottom: 1.5rem !important;
+    }
+    
+    .form-label {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    
+    .form-control, .form-select {
+      font-size: 0.95rem;
+      padding: 0.75rem;
+    }
+    
+    .btn {
+      font-size: 0.9rem;
+      padding: 0.75rem 1.25rem;
+    }
+  }
+  
+  @media (max-width: 576px) {
+    .d-grid.gap-2.d-md-flex {
+      gap: 0.75rem !important;
+    }
+    
+    .btn {
+      font-size: 0.875rem;
+      padding: 0.6rem 1rem;
+    }
+    
+    .card-header h5 {
+      font-size: 1rem;
+    }
+    
+    .form-text {
+      font-size: 0.8rem;
+    }
+  }
+</style>
 {% endblock %}

@@ -1,79 +1,736 @@
-/* 基本的なフォントサイズを画面幅に応じて調整 */
+/* モバイルファーストのレスポンシブデザイン */
+
+/* 基本設定 */
 html {
-  font-size: 16px; /* デフォルトのフォントサイズ */
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-/* 中程度の画面 (例: 992px未満) */
-@media (max-width: 991.98px) {
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+  font-weight: 400;
+}
+
+/* 見出しの基本設定 */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.75rem;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.5rem; }
+h4 { font-size: 1.25rem; }
+h5 { font-size: 1.125rem; }
+h6 { font-size: 1rem; }
+
+/* 段落とテキストの基本設定 */
+p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+/* モバイル向けの基本調整（768px以下） */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  /* 見出しサイズの調整 */
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.25rem; }
+  h4 { font-size: 1.125rem; }
+  h5 { font-size: 1rem; }
+  h6 { font-size: 0.9rem; }
+
+  /* ナビゲーションバーの調整 */
+  .navbar-brand {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .navbar-nav .nav-link {
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+  }
+
+  /* コンテナの調整 */
+  .container, .container-fluid {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  /* カードの調整 */
+  .card {
+    margin-bottom: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .card-header {
+    padding: 16px 20px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .card-body {
+    padding: 20px;
+    font-size: 0.95rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ボタンの調整 - タッチフレンドリー */
+  .btn {
+    min-height: 44px; /* タッチターゲットの最小サイズ */
+    padding: 12px 18px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    line-height: 1.3;
+    transition: all 0.2s ease;
+  }
+
+  .btn-sm {
+    min-height: 40px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+  }
+
+  .btn-lg {
+    min-height: 56px;
+    padding: 18px 24px;
+    font-size: 1.05rem;
+  }
+
+  /* アクションボタン群の調整 */
+  .extended-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .extended-action-buttons .btn {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 16px 20px;
+    font-size: 0.95rem;
+  }
+
+  .extended-action-buttons .btn i {
+    margin-right: 12px;
+    width: 20px;
+    text-align: center;
+    font-size: 1rem;
+  }
+
+  /* フィルターセクションの調整 */
+  .filter-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .filter-section h5 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #333;
+  }
+
+  /* スタッフフィルターの調整 */
+  .staff-filter .form-check-inline {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    transition: all 0.2s ease;
+  }
+
+  .staff-filter .form-check-inline:hover {
+    background-color: #f8f9fa;
+    border-color: #007bff;
+  }
+
+  .staff-filter .form-check-input {
+    margin-right: 10px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .staff-filter .form-check-label {
+    font-size: 0.95rem;
+    cursor: pointer;
+    width: 100%;
+    line-height: 1.4;
+    color: #333;
+  }
+
+  /* 全選択/全解除ボタンの調整 */
+  .staff-filter .mb-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .staff-filter .mb-2 .btn {
+    font-size: 0.85rem;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+
+  /* フォーム要素の調整 */
+  .form-control, .form-select {
+    min-height: 48px;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    border: 1px solid #ced4da;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus, .form-select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+  }
+
+  .form-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+  }
+
+  /* テーブルの調整 */
+  .table-responsive {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+  }
+
+  .table th {
+    padding: 16px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    color: #333;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .table td {
+    padding: 14px 12px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f4;
+  }
+
+  .table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+
+  /* モーダルの調整 */
+  .modal-dialog {
+    margin: 20px;
+    max-width: calc(100vw - 40px);
+  }
+
+  .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .modal-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+
+  .modal-body {
+    padding: 20px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #dee2e6;
+  }
+
+  /* FullCalendarのモバイル調整 */
+  .fc-header-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .fc-header-toolbar .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0;
+  }
+
+  .fc-toolbar-title {
+    font-size: 1.3rem !important;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+  }
+
+  .fc-button {
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    margin: 0 3px !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .fc-button-primary {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+  }
+
+  .fc-button-primary:hover {
+    background-color: #0056b3 !important;
+    border-color: #0056b3 !important;
+    transform: translateY(-1px);
+  }
+
+  /* カレンダーグリッドの調整 */
+  .fc-daygrid-day {
+    min-height: 90px !important;
+  }
+
+  .fc-daygrid-day-number {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    padding: 10px !important;
+    color: #333;
+  }
+
+  .fc-event {
+    font-size: 0.75rem !important;
+    padding: 3px 6px !important;
+    margin: 2px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    line-height: 1.3 !important;
+  }
+
+  .fc-event-title {
+    font-weight: 500 !important;
+  }
+
+  .fc-daygrid-more-link {
+    font-size: 0.75rem !important;
+    padding: 3px 6px !important;
+    margin: 2px !important;
+    background-color: #6c757d !important;
+    color: white !important;
+    border-radius: 6px !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+  }
+
+  /* 今日の日付のハイライト */
+  .fc-day-today {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+  }
+
+  .fc-day-today .fc-daygrid-day-number {
+    background-color: #ffc107;
+    color: #000;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 6px;
+    font-weight: 600;
+  }
+
+  /* リストビューの調整 */
+  .fc-list-event {
+    font-size: 0.9rem !important;
+  }
+
+  .fc-list-event-title {
+    font-weight: 500 !important;
+  }
+
+  .fc-list-event-time {
+    font-weight: 600 !important;
+    color: #007bff !important;
+  }
+}
+
+/* 中型画面（576px以下）の調整 */
+@media (max-width: 576px) {
+  html {
+    font-size: 14px;
+  }
+
+  /* 見出しサイズの調整 */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.3rem; }
+  h3 { font-size: 1.15rem; }
+  h4 { font-size: 1rem; }
+  h5 { font-size: 0.95rem; }
+  h6 { font-size: 0.85rem; }
+
+  .container, .container-fluid {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .card-body {
+    padding: 16px;
+  }
+
+  .btn {
+    font-size: 0.9rem;
+    padding: 12px 16px;
+  }
+
+  .fc-toolbar-title {
+    font-size: 1.15rem !important;
+  }
+
+  .fc-button {
+    font-size: 0.8rem !important;
+    padding: 8px 12px !important;
+  }
+}
+
+/* 超小型画面（400px未満）の調整 */
+@media (max-width: 400px) {
+  html {
+    font-size: 13px;
+  }
+
+  /* 見出しサイズの調整 */
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.2rem; }
+  h3 { font-size: 1.1rem; }
+  h4 { font-size: 1rem; }
+  h5 { font-size: 0.9rem; }
+  h6 { font-size: 0.8rem; }
+
+  .container, .container-fluid {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .card-body {
+    padding: 12px;
+  }
+
+  .btn {
+    font-size: 0.85rem;
+    padding: 10px 12px;
+  }
+
+  /* FullCalendarのビュー切り替えボタンを縦積み */
+  .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
+    width: 100% !important;
+    margin: 2px 0 !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* カレンダーの日付セルをより小さく */
+  .fc-daygrid-day {
+    min-height: 70px !important;
+  }
+
+  .fc-daygrid-day-number {
+    font-size: 0.85rem !important;
+    padding: 6px !important;
+  }
+
+  .fc-event {
+    font-size: 0.65rem !important;
+    padding: 2px 4px !important;
+  }
+
+  .fc-toolbar-title {
+    font-size: 1rem !important;
+  }
+}
+
+/* タブレット向けの調整（769px〜1024px） */
+@media (min-width: 769px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+
+  /* 見出しサイズの調整 */
+  h1 { font-size: 1.9rem; }
+  h2 { font-size: 1.65rem; }
+  h3 { font-size: 1.4rem; }
+  h4 { font-size: 1.2rem; }
+  h5 { font-size: 1.1rem; }
+  h6 { font-size: 1rem; }
+
+  .extended-action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .staff-filter .form-check-inline {
+    display: inline-block;
+    margin-right: 15px;
+    margin-bottom: 8px;
+  }
+
+  .btn {
+    font-size: 0.95rem;
+    padding: 12px 18px;
+  }
+}
+
+/* デスクトップ向けの調整（1025px以上） */
+@media (min-width: 1025px) {
+  .extended-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .staff-filter .form-check-inline {
+    display: inline-block;
+    margin-right: 15px;
+    margin-bottom: 8px;
+  }
+
+  .btn {
+    font-size: 1rem;
+    padding: 12px 20px;
+  }
+}
+
+/* 汎用的なユーティリティクラス */
+.mobile-only {
+  display: block;
+}
+
+.desktop-only {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* アクセシビリティの向上 */
+@media (max-width: 768px) {
+  /* フォーカス時のアウトライン */
+  .btn:focus,
+  .form-control:focus,
+  .form-check-input:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+
+  /* タッチターゲットの最小サイズ確保 */
+  .form-check-input {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* リンクのタッチターゲット */
+  a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* テキストの読みやすさ向上 */
+@media (max-width: 768px) {
+  /* 段落の行間調整 */
+  p {
+    line-height: 1.7;
+    margin-bottom: 1.2rem;
+  }
+
+  /* リストの調整 */
+  ul, ol {
+    padding-left: 1.5rem;
+    line-height: 1.6;
+  }
+
+  li {
+    margin-bottom: 0.5rem;
+  }
+
+  /* 強調テキストの調整 */
+  strong, b {
+    font-weight: 600;
+  }
+
+  /* 小さなテキストの調整 */
+  small, .small {
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+}
+
+/* 基本的なフォントサイズを画面幅に応じて調整 */
+html {
+  font-size: 16px;
+}
+
+@media (max-width: 1200px) {
   html {
     font-size: 15px;
   }
 }
 
-/* 小さな画面 (例: 768px未満) */
-@media (max-width: 767.98px) {
+@media (max-width: 992px) {
   html {
-    font-size: 14px; /* 少し小さくする */
+    font-size: 14px;
   }
+}
 
-  h1, .h1 { font-size: calc(1.3rem + 0.6vw); } /* Bootstrap 5 の RFS に近い考え方 */
-  h2, .h2 { font-size: calc(1.25rem + 0.3vw); }
-  h3, .h3 { font-size: calc(1.2rem + 0.15vw); }
+@media (max-width: 768px) {
+  html {
+    font-size: 13px;
+  }
+}
 
-  /* コンテナの左右パディングを少し減らす */
+@media (max-width: 576px) {
+  html {
+    font-size: 12px;
+  }
+}
+
+/* ヘッダーサイズの調整 */
+@media (max-width: 768px) {
+  .navbar-brand {
+    font-size: 1rem;
+  }
+}
+
+/* コンテナのパディング調整 */
+@media (max-width: 768px) {
+  .container, .container-fluid {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+}
+
+@media (max-width: 576px) {
   .container, .container-fluid {
     padding-left: 10px;
     padding-right: 10px;
   }
 }
 
-/* さらに小さな画面 (例: 576px未満) */
-@media (max-width: 575.98px) {
-  html {
-    font-size: 13px;
-  }
-
-  h1, .h1 { font-size: 1.5rem; }
-  h2, .h2 { font-size: 1.3rem; }
-  h3, .h3 { font-size: 1.15rem; }
-
-  /* ボタン群が縦積みになるように調整 */
-  .btn-toolbar,
-  .btn-group {
-    flex-direction: column;
-    align-items: stretch; /* ボタン幅を親に合わせる */
-  }
-
-  .btn-toolbar > .btn,
-  .btn-toolbar > .btn-group,
-  .btn-group > .btn {
-    width: 100%; /* 幅を100%に */
+/* ボタン群の縦積み対応 */
+@media (max-width: 768px) {
+  .btn-group-vertical .btn,
+  .d-grid .btn {
     margin-bottom: 0.5rem;
   }
-
-  /* 最後の要素以外のマージンを調整 */
-  .btn-toolbar > .btn:not(:last-child),
-  .btn-toolbar > .btn-group:not(:last-child),
-  .btn-group > .btn:not(:last-child) {
-    margin-right: 0;
-  }
-   .btn-group > .btn:not(:first-child) {
-    margin-left: 0;
-  }
-
-  /* フォーム要素のラベルと入力欄のレイアウト調整 */
-  .form-label {
-    margin-bottom: 0.25rem;
-  }
-  .form-control, .form-select {
-    margin-bottom: 0.75rem; /* 下に少しマージンを追加して連続する場合の間隔を確保 */
+  
+  .btn-group-vertical .btn:last-child,
+  .d-grid .btn:last-child {
+    margin-bottom: 0;
   }
 }
 
-/* 汎用的なテーブルレスポンシブ対応のクラス */
-.table-responsive-custom {
-  display: block;
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch; /* iOSでの慣性スクロール */
+/* フォーム要素の間隔調整 */
+@media (max-width: 768px) {
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-control {
+    margin-bottom: 1rem;
+  }
+}
+
+/* カードコンポーネントの調整 */
+@media (max-width: 768px) {
+  .card {
+    margin-bottom: 1.5rem;
+  }
+  
+  .card-header {
+    padding: 1rem;
+    font-size: 1rem;
+  }
+  
+  .card-body {
+    padding: 1rem;
+  }
+}
+
+/* テーブルのレスポンシブ対応 */
+@media (max-width: 768px) {
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+  
+  .table th,
+  .table td {
+    padding: 0.5rem;
+  }
+}
+
+/* モーダルの調整 */
+@media (max-width: 768px) {
+  .modal-dialog {
+    margin: 1rem;
+  }
+  
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 1rem;
+  }
 } 

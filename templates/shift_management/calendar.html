@@ -5,9 +5,16 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
+<link rel="stylesheet" href="{% static 'css/calendar_mobile.css' %}">
 <style>
   .calendar-container {
-    margin-bottom: 30px;
+    margin-bottom: 15px;
+  }
+  
+  @media (max-width: 768px) {
+    .calendar-container {
+      margin-bottom: 10px;
+    }
   }
   .fc-event {
     cursor: pointer;
@@ -29,16 +36,6 @@
     margin-right: 5px;
     border-radius: 3px;
   }
-  .filter-section {
-    margin-bottom: 20px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 5px;
-  }
-  .action-buttons {
-    margin-bottom: 20px;
-  }
-  /* 新規追加スタイル */
   .fc-event-time, .fc-event-title {
     padding: 0 3px;
     white-space: nowrap;
@@ -60,6 +57,53 @@
     gap: 10px;
     margin-bottom: 20px;
   }
+  
+  .mobile-quick-actions {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+  
+  .quick-action-fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+  }
+  
+  .quick-action-fab:hover {
+    background-color: #0056b3;
+    transform: scale(1.1);
+  }
+  
+  .compact-filter {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  
+  .filter-toggle {
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  .filter-content {
+    margin-top: 15px;
+  }
+  
   @media (max-width: 768px) {
     .extended-action-buttons {
       flex-direction: column;
@@ -67,61 +111,230 @@
     .extended-action-buttons .btn {
       margin-bottom: 5px;
     }
-    /* スタッフフィルター用レスポンシブ対応 */
     .staff-filter .form-check-inline {
       display: block;
-      margin-right: 0; /* form-check-inlineによる右マージンをリセット */
-      margin-bottom: 0.5rem; /* 適度な間隔 */
+      margin-right: 0;
+      margin-bottom: 0.5rem;
+    }
+    
+    .mobile-quick-actions {
+      display: block;
+    }
+    
+    .desktop-action-buttons {
+      display: none;
+    }
+    
+    .calendar-header-mobile {
+      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(108, 117, 125, 0.15);
+    }
+    
+    .calendar-header-mobile h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
+    
+    .calendar-header-mobile .subtitle {
+      font-size: 0.8rem;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+    
+    .compact-filter {
+      padding: 12px;
+    }
+    
+    .filter-content {
+      margin-top: 12px;
     }
   }
 
-  /* FullCalendarのレスポンシブ対応強化 */
-  @media (max-width: 767.98px) { /* Bootstrapのsmブレークポイント未満 */
-    /* ヘッダーツールバーの要素が縦積みになるように調整 */
+  /* モバイル向けカレンダー調整 */
+  @media (max-width: 767.98px) {
     .fc-header-toolbar {
       flex-direction: column;
-      align-items: stretch; /* 各要素を親の幅に合わせる */
-      gap: 10px; /* 各ツールバーセクション間の間隔 */
+      align-items: center;
+      gap: 8px;
+      padding: 10px 8px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      margin-bottom: 10px;
     }
 
     .fc-header-toolbar .fc-toolbar-chunk {
       display: flex;
-      justify-content: center; /* 中央揃え */
-      margin-bottom: 5px; /* 各チャンクの下マージン */
+      justify-content: center;
+      align-items: center;
+      width: 100%;
     }
 
-    /* タイトルを少し小さく */
     .fc-header-toolbar .fc-toolbar-title {
-      font-size: 1.1rem; /* 現在のhtmlフォントサイズ(14px想定)に対して調整 */
-      margin: 0 0 5px 0; /* タイトルの上下マージン調整 */
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin: 0;
+      text-align: center;
+      color: #333;
+      order: 1;
     }
 
-    /* ボタンのフォントサイズ調整 */
+    /* 前/次/今日ボタンを横並びに */
+    .fc-header-toolbar .fc-toolbar-chunk:first-child {
+      order: 2;
+      margin-top: 6px;
+    }
+
+    .fc-header-toolbar .fc-toolbar-chunk:first-child .fc-button-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* 表示切り替えボタンを横並びに */
+    .fc-header-toolbar .fc-toolbar-chunk:last-child {
+      order: 3;
+      margin-top: 6px;
+    }
+
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
+      flex: 0 0 auto;
+      min-width: 60px;
+    }
+
     .fc-button {
-      font-size: 0.8rem; /* ボタンの文字を少し小さく */
-      padding: 0.3em 0.5em; /* ボタンのパディングを調整 */
+      font-size: 0.9rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      min-height: 40px;
+      font-weight: 500;
+      border: 1px solid #dee2e6;
+      background-color: white;
+      color: #495057;
     }
 
-    /* 日付セルの "+X more" リンクのスタイル調整 */
+    /* FullCalendarのボタングループを強制的に横並びに */
+    .fc .fc-button-group {
+      display: flex !important;
+      flex-direction: row !important;
+    }
+
+    .fc .fc-button-group .fc-button {
+      margin: 0 2px !important;
+    }
+
+    .fc-button:hover {
+      background-color: #e9ecef;
+    }
+
+    .fc-button-active {
+      background-color: #007bff !important;
+      border-color: #007bff !important;
+      color: white !important;
+    }
+
+    /* 今日ボタンを目立たせる */
+    .fc-today-button {
+      background-color: #28a745 !important;
+      border-color: #28a745 !important;
+      color: white !important;
+    }
+
+    .fc-today-button:hover {
+      background-color: #218838 !important;
+      border-color: #1e7e34 !important;
+    }
+
+    /* 前/次ボタンのスタイル */
+    .fc-prev-button, .fc-next-button {
+      background-color: #6c757d !important;
+      border-color: #6c757d !important;
+      color: white !important;
+    }
+
+    .fc-prev-button:hover, .fc-next-button:hover {
+      background-color: #5a6268 !important;
+      border-color: #545b62 !important;
+    }
+
     .fc-daygrid-day-bottom .fc-daygrid-more-link {
-      font-size: 0.75rem; /* 文字を小さく */
-      padding: 1px 3px; /* パディングを調整 */
+      font-size: 0.75rem;
+      padding: 2px 4px;
     }
   }
 
-  @media (max-width: 400px) { /* さらに小さい画面用の調整 */
-    .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group { /* 右端のボタングループ (月/週/日) */
+  /* 超小型画面向け調整 */
+  @media (max-width: 480px) {
+    .fc-header-toolbar .fc-toolbar-title {
+      font-size: 1.1rem;
+    }
+
+    .fc-button {
+      font-size: 0.75rem;
+      padding: 6px 8px;
+      min-height: 32px;
+      min-width: 50px;
+    }
+
+    /* 表示切り替えボタンも横並びを維持 */
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
+      flex: 0 0 auto;
+      font-size: 0.7rem;
+      padding: 5px 6px;
+    }
+  }
+
+  /* メインコンテンツコンテナのflexbox制御 */
+  .main-content-container {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* モバイル版でボタンとカレンダーの順序を逆にする */
+  @media (max-width: 767.98px) {
+    .main-content-container {
       display: flex;
-      flex-direction: column; /* 超小型画面では縦積みに */
-      width: 100%;
+      flex-direction: column;
     }
-    .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group .fc-button {
-        width: 100%;
-        margin-bottom: 3px;
-        box-sizing: border-box;
+
+    /* 期間設定: order 1 */
+    .main-content-container > .row:nth-child(1) {
+      order: 1;
     }
-     .fc-header-toolbar .fc-toolbar-chunk:nth-child(3) .fc-button-group .fc-button:not(:last-child) {
-        margin-right: 0; /* ボタングループ内のマージンリセット */
+
+    /* カレンダー: order 3 */
+    .main-content-container > .row:nth-child(2) {
+      order: 3;
+    }
+
+    /* フィルター: order 2 */
+    .main-content-container > .row:nth-child(3) {
+      order: 2;
+    }
+
+    /* アクションボタン: order 4 */
+    .main-content-container > .row:nth-child(4) {
+      order: 4;
     }
   }
 </style>
@@ -129,94 +342,259 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-  <h1 class="mb-4">シフトカレンダー</h1>
+  <!-- モバイル専用ヘッダー -->
+  <div class="calendar-header-mobile d-md-none">
+    <h3 style="font-size: 1.2rem; margin: 0;">シフト管理</h3>
+    <div class="subtitle" style="font-size: 0.8rem;">スケジュール確認・編集</div>
+  </div>
   
-  <div class="row">
-    <div class="col-md-12">
+  <!-- デスクトップ用タイトル -->
+  <h1 class="mb-4 d-none d-md-block">シフトカレンダー</h1>
+  
+  <!-- メインコンテンツコンテナ（モバイルでflexbox順序制御） -->
+  <div class="main-content-container">
+  
+  <!-- シフト表示期間設定 -->
+  <div class="row mb-3">
+    <div class="col-12">
       <div class="card">
-        <div class="card-header">
-          <h5 class="card-title">シフト表示期間</h5>
+        <!-- デスクトップ用ヘッダー -->
+        <div class="card-header d-none d-md-block">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-calendar-alt me-2"></i>
+            表示期間設定
+          </h5>
         </div>
-        <div class="card-body">
-          <form method="get" class="row g-3">
-            <div class="col-md-4">
-              <label for="id_start_date" class="form-label">開始日</label>
-              {{ form.start_date }}
+        <!-- モバイル用コンパクトヘッダー -->
+        <div class="card-header d-md-none py-1">
+          <h6 class="card-title mb-0" style="font-size: 0.85rem;">
+            <i class="fas fa-calendar-alt me-1"></i>
+            期間設定
+          </h6>
+        </div>
+        <div class="card-body py-2">
+          <!-- デスクトップ用レイアウト -->
+          <form method="get" class="d-none d-md-block">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="id_start_date" class="form-label">開始日</label>
+                {{ form.start_date }}
+              </div>
+              <div class="col-md-4">
+                <label for="id_end_date" class="form-label">終了日</label>
+                {{ form.end_date }}
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                  <i class="fas fa-search me-2"></i>
+                  期間変更
+                </button>
+              </div>
             </div>
-            <div class="col-md-4">
-              <label for="id_end_date" class="form-label">終了日</label>
-              {{ form.end_date }}
-            </div>
-            <div class="col-md-4 d-flex align-items-end">
-              <button type="submit" class="btn btn-primary">表示期間を変更</button>
+          </form>
+          
+          <!-- モバイル用コンパクトレイアウト -->
+          <form method="get" class="d-md-none">
+            <div class="row g-1">
+              <div class="col-5">
+                <label for="id_start_date_mobile" class="form-label small mb-1">開始</label>
+                <input type="date" class="form-control form-control-sm" id="id_start_date_mobile" name="start_date" value="{{ form.start_date.value|default:'' }}" style="padding: 4px 8px;">
+              </div>
+              <div class="col-5">
+                <label for="id_end_date_mobile" class="form-label small mb-1">終了</label>
+                <input type="date" class="form-control form-control-sm" id="id_end_date_mobile" name="end_date" value="{{ form.end_date.value|default:'' }}" style="padding: 4px 8px;">
+              </div>
+              <div class="col-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-secondary btn-sm w-100" style="padding: 4px 2px; font-size: 0.75rem;">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
             </div>
           </form>
         </div>
       </div>
     </div>
   </div>
-  
-  <div class="row mt-4">
-    <div class="col-md-12">
-      <!-- 拡張アクションボタン（新規追加） -->
-      <div class="extended-action-buttons">
-        <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success">
-          <i class="fas fa-plus"></i> 新規シフト登録
-        </a>
-        <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-success">
-          <i class="fas fa-calendar-plus"></i> 複数シフト一括登録
-        </a>
-        <a href="{% url 'shift_management:template_list' %}" class="btn btn-info">
-          <i class="fas fa-clipboard-list"></i> テンプレート管理
-        </a>
-        <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary">
-          <i class="fas fa-users"></i> スタッフ管理
-        </a>
-        <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning">
-          <i class="fas fa-tags"></i> シフト種別管理
-        </a>
-        <a href="{% url 'shift_management:shift_export' %}" class="btn btn-primary">
-          <i class="fas fa-file-export"></i> シフト表印刷・エクスポート
-        </a>
+
+  <!-- メインカレンダー -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-calendar me-2"></i>
+            シフトカレンダー
+          </h5>
+        </div>
+        <div class="card-body py-2">
+          <!-- モバイル用スクロールヒント -->
+          <div class="d-md-none alert alert-info py-1 mb-2" style="font-size: 0.75rem;">
+            <i class="fas fa-hand-point-right me-1"></i>
+            横スワイプで全体表示
+          </div>
+          <div class="calendar-container">
+            <div id="calendar"></div>
+          </div>
+        </div>
       </div>
-      
-      <div class="filter-section">
-        <h5>表示フィルター</h5>
-        <div class="row">
-          <div class="col-md-6">
-            <label class="form-label">スタッフ</label>
-            <div class="staff-filter">
-              <!-- 全選択/全解除ボタン（新規追加） -->
-              <div class="mb-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="selectAllStaff">全て選択</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllStaff">全て解除</button>
+    </div>
+  </div>
+  
+  <!-- コンパクトなフィルターセクション -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="compact-filter">
+        <div class="filter-toggle d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#filterContent">
+          <h6 class="mb-0">
+            <i class="fas fa-filter me-2"></i>
+            表示フィルター
+          </h6>
+          <i class="fas fa-chevron-down"></i>
+        </div>
+        <div class="collapse filter-content" id="filterContent">
+          <div class="row">
+            <div class="col-md-6">
+              <label class="form-label">スタッフ</label>
+              <div class="staff-filter">
+                <!-- 全選択/全解除ボタン -->
+                <div class="mb-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="selectAllStaff">全て選択</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllStaff">全て解除</button>
+                </div>
+                {% for staff in staff_list %}
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input staff-checkbox" type="checkbox" id="staff-{{ staff.id }}" value="{{ staff.id }}" checked>
+                  <label class="form-check-label" for="staff-{{ staff.id }}">{{ staff.name }}</label>
+                </div>
+                {% endfor %}
               </div>
-              {% for staff in staff_list %}
-              <div class="form-check form-check-inline">
-                <input class="form-check-input staff-checkbox" type="checkbox" id="staff-{{ staff.id }}" value="{{ staff.id }}" checked>
-                <label class="form-check-label" for="staff-{{ staff.id }}">{{ staff.name }}</label>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">シフト種別</label>
+              <div class="shift-legend">
+                {% for type in shift_types %}
+                <div class="shift-type-item">
+                  <div class="shift-type-color" style="background-color: {{ type.color }};"></div>
+                  <span>{{ type.name }}</span>
+                </div>
+                {% endfor %}
               </div>
-              {% endfor %}
             </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">シフト種別</label>
-            <div class="shift-legend">
-              {% for type in shift_types %}
-              <div class="shift-type-item">
-                <div class="shift-type-color" style="background-color: {{ type.color }};"></div>
-                <span>{{ type.name }}</span>
-              </div>
-              {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- アクションボタンセクション -->
+  <div class="row">
+    <div class="col-12">
+      <!-- デスクトップ用アクションボタン -->
+      <div class="desktop-action-buttons d-none d-md-block">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="fas fa-tools me-2"></i>
+              操作メニュー
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="extended-action-buttons">
+              <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success">
+                <i class="fas fa-plus"></i> 新規シフト登録
+              </a>
+              <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-success">
+                <i class="fas fa-calendar-plus"></i> 複数シフト一括登録
+              </a>
+              <a href="{% url 'shift_management:shift_reason_create' %}" class="btn btn-warning">
+                <i class="fas fa-calendar-times"></i> 事由登録
+              </a>
+              <a href="{% url 'shift_management:template_list' %}" class="btn btn-info">
+                <i class="fas fa-clipboard-list"></i> テンプレート管理
+              </a>
+              <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary">
+                <i class="fas fa-users"></i> スタッフ管理
+              </a>
+              <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning">
+                <i class="fas fa-tags"></i> シフト種別管理
+              </a>
+              <a href="{% url 'shift_management:shift_export' %}" class="btn btn-primary">
+                <i class="fas fa-file-export"></i> シフト表印刷・エクスポート
+              </a>
+              <a href="{% url 'shift_management:time_chart' %}" class="btn btn-info">
+                <i class="fas fa-chart-bar"></i> 時間チャートを確認する
+              </a>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="calendar-container">
-        <div id="calendar"></div>
+      <!-- モバイル用簡易アクションボタン -->
+      <div class="extended-action-buttons d-md-none">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="card-title mb-0">
+              <i class="fas fa-tools me-2"></i>
+              クイック操作
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-2">
+              <div class="col-6">
+                <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success w-100">
+                  <i class="fas fa-plus me-2"></i>
+                  新規登録
+                </a>
+              </div>
+              <div class="col-6">
+                <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-info w-100">
+                  <i class="fas fa-calendar-plus me-2"></i>
+                  一括登録
+                </a>
+              </div>
+              <div class="col-6">
+                <a href="{% url 'shift_management:shift_reason_create' %}" class="btn btn-warning w-100">
+                  <i class="fas fa-calendar-times me-2"></i>
+                  事由登録
+                </a>
+              </div>
+              <div class="col-6">
+                <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary w-100">
+                  <i class="fas fa-users me-2"></i>
+                  スタッフ
+                </a>
+              </div>
+              <div class="col-6">
+                <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning w-100">
+                  <i class="fas fa-tags me-2"></i>
+                  種別
+                </a>
+              </div>
+              <div class="col-6">
+                <a href="{% url 'shift_management:time_chart' %}" class="btn btn-info w-100">
+                  <i class="fas fa-chart-bar me-2"></i>
+                  時間チャート
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
+  </div> <!-- main-content-container 閉じタグ -->
+  
+  <!-- モバイル専用フローティングアクションボタン -->
+  <div class="mobile-quick-actions d-md-none">
+    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:time_chart' %}'">
+      <i class="fas fa-chart-bar"></i>
+    </button>
+    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:shift_export' %}'">
+      <i class="fas fa-file-export"></i>
+    </button>
+    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:template_list' %}'">
+      <i class="fas fa-clipboard-list"></i>
+    </button>
   </div>
   
   <!-- シフト詳細モーダル -->
@@ -239,7 +617,7 @@
     </div>
   </div>
   
-  <!-- 日付クリック時の新規シフト登録モーダル（新規追加） -->
+  <!-- 日付クリック時の新規シフト登録モーダル -->
   <div class="modal fade" id="newShiftModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -259,6 +637,9 @@
             </a>
             <a href="#" class="btn btn-info" id="templateBtn">
               <i class="fas fa-clipboard-list"></i> テンプレート適用
+            </a>
+            <a href="#" class="btn btn-warning" id="reasonBtn">
+              <i class="fas fa-calendar-times"></i> 事由登録
             </a>
           </div>
         </div>
@@ -282,9 +663,10 @@
     // カレンダーインスタンスを初期化
     function initCalendar() {
       let initialView = 'dayGridMonth';
-      if (window.innerWidth < 768) {
-        initialView = 'listWeek';
-      }
+      // モバイルでも月表示をデフォルトに（横スクロール対応のため）
+      // if (window.innerWidth < 768) {
+      //   initialView = 'listWeek';
+      // }
 
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: initialView,
@@ -294,17 +676,24 @@
           center: 'title',
           right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
         },
-        windowResize: function(arg) {
-          if (window.innerWidth < 768) {
-            if (calendar.view.type !== 'listWeek') {
-              calendar.changeView('listWeek');
-            }
-          } else {
-            if (calendar.view.type === 'listWeek') {
-              calendar.changeView('dayGridMonth');
-            }
-          }
+        buttonText: {
+          today: '今日',
+          month: '月',
+          week: '週',
+          day: '日',
+          list: 'リスト'
         },
+        // windowResize: function(arg) {
+        //   if (window.innerWidth < 768) {
+        //     if (calendar.view.type !== 'listWeek') {
+        //       calendar.changeView('listWeek');
+        //     }
+        //   } else {
+        //     if (calendar.view.type === 'listWeek') {
+        //       calendar.changeView('dayGridMonth');
+        //     }
+        //   }
+        // },
         events: function(info, successCallback, failureCallback) {
           // APIからシフトデータを取得
           fetch(`{% url 'shift_management:api_shifts' %}?start=${info.startStr}&end=${info.endStr}`)
@@ -325,15 +714,28 @@
           const title = info.event.title;
           const start = info.event.start;
           const end = info.event.end;
+          const isReason = info.event.extendedProps.is_reason;
           
           // モーダル内容を設定
           const modalContent = document.getElementById('shiftDetailContent');
-          modalContent.innerHTML = `
-            <p><strong>スタッフ:</strong> ${title.split(' (')[0]}</p>
-            <p><strong>シフト種別:</strong> ${title.split(' (')[1].replace(')', '')}</p>
-            <p><strong>日付:</strong> ${start.toLocaleDateString()}</p>
-            <p><strong>時間:</strong> ${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 〜 ${end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-          `;
+          
+          if (isReason) {
+            // 事由付きシフトの場合
+            modalContent.innerHTML = `
+              <p><strong>スタッフ:</strong> ${title.split(' (')[0]}</p>
+              <p><strong>事由:</strong> ${title.split(' (')[1].replace(')', '')}</p>
+              <p><strong>日付:</strong> ${start.toLocaleDateString()}</p>
+              <p><strong>種別:</strong> <span class="badge bg-secondary">事由登録</span></p>
+            `;
+          } else {
+            // 通常のシフトの場合
+            modalContent.innerHTML = `
+              <p><strong>スタッフ:</strong> ${title.split(' (')[0]}</p>
+              <p><strong>シフト種別:</strong> ${title.split(' (')[1].replace(')', '')}</p>
+              <p><strong>日付:</strong> ${start.toLocaleDateString()}</p>
+              <p><strong>時間:</strong> ${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 〜 ${end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+            `;
+          }
           
           // 編集・削除ボタンのリンクを設定
           document.getElementById('editShiftBtn').href = `/shift-management/shift/${shiftId}/edit/`;
@@ -356,6 +758,9 @@
           document.getElementById('bulkShiftBtn').href = `${bulkShiftBaseUrl}?start_date=${info.dateStr}&end_date=${info.dateStr}`;
           
           document.getElementById('templateBtn').href = "{% url 'shift_management:template_list' %}"; 
+          
+          const reasonBaseUrl = "{% url 'shift_management:shift_reason_create' %}";
+          document.getElementById('reasonBtn').href = `${reasonBaseUrl}?date=${info.dateStr}`;
           
           // モーダルを表示
           const modal = new bootstrap.Modal(document.getElementById('newShiftModal'));
@@ -436,7 +841,7 @@
         
         // 更新完了メッセージを表示
         const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3'; // mt-3を追加
+        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
         alertDiv.setAttribute('role', 'alert');
         alertDiv.innerHTML = `
           <strong>更新完了!</strong> カレンダーが最新の情報に更新されました。
@@ -589,4 +994,4 @@
     }
   });
 </script>
-{% endblock %}
+{% endblock %} 

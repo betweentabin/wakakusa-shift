@@ -18,7 +18,7 @@ from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 from .forms import (
     StaffForm, ShiftTypeForm, ShiftForm, ShiftTemplateForm, 
     ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
-    BulkShiftForm, ShiftExportForm  # 新規追加フォーム
+    BulkShiftForm, ShiftExportForm, ShiftReasonForm  # 新規追加フォーム
 )
 
 def shift_calendar(request):
@@ -171,6 +171,27 @@ def shift_delete(request, pk):
         return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     
     return render(request, 'shift_management/shift_delete.html', {'shift': shift})
+
+def shift_reason_create(request):
+    """事由登録（公休、有給等）"""
+    if request.method == 'POST':
+        form = ShiftReasonForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, '事由を登録しました。')
+            # カレンダー更新フラグを追加してリダイレクト
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
+    else:
+        # GETパラメータから初期値を設定
+        initial = {}
+        if 'date' in request.GET:
+            initial['date'] = request.GET.get('date')
+        if 'staff' in request.GET:
+            initial['staff'] = request.GET.get('staff')
+        
+        form = ShiftReasonForm(initial=initial)
+    
+    return render(request, 'shift_management/shift_reason_form.html', {'form': form})
 
 def bulk_shift_create(request):
     """複数シフト一括登録（新規追加）"""
@@ -602,15 +623,32 @@ def api_shifts(request):
     
     events = []
     for shift in shifts:
-        events.append({
-            'id': shift.id,
-            'title': f'{shift.staff.name} ({shift.shift_type.name if shift.shift_type else "未設定"})',
-            'start': f'{shift.date.isoformat()}T{shift.start_time.isoformat()}',
-            'end': f'{shift.date.isoformat()}T{shift.end_time.isoformat()}',
-            'color': shift.shift_type.color if shift.shift_type else '#3498db',
-            'staff_id': shift.staff.id,
-            'shift_type_id': shift.shift_type.id if shift.shift_type else None,
-        })
+        if shift.is_deleted_with_reason:
+            # 事由付きの場合は灰色で表示
+            events.append({
+                'id': shift.id,
+                'title': f'{shift.staff.name} ({shift.get_deletion_reason_display()})',
+                'start': f'{shift.date.isoformat()}',  # 終日イベントとして表示
+                'allDay': True,
+                'color': '#6c757d',  # グレー
+                'textColor': '#ffffff',
+                'staff_id': shift.staff.id,
+                'shift_type_id': None,
+                'is_reason': True,
+                'reason': shift.deletion_reason,
+            })
+        else:
+            # 通常のシフトの場合
+            events.append({
+                'id': shift.id,
+                'title': f'{shift.staff.name} ({shift.shift_type.name if shift.shift_type else "未設定"})',
+                'start': f'{shift.date.isoformat()}T{shift.start_time.isoformat()}',
+                'end': f'{shift.date.isoformat()}T{shift.end_time.isoformat()}',
+                'color': shift.shift_type.color if shift.shift_type else '#3498db',
+                'staff_id': shift.staff.id,
+                'shift_type_id': shift.shift_type.id if shift.shift_type else None,
+                'is_reason': False,
+            })
     
     if events: # DEBUG
         print(f"[DEBUG] First event example: {events[0]}") # DEBUG
@@ -666,3 +704,139 @@ def api_shift_delete(request):
         return JsonResponse({'success': True})
     except Shift.DoesNotExist:
         return JsonResponse({'error': 'シフトが存在しません'}, status=404)
+
+def time_chart(request):
+    """時間チャート表示"""
+    # 表示期間の設定（デフォルトは今月）
+    today = timezone.now().date()
+    year = today.year
+    month = today.month
+    
+    # GETパラメータから期間を取得
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+    
+    if start_date_str and end_date_str:
+        try:
+            start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            # 無効な日付の場合はデフォルトに戻す
+            _, last_day = calendar.monthrange(year, month)
+            start_date = datetime.date(year, month, 1)
+            end_date = datetime.date(year, month, last_day)
+    else:
+        # デフォルトは今月
+        _, last_day = calendar.monthrange(year, month)
+        start_date = datetime.date(year, month, 1)
+        end_date = datetime.date(year, month, last_day)
+    
+    # 期間内のシフトを取得
+    shifts = Shift.objects.filter(
+        date__range=[start_date, end_date],
+        is_deleted_with_reason=False  # 事由付きシフトは除外
+    ).select_related('staff', 'shift_type').order_by('date', 'start_time')
+    
+    # スタッフ一覧を取得
+    staff_list = Staff.objects.filter(is_active=True).order_by('name')
+    
+    # 日付リストを作成
+    date_list = []
+    current_date = start_date
+    while current_date <= end_date:
+        date_list.append(current_date)
+        current_date += datetime.timedelta(days=1)
+    
+    # 時間軸の設定（6:00から24:00まで）
+    start_hour = 6
+    end_hour = 24
+    total_minutes = (end_hour - start_hour) * 60  # 18時間 = 1080分
+    
+    # 日付別のシフトデータを整理
+    chart_data = {}
+    for date in date_list:
+        chart_data[date] = []
+    
+    # シフトデータを日付別に分類
+    for shift in shifts:
+        if shift.start_time and shift.end_time and shift.date in chart_data:
+            # 開始時間と終了時間を分単位で計算（6:00を0分とする）
+            start_minutes = max(0, (shift.start_time.hour - start_hour) * 60 + shift.start_time.minute)
+            end_minutes = min(total_minutes, (shift.end_time.hour - start_hour) * 60 + shift.end_time.minute)
+            
+            # 有効な時間範囲内のシフトのみ追加
+            if start_minutes < total_minutes and end_minutes > 0:
+                # パーセンテージを計算
+                left_percent = (start_minutes / total_minutes) * 100
+                width_percent = ((end_minutes - start_minutes) / total_minutes) * 100
+                
+                chart_data[shift.date].append({
+                    'staff_name': shift.staff.name,
+                    'shift_type': shift.shift_type.name if shift.shift_type else '未設定',
+                    'start_minutes': start_minutes,
+                    'end_minutes': end_minutes,
+                    'duration': end_minutes - start_minutes,
+                    'left_percent': round(left_percent, 2),
+                    'width_percent': round(width_percent, 2),
+                    'color': shift.shift_type.color if shift.shift_type else '#3498db',
+                    'start_time': shift.start_time,
+                    'end_time': shift.end_time,
+                })
+    
+    # 時間軸のラベルを作成
+    time_labels = []
+    for hour in range(start_hour, end_hour + 1):
+        time_labels.append(f"{hour:02d}:00")
+    
+    # 統計情報を計算
+    total_shifts = sum(len(chart_data[date]) for date in date_list)
+    max_daily_shifts = max(len(chart_data[date]) for date in date_list) if date_list else 0
+    avg_daily_shifts = round(total_shifts / len(date_list), 1) if date_list else 0
+    
+    # 時間別のシフト数を計算してピーク時間を特定
+    hourly_counts = {}
+    for hour in range(start_hour, end_hour):
+        hourly_counts[f"{hour:02d}:00"] = 0
+    
+    for date in date_list:
+        for shift in chart_data[date]:
+            start_hour_shift = shift['start_time'].hour
+            end_hour_shift = shift['end_time'].hour
+            
+            # シフトが含まれる時間帯をカウント
+            for hour in range(max(start_hour, start_hour_shift), min(end_hour, end_hour_shift + 1)):
+                hour_key = f"{hour:02d}:00"
+                if hour_key in hourly_counts:
+                    hourly_counts[hour_key] += 1
+    
+    # ピーク時間を特定
+    peak_time = '-'
+    if hourly_counts and max(hourly_counts.values()) > 0:
+        peak_time = max(hourly_counts, key=hourly_counts.get)
+    
+    # フォーム用の初期値
+    form_data = {
+        'start_date': start_date,
+        'end_date': end_date
+    }
+    
+    context = {
+        'chart_data': chart_data,
+        'date_list': date_list,
+        'time_labels': time_labels,
+        'staff_list': staff_list,
+        'form_data': form_data,
+        'start_date': start_date,
+        'end_date': end_date,
+        'start_hour': start_hour,
+        'end_hour': end_hour,
+        'total_minutes': total_minutes,
+        # 統計情報
+        'max_staff_count': max_daily_shifts,
+        'avg_staff_count': avg_daily_shifts,
+        'peak_time': peak_time,
+        'total_days': len(date_list),
+        'total_shifts': total_shifts,
+    }
+    
+    return render(request, 'shift_management/time_chart.html', context)

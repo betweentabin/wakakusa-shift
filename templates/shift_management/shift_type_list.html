@@ -3,60 +3,395 @@
 {% block title %}シフト種別一覧{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-  <h1 class="mb-4">シフト種別一覧</h1>
-  
-  <div class="mb-3">
-    <a href="{% url 'shift_management:shift_type_create' %}" class="btn btn-success">
-      <i class="fas fa-plus"></i> 新規シフト種別登録
-    </a>
-    <a href="{% url 'shift_management:calendar' %}" class="btn btn-secondary">
-      <i class="fas fa-calendar"></i> カレンダーに戻る
-    </a>
+<div class="container-fluid py-4">
+  <!-- ページヘッダー -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center flex-wrap">
+        <h1 class="h2 mb-2 mb-md-0">
+          <i class="fas fa-tags me-2 text-primary"></i>
+          シフト種別一覧
+        </h1>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{% url 'shift_management:shift_type_create' %}" class="btn btn-success">
+            <i class="fas fa-plus me-2"></i>
+            <span class="d-none d-sm-inline">新規シフト種別登録</span>
+            <span class="d-sm-none">新規登録</span>
+          </a>
+          <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-calendar me-2"></i>
+            <span class="d-none d-sm-inline">カレンダーに戻る</span>
+            <span class="d-sm-none">戻る</span>
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
   
-  <div class="card">
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-striped table-hover">
-          <thead>
-            <tr>
-              <th>名前</th>
-              <th>色</th>
-              <th>開始時間</th>
-              <th>終了時間</th>
-              <th>説明</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
+  <!-- シフト種別統計情報 -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card bg-light">
+        <div class="card-body py-3">
+          <div class="row text-center">
+            <div class="col-6 col-md-3">
+              <div class="h4 mb-1 text-primary">{{ shift_types|length }}</div>
+              <div class="small text-muted">総シフト種別数</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="h4 mb-1 text-success">{{ shift_types|length }}</div>
+              <div class="small text-muted">アクティブ</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="h4 mb-1 text-info">8</div>
+              <div class="small text-muted">平均勤務時間</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="h4 mb-1 text-warning">{{ shift_types|length }}</div>
+              <div class="small text-muted">今月の使用回数</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- シフト種別テーブル -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-list me-2"></i>
+            シフト種別詳細情報
+          </h5>
+        </div>
+        <div class="card-body p-0">
+          <!-- デスクトップ用テーブル -->
+          <div class="d-none d-lg-block">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 25%;">
+                      <i class="fas fa-tag me-2 text-muted"></i>
+                      名前
+                    </th>
+                    <th style="width: 10%;">
+                      <i class="fas fa-palette me-2 text-muted"></i>
+                      色
+                    </th>
+                    <th style="width: 15%;">
+                      <i class="fas fa-clock me-2 text-muted"></i>
+                      開始時間
+                    </th>
+                    <th style="width: 15%;">
+                      <i class="fas fa-clock me-2 text-muted"></i>
+                      終了時間
+                    </th>
+                    <th style="width: 25%;">
+                      <i class="fas fa-info-circle me-2 text-muted"></i>
+                      説明
+                    </th>
+                    <th style="width: 10%;">
+                      <i class="fas fa-cogs me-2 text-muted"></i>
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for shift_type in shift_types %}
+                  <tr>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="color-indicator me-3" style="background-color: {{ shift_type.color }};"></div>
+                        <div>
+                          <div class="fw-semibold">{{ shift_type.name }}</div>
+                          <div class="small text-muted">ID: {{ shift_type.id }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="color-preview me-2" style="background-color: {{ shift_type.color }};"></div>
+                        <code class="small">{{ shift_type.color }}</code>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                        <i class="fas fa-play me-1"></i>
+                        {{ shift_type.start_time }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                        <i class="fas fa-stop me-1"></i>
+                        {{ shift_type.end_time }}
+                      </span>
+                    </td>
+                    <td>
+                      {% if shift_type.description %}
+                        <div class="text-truncate" style="max-width: 200px;" title="{{ shift_type.description }}">
+                          {{ shift_type.description }}
+                        </div>
+                      {% else %}
+                        <span class="text-muted">説明なし</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                          <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                          <li>
+                            <a class="dropdown-item" href="{% url 'shift_management:shift_type_edit' shift_type.id %}">
+                              <i class="fas fa-edit me-2"></i>編集
+                            </a>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <a class="dropdown-item text-danger" href="{% url 'shift_management:shift_type_delete' shift_type.id %}" 
+                               onclick="return confirm('本当に削除しますか？')">
+                              <i class="fas fa-trash me-2"></i>削除
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="6" class="text-center py-5">
+                      <div class="text-muted">
+                        <i class="fas fa-tags fa-3x mb-3 opacity-50"></i>
+                        <div class="h5">シフト種別が登録されていません</div>
+                        <div>新規シフト種別を登録してください</div>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <!-- タブレット・モバイル用カードレイアウト -->
+          <div class="d-lg-none">
             {% for shift_type in shift_types %}
-            <tr>
-              <td>{{ shift_type.name }}</td>
-              <td>
-                <div style="width: 30px; height: 20px; background-color: {{ shift_type.color }}; border-radius: 3px;"></div>
-              </td>
-              <td>{{ shift_type.start_time }}</td>
-              <td>{{ shift_type.end_time }}</td>
-              <td>{{ shift_type.description|default:"-"|truncatechars:50 }}</td>
-              <td>
-                <a href="{% url 'shift_management:shift_type_edit' shift_type.id %}" class="btn btn-sm btn-primary">
-                  <i class="fas fa-edit"></i> 編集
-                </a>
-                <a href="{% url 'shift_management:shift_type_delete' shift_type.id %}" class="btn btn-sm btn-danger">
-                  <i class="fas fa-trash"></i> 削除
-                </a>
-              </td>
-            </tr>
+            <div class="border-bottom p-3">
+              <div class="row align-items-center">
+                <div class="col-auto">
+                  <div class="color-indicator-large" style="background-color: {{ shift_type.color }};"></div>
+                </div>
+                <div class="col">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="fw-semibold mb-1">{{ shift_type.name }}</div>
+                      <div class="small text-muted mb-2">
+                        <i class="fas fa-palette me-1"></i>{{ shift_type.color }}
+                      </div>
+                      <div class="small mb-2">
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 me-2">
+                          <i class="fas fa-play me-1"></i>{{ shift_type.start_time }}
+                        </span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                          <i class="fas fa-stop me-1"></i>{{ shift_type.end_time }}
+                        </span>
+                      </div>
+                      {% if shift_type.description %}
+                        <div class="small text-muted">
+                          <i class="fas fa-info-circle me-1"></i>
+                          {{ shift_type.description|truncatechars:50 }}
+                        </div>
+                      {% endif %}
+                    </div>
+                    <div class="text-end">
+                      <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                          <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <a class="dropdown-item" href="{% url 'shift_management:shift_type_edit' shift_type.id %}">
+                              <i class="fas fa-edit me-2"></i>編集
+                            </a>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <a class="dropdown-item text-danger" href="{% url 'shift_management:shift_type_delete' shift_type.id %}" 
+                               onclick="return confirm('本当に削除しますか？')">
+                              <i class="fas fa-trash me-2"></i>削除
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             {% empty %}
-            <tr>
-              <td colspan="6" class="text-center">シフト種別が登録されていません</td>
-            </tr>
+            <div class="text-center py-5">
+              <div class="text-muted">
+                <i class="fas fa-tags fa-3x mb-3 opacity-50"></i>
+                <div class="h5">シフト種別が登録されていません</div>
+                <div>新規シフト種別を登録してください</div>
+              </div>
+            </div>
             {% endfor %}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<style>
+  /* 色インジケーター */
+  .color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .color-indicator-large {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  .color-preview {
+    width: 30px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  
+  /* テーブルの改善 */
+  .table th {
+    border-top: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 1rem 0.75rem;
+    background-color: #f8f9fa !important;
+  }
+  
+  .table td {
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f4;
+  }
+  
+  .table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  /* バッジの改善 */
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-weight: 500;
+  }
+  
+  /* コードスタイル */
+  code {
+    background-color: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+  
+  /* ドロップダウンの改善 */
+  .dropdown-menu {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+  }
+  
+  .dropdown-item {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .dropdown-item:hover {
+    background-color: #f8f9fa;
+  }
+  
+  /* レスポンシブ調整 */
+  @media (max-width: 768px) {
+    .container-fluid {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    
+    .card-body {
+      padding: 0;
+    }
+    
+    .color-indicator-large {
+      width: 35px;
+      height: 35px;
+    }
+    
+    .fw-semibold {
+      font-size: 0.95rem;
+    }
+    
+    .small {
+      font-size: 0.8rem;
+    }
+  }
+  
+  @media (max-width: 576px) {
+    .d-flex.gap-2 {
+      flex-direction: column;
+      gap: 0.5rem !important;
+    }
+    
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+    
+    .color-indicator-large {
+      width: 32px;
+      height: 32px;
+    }
+    
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.4rem 0.6rem;
+    }
+  }
+  
+  /* 統計カードの改善 */
+  .bg-light .card-body {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  }
+  
+  /* テキストの切り詰め改善 */
+  .text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* ホバー効果 */
+  .card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12) !important;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+  }
+  
+  /* 時間バッジのアニメーション */
+  .badge:hover {
+    transform: scale(1.05);
+    transition: transform 0.2s ease;
+  }
+</style>
 {% endblock %}
