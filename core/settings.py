@@ -20,6 +20,8 @@ ALLOWED_HOSTS = ['*']
 # CSRF設定
 CSRF_TRUSTED_ORIGINS = [
     'https://8000-it74zvry9ngu35atr58eg-7ea0d6d9.manusvm.computer',
+    'https://*.githubpreview.dev',
+    'https://*.app.github.dev',
 ]
 
 # Application definition
@@ -64,7 +66,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'wsgi.application'
+WSGI_APPLICATION = 'core.wsgi.application'
 
 # Database
 DATABASES = {
