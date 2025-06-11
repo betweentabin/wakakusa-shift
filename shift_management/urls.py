@@ -14,9 +14,12 @@ urlpatterns = [
     # カレンダー表示（管理者用）
     path('calendar/', views.shift_calendar, name='calendar'),
     
-    # スタッフ用シフト確認（読み取り専用）
+    # スタッフ用シフト確認・管理
     path('staff-view/', views.staff_shift_view, name='staff_view'),
     path('staff-api/shifts/', views.staff_api_shifts, name='staff_api_shifts'),
+    path('staff/shift/create/', views.staff_shift_create, name='staff_shift_create'),
+    path('staff/shift/<int:pk>/edit/', views.staff_shift_edit, name='staff_shift_edit'),
+    path('staff/shift/<int:pk>/delete/', views.staff_shift_delete, name='staff_shift_delete'),
     
     # スタッフ管理
     path('staff/', views.staff_list, name='staff_list'),

@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.urls import reverse
 from django.template.loader import render_to_string
+from django import forms
 import json
 import calendar
 import datetime
@@ -28,6 +29,22 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from django.db import connection
+
+# ヘルパー関数
+def get_staff_for_user(user):
+    """
+    ログインユーザーに対応するStaffオブジェクトを取得
+    userフィールドまたは名前で照合
+    """
+    try:
+        # まずuserフィールドで検索
+        return Staff.objects.get(user=user)
+    except Staff.DoesNotExist:
+        try:
+            # userフィールドがない場合は名前で照合
+            return Staff.objects.get(name=user.username, is_active=True)
+        except Staff.DoesNotExist:
+            return None
 
 # 認証関連のビュー
 def user_login(request):
@@ -998,8 +1015,99 @@ def staff_shift_view(request):
     return render(request, 'shift_management/staff_calendar.html', context)
 
 @login_required
+def staff_shift_create(request):
+    """スタッフ用シフト新規作成（自分のシフトのみ）"""
+    # スタッフ自身のStaffオブジェクトを取得
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。管理者にお問い合わせください。')
+        return redirect('shift_management:staff_view')
+    
+    if request.method == 'POST':
+        form = ShiftForm(request.POST)
+        if form.is_valid():
+            shift = form.save(commit=False)
+            # スタッフを自分に固定
+            shift.staff = staff_obj
+            shift.save()
+            messages.success(request, 'シフトを登録しました。')
+            return redirect('shift_management:staff_view')
+    else:
+        # GETパラメータから初期値を設定
+        initial = {'staff': staff_obj.id}
+        if 'date' in request.GET:
+            initial['date'] = request.GET.get('date')
+        
+        form = ShiftForm(initial=initial)
+        # スタッフフィールドを非表示にして自分に固定
+        form.fields['staff'].widget = forms.HiddenInput()
+        form.fields['staff'].initial = staff_obj.id
+    
+    return render(request, 'shift_management/staff_shift_form.html', {
+        'form': form, 
+        'is_create': True,
+        'staff_obj': staff_obj
+    })
+
+@login_required
+def staff_shift_edit(request, pk):
+    """スタッフ用シフト編集（自分のシフトのみ）"""
+    # スタッフ自身のStaffオブジェクトを取得
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。管理者にお問い合わせください。')
+        return redirect('shift_management:staff_view')
+    
+    # 自分のシフトのみ編集可能
+    shift = get_object_or_404(Shift, pk=pk, staff=staff_obj)
+    
+    if request.method == 'POST':
+        form = ShiftForm(request.POST, instance=shift)
+        if form.is_valid():
+            shift = form.save(commit=False)
+            # スタッフを自分に固定
+            shift.staff = staff_obj
+            shift.save()
+            messages.success(request, 'シフトを更新しました。')
+            return redirect('shift_management:staff_view')
+    else:
+        form = ShiftForm(instance=shift)
+        # スタッフフィールドを非表示にして自分に固定
+        form.fields['staff'].widget = forms.HiddenInput()
+        form.fields['staff'].initial = staff_obj.id
+    
+    return render(request, 'shift_management/staff_shift_form.html', {
+        'form': form, 
+        'shift': shift,
+        'is_create': False,
+        'staff_obj': staff_obj
+    })
+
+@login_required
+def staff_shift_delete(request, pk):
+    """スタッフ用シフト削除（自分のシフトのみ）"""
+    # スタッフ自身のStaffオブジェクトを取得
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。管理者にお問い合わせください。')
+        return redirect('shift_management:staff_view')
+    
+    # 自分のシフトのみ削除可能
+    shift = get_object_or_404(Shift, pk=pk, staff=staff_obj)
+    
+    if request.method == 'POST':
+        shift.delete()
+        messages.success(request, 'シフトを削除しました。')
+        return redirect('shift_management:staff_view')
+    
+    return render(request, 'shift_management/staff_shift_delete.html', {
+        'shift': shift,
+        'staff_obj': staff_obj
+    })
+
+@login_required
 def staff_api_shifts(request):
-    """スタッフ用シフトデータAPI（読み取り専用）"""
+    """スタッフ用シフトデータAPI（編集可能）"""
     try:
         # パラメータを取得
         start_date_str = request.GET.get('start')
@@ -1018,7 +1126,12 @@ def staff_api_shifts(request):
             start_date = datetime.datetime.strptime(start_date_str[:10], '%Y-%m-%d').date()
             end_date = datetime.datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
         
-        # シフトデータを取得（通常のシフトのみ）
+        # スタッフ自身のStaffオブジェクトを取得
+        staff_obj = get_staff_for_user(request.user)
+        if not staff_obj:
+            return JsonResponse({'error': f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません'}, status=400)
+        
+        # 全スタッフのシフトデータを取得（通常のシフトのみ）
         shifts = Shift.objects.filter(
             date__range=[start_date, end_date],
             is_deleted_with_reason=False,  # 事由付き削除されていないもののみ
@@ -1041,6 +1154,9 @@ def staff_api_shifts(request):
             start_datetime = datetime.datetime.combine(shift.date, shift.start_time)
             end_datetime = datetime.datetime.combine(shift.date, shift.end_time)
             
+            # 自分のシフトかどうかを判定
+            is_own_shift = shift.staff.id == staff_obj.id
+            
             event = {
                 'id': shift.id,
                 'title': f'{shift.staff.name} ({shift_type_name})',
@@ -1050,14 +1166,16 @@ def staff_api_shifts(request):
                 'staff_id': shift.staff.id,
                 'shift_type_id': shift.shift_type.id if shift.shift_type else None,
                 'is_reason': False,
-                'editable': False,  # スタッフビューでは編集不可
-                'startEditable': False,
-                'durationEditable': False,
+                'is_own_shift': is_own_shift,
+                'editable': is_own_shift,  # 自分のシフトのみ編集可能
+                'startEditable': is_own_shift,
+                'durationEditable': is_own_shift,
             }
             events.append(event)
         
-        # 事由データも取得（事由付きシフト）
+        # 自分の事由データも取得（事由付きシフト）
         reason_shifts = Shift.objects.filter(
+            staff=staff_obj,  # 自分の事由のみ
             date__range=[start_date, end_date],
             is_deleted_with_reason=True
         ).select_related('staff')
@@ -1075,7 +1193,7 @@ def staff_api_shifts(request):
                 'staff_id': reason_shift.staff.id,
                 'is_reason': True,
                 'allDay': True,
-                'editable': False,  # スタッフビューでは編集不可
+                'editable': False,  # 事由は編集不可
             }
             events.append(event)
         

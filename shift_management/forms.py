@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import User
 from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 
 # 時間選択肢を生成するヘルパー関数
@@ -14,6 +15,34 @@ def get_time_choices(interval_minutes=30):
 TIME_CHOICES = get_time_choices(30) # 30分刻みの選択肢
 
 class StaffForm(forms.ModelForm):
+    # ユーザーアカウント作成用フィールド
+    create_user_account = forms.BooleanField(
+        label='ログインアカウントを作成',
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='チェックすると、このスタッフ用のログインアカウントが作成されます'
+    )
+    username = forms.CharField(
+        label='ユーザー名',
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'ログイン時に使用するユーザー名'}),
+        help_text='半角英数字、@/./+/-/_ のみ使用可能'
+    )
+    password = forms.CharField(
+        label='パスワード',
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '8文字以上のパスワード'}),
+        help_text='8文字以上で設定してください'
+    )
+    password_confirm = forms.CharField(
+        label='パスワード（確認）',
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'パスワードを再入力'}),
+        help_text='確認のため同じパスワードを入力してください'
+    )
+
     class Meta:
         model = Staff
         fields = ['name', 'phone', 'email', 'position', 'is_active']
@@ -24,6 +53,92 @@ class StaffForm(forms.ModelForm):
             'position': forms.TextInput(attrs={'class': 'form-control'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 編集時はユーザー名を初期値として設定
+        if self.instance and self.instance.pk and self.instance.user:
+            self.fields['username'].initial = self.instance.user.username
+            self.fields['create_user_account'].initial = True
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        create_user_account = self.cleaned_data.get('create_user_account')
+        
+        if create_user_account and not username:
+            raise forms.ValidationError('ログインアカウントを作成する場合、ユーザー名は必須です。')
+        
+        if username:
+            # 既存ユーザーとの重複チェック（編集時は自分を除く）
+            existing_user = User.objects.filter(username=username).first()
+            if existing_user:
+                if not self.instance.pk or not self.instance.user or existing_user != self.instance.user:
+                    raise forms.ValidationError('このユーザー名は既に使用されています。')
+        
+        return username
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        create_user_account = self.cleaned_data.get('create_user_account')
+        
+        if create_user_account and not password and not self.instance.pk:
+            raise forms.ValidationError('ログインアカウントを作成する場合、パスワードは必須です。')
+        
+        if password and len(password) < 8:
+            raise forms.ValidationError('パスワードは8文字以上で設定してください。')
+        
+        return password
+
+    def clean(self):
+        cleaned_data = super().clean()
+        create_user_account = cleaned_data.get('create_user_account')
+        password = cleaned_data.get('password')
+        password_confirm = cleaned_data.get('password_confirm')
+        
+        if create_user_account and password and password != password_confirm:
+            raise forms.ValidationError('パスワードが一致しません。')
+        
+        return cleaned_data
+
+    def save(self, commit=True):
+        staff = super().save(commit=False)
+        
+        if commit:
+            staff.save()
+            
+            # ユーザーアカウント作成処理
+            create_user_account = self.cleaned_data.get('create_user_account')
+            username = self.cleaned_data.get('username')
+            password = self.cleaned_data.get('password')
+            
+            if create_user_account and username:
+                if staff.user:
+                    # 既存ユーザーの更新
+                    user = staff.user
+                    user.username = username
+                    if password:
+                        user.set_password(password)
+                    user.save()
+                else:
+                    # 新規ユーザー作成
+                    if password:
+                        user = User.objects.create_user(
+                            username=username,
+                            password=password,
+                            email=staff.email or '',
+                            first_name=staff.name.split()[0] if staff.name else '',
+                            last_name=' '.join(staff.name.split()[1:]) if staff.name and len(staff.name.split()) > 1 else ''
+                        )
+                        staff.user = user
+                        staff.save()
+            elif not create_user_account and staff.user:
+                # ユーザーアカウントの削除
+                user = staff.user
+                staff.user = None
+                staff.save()
+                user.delete()
+        
+        return staff
 
 class ShiftTypeForm(forms.ModelForm):
     start_time = forms.ChoiceField(

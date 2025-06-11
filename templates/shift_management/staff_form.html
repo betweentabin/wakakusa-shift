@@ -104,6 +104,119 @@
               </div>
             </div>
 
+            <!-- 役職フィールド -->
+            <div class="mb-4">
+              <label for="{{ form.position.id_for_label }}" class="form-label">
+                <i class="fas fa-briefcase me-2 text-muted"></i>
+                役職・担当
+              </label>
+              {{ form.position }}
+              {% if form.position.errors %}
+                <div class="invalid-feedback d-block">
+                  {% for error in form.position.errors %}
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                <i class="fas fa-info-circle me-1"></i>
+                役職や担当業務を入力してください（任意）
+              </div>
+            </div>
+
+            <!-- ログインアカウント作成セクション -->
+            <div class="card mb-4 border-info">
+              <div class="card-header bg-info text-white">
+                <h6 class="card-title mb-0">
+                  <i class="fas fa-user-lock me-2"></i>
+                  ログインアカウント設定
+                </h6>
+              </div>
+              <div class="card-body">
+                <!-- ログインアカウント作成チェックボックス -->
+                <div class="mb-3">
+                  <div class="form-check form-switch">
+                    {{ form.create_user_account }}
+                    <label class="form-check-label" for="{{ form.create_user_account.id_for_label }}">
+                      <i class="fas fa-key me-2 text-info"></i>
+                      {{ form.create_user_account.label }}
+                    </label>
+                  </div>
+                  {% if form.create_user_account.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.create_user_account.errors %}
+                        <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">
+                    <i class="fas fa-info-circle me-1"></i>
+                    {{ form.create_user_account.help_text }}
+                  </div>
+                </div>
+
+                <!-- ユーザー名フィールド -->
+                <div class="mb-3" id="username-field">
+                  <label for="{{ form.username.id_for_label }}" class="form-label">
+                    <i class="fas fa-user me-2 text-muted"></i>
+                    {{ form.username.label }}
+                  </label>
+                  {{ form.username }}
+                  {% if form.username.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.username.errors %}
+                        <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">
+                    <i class="fas fa-info-circle me-1"></i>
+                    {{ form.username.help_text }}
+                  </div>
+                </div>
+
+                <!-- パスワードフィールド -->
+                <div class="mb-3" id="password-field">
+                  <label for="{{ form.password.id_for_label }}" class="form-label">
+                    <i class="fas fa-lock me-2 text-muted"></i>
+                    {{ form.password.label }}
+                  </label>
+                  {{ form.password }}
+                  {% if form.password.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.password.errors %}
+                        <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">
+                    <i class="fas fa-info-circle me-1"></i>
+                    {{ form.password.help_text }}
+                  </div>
+                </div>
+
+                <!-- パスワード確認フィールド -->
+                <div class="mb-0" id="password-confirm-field">
+                  <label for="{{ form.password_confirm.id_for_label }}" class="form-label">
+                    <i class="fas fa-lock me-2 text-muted"></i>
+                    {{ form.password_confirm.label }}
+                  </label>
+                  {{ form.password_confirm }}
+                  {% if form.password_confirm.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.password_confirm.errors %}
+                        <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">
+                    <i class="fas fa-info-circle me-1"></i>
+                    {{ form.password_confirm.help_text }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- アクティブフィールド -->
             <div class="mb-4">
               <div class="form-check form-switch">
@@ -254,4 +367,30 @@
     }
   }
 </style>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const createUserCheckbox = document.querySelector('input[name="create_user_account"]');
+    const usernameField = document.getElementById('username-field');
+    const passwordField = document.getElementById('password-field');
+    const passwordConfirmField = document.getElementById('password-confirm-field');
+    
+    function toggleUserFields() {
+        const isChecked = createUserCheckbox.checked;
+        const display = isChecked ? 'block' : 'none';
+        
+        usernameField.style.display = display;
+        passwordField.style.display = display;
+        passwordConfirmField.style.display = display;
+    }
+    
+    // 初期状態の設定
+    toggleUserFields();
+    
+    // チェックボックスの変更時にフィールドの表示を切り替え
+    createUserCheckbox.addEventListener('change', toggleUserFields);
+});
+</script>
+{% endblock %}
 {% endblock %}

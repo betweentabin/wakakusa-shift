@@ -462,19 +462,19 @@
 <div class="container-fluid py-4">
     <!-- モバイル専用ヘッダー -->
     <div class="calendar-header-mobile d-md-none">
-        <h3>シフト確認</h3>
+        <h3>シフト管理</h3>
         <div class="subtitle">{{ month_name }}のシフト表</div>
     </div>
     
     <!-- デスクトップ用タイトル -->
     <div class="staff-view-header d-none d-md-block">
-        <h1>シフト確認</h1>
+        <h1>シフト管理</h1>
         <p>{{ month_name }}のシフト表</p>
     </div>
 
-    <div class="readonly-notice">
-        <i class="fas fa-info-circle"></i>
-        こちらは確認専用のページです。シフトの編集はできません。
+    <div class="alert alert-success">
+        <i class="fas fa-calendar-check me-2"></i>
+        全スタッフのシフトを確認できます。あなたのシフトは登録・編集可能です。日付をクリックして新規登録、自分のシフトをクリックして編集・削除ができます。
     </div>
 
     <div class="row">
@@ -516,9 +516,9 @@
                 <div id="shiftDetailContent">
                     <!-- シフト詳細がここに表示されます -->
                 </div>
-                <div class="alert alert-info mt-3 mb-0" style="font-size: 0.9rem;">
-                    <i class="fas fa-lock me-2"></i>
-                    こちらは確認専用です。シフトの変更は管理者にお問い合わせください。
+                <div id="shiftInfoAlert" class="alert alert-info mt-3 mb-0" style="font-size: 0.9rem;">
+                    <i class="fas fa-edit me-2"></i>
+                    編集・削除ボタンからシフトを変更できます。
                 </div>
             </div>
             <div class="modal-footer">
@@ -526,6 +526,14 @@
                     <i class="fas fa-times me-2"></i>
                     閉じる
                 </button>
+                <a href="#" class="btn btn-primary" id="editShiftBtn">
+                    <i class="fas fa-edit me-2"></i>
+                    編集
+                </a>
+                <a href="#" class="btn btn-danger" id="deleteShiftBtn">
+                    <i class="fas fa-trash me-2"></i>
+                    削除
+                </a>
             </div>
         </div>
     </div>
@@ -564,14 +572,24 @@ document.addEventListener('DOMContentLoaded', function() {
         dayMaxEvents: true,
         moreLinkClick: 'popover',
         
-        // 読み取り専用設定
-        editable: false,
-        selectable: false,
-        selectMirror: false,
+        // 編集可能設定
+        editable: true,
+        selectable: true,
+        selectMirror: true,
         
-        // イベントクリック時の詳細表示
+        // 日付クリック時のシフト作成
+        dateClick: function(info) {
+            // 新規シフト作成ページに遷移
+            const dateStr = info.dateStr;
+            window.location.href = `{% url 'shift_management:staff_shift_create' %}?date=${dateStr}`;
+        },
+        
+        // イベントクリック時の編集・削除
         eventClick: function(info) {
             var event = info.event;
+            
+            // 自分のシフトかどうかを判定
+            var isOwnShift = event.extendedProps.is_own_shift;
             
             // シフト種別名を取得
             var shiftTypeName = 'N/A';
@@ -637,6 +655,29 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
             
             document.getElementById('shiftDetailContent').innerHTML = content;
+            
+            // 編集・削除ボタンの表示制御
+            const editBtn = document.getElementById('editShiftBtn');
+            const deleteBtn = document.getElementById('deleteShiftBtn');
+            const infoAlert = document.getElementById('shiftInfoAlert');
+            
+            if (isOwnShift) {
+                // 自分のシフトの場合は編集・削除ボタンを表示
+                const shiftId = event.id;
+                editBtn.href = `{% url 'shift_management:staff_shift_edit' 0 %}`.replace('0', shiftId);
+                deleteBtn.href = `{% url 'shift_management:staff_shift_delete' 0 %}`.replace('0', shiftId);
+                editBtn.style.display = 'inline-block';
+                deleteBtn.style.display = 'inline-block';
+                infoAlert.innerHTML = '<i class="fas fa-edit me-2"></i>編集・削除ボタンからシフトを変更できます。';
+                infoAlert.className = 'alert alert-info mt-3 mb-0';
+            } else {
+                // 他の人のシフトの場合は編集・削除ボタンを非表示
+                editBtn.style.display = 'none';
+                deleteBtn.style.display = 'none';
+                infoAlert.innerHTML = '<i class="fas fa-eye me-2"></i>他のスタッフのシフトです。表示のみ可能です。';
+                infoAlert.className = 'alert alert-secondary mt-3 mb-0';
+            }
+            
             var modal = new bootstrap.Modal(document.getElementById('shiftDetailModal'));
             modal.show();
         },
