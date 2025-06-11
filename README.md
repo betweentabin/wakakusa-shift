@@ -42,7 +42,7 @@ pip install -r requirements.txt
 # データベースマイグレーション
 python manage.py migrate
 
-# スーパーユーザーを作成
+# スーパーユーザーを作成（ユーザー名: admin固定）
 python manage.py createsuperuser
 
 # 開発サーバーを起動
@@ -109,7 +109,7 @@ wakakusa-shift-1/
 
 ### 権限レベル
 
-- **管理者 (superuser)**: 全機能にアクセス可能
+- **管理者 (admin)**: 全機能にアクセス可能
 - **一般スタッフ (staff)**: シフト確認のみ（読み取り専用）
 
 ### 管理コマンド

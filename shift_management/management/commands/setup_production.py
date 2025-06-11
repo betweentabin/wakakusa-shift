@@ -69,8 +69,9 @@ class Command(BaseCommand):
         """スーパーユーザーを作成"""
         self.stdout.write('👤 スーパーユーザーを作成中...')
         
-        username = input('ユーザー名: ')
-        email = input('メールアドレス: ')
+        username = 'admin'
+        email = input('管理者メールアドレス: ')
+        password = input('管理者パスワード: ')
         
         if User.objects.filter(username=username).exists():
             self.stdout.write(
@@ -81,14 +82,14 @@ class Command(BaseCommand):
         user = User.objects.create_superuser(
             username=username,
             email=email,
-            password=None  # パスワードは対話式で設定
+            password=password
         )
         
         # 対応するStaffレコードを作成
         staff, created = Staff.objects.get_or_create(
             user=user,
             defaults={
-                'name': username,
+                'name': '管理者',
                 'email': email,
                 'position': '管理者',
                 'is_active': True

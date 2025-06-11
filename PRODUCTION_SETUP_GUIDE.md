@@ -142,7 +142,7 @@ python3 manage_prod.py migrate
 # 静的ファイル収集
 python3 manage_prod.py collectstatic --noinput
 
-# 初期セットアップ
+# 初期セットアップ（ユーザー名: admin固定、メールアドレスとパスワードを入力）
 python3 manage_prod.py setup_production --create-superuser --create-sample-data --optimize-db --warm-cache
 ```
 
