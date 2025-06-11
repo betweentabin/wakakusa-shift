@@ -168,11 +168,26 @@
       .navbar-nav .nav-item {
         margin-bottom: 0.25rem;
       }
+      
+      /* ドロップダウンメニューの調整 */
+      .dropdown-menu {
+        text-align: left;
+      }
+      
+      /* アラートメッセージの調整 */
+      .alert {
+        margin: 10px;
+        font-size: 0.9rem;
+      }
     }
     
     @media (max-width: 576px) {
       .navbar-brand {
         font-size: 1rem;
+      }
+      
+      .navbar-brand .d-sm-none {
+        font-size: 0.9rem;
       }
       
       .content {
@@ -187,11 +202,42 @@
       .card-body {
         padding: 14px;
       }
+      
+      /* ナビゲーションリンクの調整 */
+      .navbar-nav .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+      }
+      
+      /* ドロップダウンの調整 */
+      .dropdown-menu {
+        min-width: 150px;
+      }
+      
+      .dropdown-item {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+      }
+      
+      /* アラートメッセージの調整 */
+      .alert {
+        margin: 8px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+      }
+      
+      .alert .btn-close {
+        font-size: 0.8rem;
+      }
     }
     
     @media (max-width: 400px) {
       .navbar-brand {
         font-size: 0.9rem;
+      }
+      
+      .navbar-brand .d-sm-none {
+        font-size: 0.8rem;
       }
       
       .content {
@@ -200,6 +246,92 @@
       
       .card {
         margin-bottom: 16px;
+      }
+      
+      .card-header {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+      }
+      
+      .card-body {
+        padding: 12px;
+      }
+      
+      /* ナビゲーションの極小画面対応 */
+      .navbar-nav .nav-link {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.85rem;
+      }
+      
+      .dropdown-item {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+      }
+      
+      /* アラートメッセージの極小画面対応 */
+      .alert {
+        margin: 6px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+      }
+    }
+    
+    /* タッチデバイス対応 */
+    @media (hover: none) and (pointer: coarse) {
+      .navbar-nav .nav-link {
+        min-height: 44px; /* タッチターゲットサイズ */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .dropdown-item {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+      }
+      
+      .btn-close {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      
+      /* ホバーエフェクトを無効化 */
+      .navbar-nav .nav-link:hover {
+        background-color: transparent;
+      }
+      
+      .card:hover {
+        transform: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      
+      .btn:hover {
+        transform: none;
+      }
+    }
+    
+    /* 横向き画面での調整 */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .content {
+        padding: 8px;
+      }
+      
+      .card {
+        margin-bottom: 12px;
+      }
+      
+      .card-header {
+        padding: 8px 12px;
+      }
+      
+      .card-body {
+        padding: 10px;
+      }
+      
+      .alert {
+        margin: 4px;
+        padding: 4px 8px;
       }
     }
     
@@ -222,31 +354,55 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
-      <a class="navbar-brand" href="/">
+      <a class="navbar-brand" href="{% url 'shift_management:home' %}">
         <i class="fas fa-seedling me-2"></i>
-        <span class="d-none d-sm-inline">水耕栽培管理システム</span>
-        <span class="d-sm-none">管理システム</span>
+                    <span class="d-none d-sm-inline">わかくさシフト</span>
+        <span class="d-sm-none">わかくさシフト</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav me-auto">
+          {% if user.is_authenticated %}
+            {% if user.is_superuser or user.is_staff %}
           <li class="nav-item">
             <a class="nav-link" href="{% url 'shift_management:calendar' %}">
               <i class="fas fa-calendar-alt me-1"></i>
               シフト管理
             </a>
           </li>
+            {% endif %}
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'shift_management:staff_view' %}">
+                <i class="fas fa-eye me-1"></i>
+                シフト確認
+              </a>
+            </li>
+          {% endif %}
           <!-- 他の機能へのリンクはここに追加 -->
         </ul>
         <ul class="navbar-nav">
+          {% if user.is_authenticated %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-user me-1"></i>
+                <span class="d-none d-md-inline">{{ user.username }}</span>
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                <li><a class="dropdown-item" href="{% url 'shift_management:logout' %}">
+                  <i class="fas fa-sign-out-alt me-2"></i>ログアウト
+                </a></li>
+              </ul>
+            </li>
+          {% else %}
           <li class="nav-item">
-            <a class="nav-link" href="#">
-              <i class="fas fa-user me-1"></i>
+              <a class="nav-link" href="{% url 'shift_management:login' %}">
+                <i class="fas fa-sign-in-alt me-1"></i>
               <span class="d-none d-md-inline">ログイン</span>
             </a>
           </li>
+          {% endif %}
         </ul>
       </div>
     </div>

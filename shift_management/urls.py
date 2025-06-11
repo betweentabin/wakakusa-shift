@@ -4,8 +4,19 @@ from . import views
 app_name = 'shift_management'
 
 urlpatterns = [
-    # カレンダー表示
-    path('', views.shift_calendar, name='calendar'),
+    # 認証関連
+    path('login/', views.user_login, name='login'),
+    path('logout/', views.user_logout, name='logout'),
+    
+    # ホームページ（権限に応じてリダイレクト）
+    path('', views.home_redirect, name='home'),
+    
+    # カレンダー表示（管理者用）
+    path('calendar/', views.shift_calendar, name='calendar'),
+    
+    # スタッフ用シフト確認（読み取り専用）
+    path('staff-view/', views.staff_shift_view, name='staff_view'),
+    path('staff-api/shifts/', views.staff_api_shifts, name='staff_api_shifts'),
     
     # スタッフ管理
     path('staff/', views.staff_list, name='staff_list'),

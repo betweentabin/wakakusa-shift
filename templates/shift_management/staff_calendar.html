@@ -1,0 +1,651 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}シフト確認 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
+<link rel="stylesheet" href="{% static 'css/calendar_mobile.css' %}">
+<style>
+    .calendar-container {
+        margin-bottom: 15px;
+    }
+    
+    @media (max-width: 768px) {
+        .calendar-container {
+            margin-bottom: 10px;
+        }
+    }
+    
+    .fc-event {
+        cursor: default !important;
+    }
+    
+    .fc-event:hover {
+        opacity: 0.8;
+    }
+    
+    .shift-legend {
+        display: flex;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+    
+    .shift-type-item {
+        display: flex;
+        align-items: center;
+        margin-right: 15px;
+        margin-bottom: 5px;
+    }
+    
+    .shift-type-color {
+        width: 20px;
+        height: 20px;
+        margin-right: 5px;
+        border-radius: 3px;
+    }
+    
+    .fc-event-time, .fc-event-title {
+        padding: 0 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .fc-day-today {
+        background-color: rgba(255, 220, 40, 0.15) !important;
+    }
+    
+    .fc-day-sat {
+        background-color: rgba(0, 120, 255, 0.05);
+    }
+    
+    .fc-day-sun {
+        background-color: rgba(255, 80, 80, 0.05);
+    }
+    
+    .staff-view-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .staff-view-header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+    }
+    
+    .staff-view-header p {
+        margin: 5px 0 0 0;
+        opacity: 0.9;
+    }
+    
+    .readonly-notice {
+        background: #e8f4fd;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .readonly-notice i {
+        margin-right: 8px;
+    }
+    
+    .calendar-header-mobile {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+    }
+    
+    .calendar-header-mobile h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        font-weight: 500;
+    }
+    
+    .calendar-header-mobile .subtitle {
+        font-size: 0.8rem;
+        opacity: 0.85;
+        margin-top: 2px;
+    }
+    
+    /* 管理者用と同じレスポンシブ対応 */
+    @media (max-width: 767.98px) {
+        .fc-header-toolbar {
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 8px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .fc-header-toolbar .fc-toolbar-chunk {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        .fc-header-toolbar .fc-toolbar-title {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin: 0;
+            text-align: center;
+            color: #333;
+            order: 1;
+        }
+
+        /* 前/次/今日ボタンを横並びに */
+        .fc-header-toolbar .fc-toolbar-chunk:first-child {
+            order: 2;
+            margin-top: 6px;
+        }
+
+        .fc-header-toolbar .fc-toolbar-chunk:first-child .fc-button-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        /* 表示切り替えボタンを横並びに */
+        .fc-header-toolbar .fc-toolbar-chunk:last-child {
+            order: 3;
+            margin-top: 6px;
+        }
+
+        .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
+            flex: 0 0 auto;
+            min-width: 60px;
+        }
+
+        .fc-button {
+            font-size: 0.9rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            min-height: 40px;
+            font-weight: 500;
+            border: 1px solid #dee2e6;
+            background-color: white;
+            color: #495057;
+        }
+
+        /* FullCalendarのボタングループを強制的に横並びに */
+        .fc .fc-button-group {
+            display: flex !important;
+            flex-direction: row !important;
+        }
+
+        .fc .fc-button-group .fc-button {
+            margin: 0 2px !important;
+        }
+
+        .fc-button:hover {
+            background-color: #e9ecef;
+        }
+
+        .fc-button-active {
+            background-color: #007bff !important;
+            border-color: #007bff !important;
+            color: white !important;
+        }
+
+        /* 今日ボタンを目立たせる */
+        .fc-today-button {
+            background-color: #28a745 !important;
+            border-color: #28a745 !important;
+            color: white !important;
+        }
+
+        .fc-today-button:hover {
+            background-color: #218838 !important;
+            border-color: #1e7e34 !important;
+        }
+
+        /* 前/次ボタンのスタイル */
+        .fc-prev-button, .fc-next-button {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+            color: white !important;
+        }
+
+        .fc-prev-button:hover, .fc-next-button:hover {
+            background-color: #5a6268 !important;
+            border-color: #545b62 !important;
+        }
+
+        .fc-daygrid-day-bottom .fc-daygrid-more-link {
+            font-size: 0.75rem;
+            padding: 2px 4px;
+        }
+        
+        .staff-view-header {
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .staff-view-header h1 {
+            font-size: 1.5rem;
+        }
+        
+        .readonly-notice {
+            padding: 8px 12px;
+            font-size: 0.9rem;
+        }
+        
+        .card-header {
+            padding: 12px 15px;
+        }
+        
+        .card-header h5 {
+            font-size: 1rem;
+        }
+        
+        .calendar-nav {
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .calendar-nav .btn {
+            font-size: 0.85rem;
+            padding: 6px 12px;
+        }
+        
+        .calendar-nav span {
+            order: -1;
+            font-size: 1.1rem;
+            margin: 0 !important;
+        }
+    }
+
+    /* 超小型画面向け調整 */
+    @media (max-width: 480px) {
+        .fc-header-toolbar .fc-toolbar-title {
+            font-size: 1rem;
+        }
+
+        .fc-button {
+            font-size: 0.75rem;
+            padding: 6px 8px;
+            min-height: 36px;
+            min-width: 50px;
+        }
+
+        /* 表示切り替えボタンも横並びを維持 */
+        .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2px;
+        }
+
+        .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
+            flex: 0 0 auto;
+            font-size: 0.7rem;
+            padding: 5px 6px;
+        }
+        
+        /* カードのパディング調整 */
+        .card-body {
+            padding: 10px;
+        }
+        
+        .card-header {
+            padding: 8px 10px;
+        }
+        
+        /* フォーム要素の調整 */
+        .form-control {
+            font-size: 14px;
+            padding: 6px 8px;
+        }
+        
+        .btn {
+            font-size: 0.8rem;
+            padding: 6px 10px;
+        }
+        
+        /* シフト凡例の調整 */
+        .shift-legend {
+            margin-bottom: 15px;
+        }
+        
+        .shift-type-item {
+            margin-right: 10px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+        
+        .shift-type-color {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .staff-view-header {
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .staff-view-header h1 {
+            font-size: 1.3rem;
+        }
+        
+        .staff-view-header p {
+            font-size: 0.9rem;
+        }
+        
+        .card {
+            margin-bottom: 15px;
+        }
+        
+        .calendar-nav .btn {
+            font-size: 0.8rem;
+            padding: 5px 10px;
+        }
+        
+        .calendar-nav span {
+            font-size: 1rem;
+        }
+    }
+    
+    /* 極小画面（400px以下）向け調整 */
+    @media (max-width: 400px) {
+        .fc-header-toolbar .fc-toolbar-title {
+            font-size: 0.9rem;
+        }
+        
+        .fc-button {
+            font-size: 0.7rem;
+            padding: 4px 6px;
+            min-height: 32px;
+            min-width: 45px;
+        }
+        
+        .card-body {
+            padding: 8px;
+        }
+        
+        .card-header {
+            padding: 6px 8px;
+        }
+        
+        .form-control {
+            font-size: 13px;
+            padding: 5px 6px;
+        }
+        
+        .btn {
+            font-size: 0.75rem;
+            padding: 5px 8px;
+        }
+        
+        .shift-type-item {
+            font-size: 0.75rem;
+            margin-right: 8px;
+            margin-bottom: 6px;
+        }
+        
+        .shift-type-color {
+            width: 14px;
+            height: 14px;
+        }
+        
+        .staff-view-header h1 {
+            font-size: 1.2rem;
+        }
+        
+        .staff-view-header p {
+            font-size: 0.85rem;
+        }
+        
+        .readonly-notice {
+            font-size: 0.85rem;
+            padding: 6px 10px;
+        }
+        
+        .calendar-nav span {
+            font-size: 0.9rem;
+        }
+        
+        .calendar-nav .btn {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+        }
+    }
+    
+    /* タッチデバイス対応 */
+    @media (hover: none) and (pointer: coarse) {
+        .fc-event {
+            min-height: 24px;
+        }
+        
+        .fc-daygrid-event {
+            padding: 2px 4px;
+        }
+        
+        .calendar-nav .btn {
+            min-height: 40px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- モバイル専用ヘッダー -->
+    <div class="calendar-header-mobile d-md-none">
+        <h3>シフト確認</h3>
+        <div class="subtitle">{{ month_name }}のシフト表</div>
+    </div>
+    
+    <!-- デスクトップ用タイトル -->
+    <div class="staff-view-header d-none d-md-block">
+        <h1>シフト確認</h1>
+        <p>{{ month_name }}のシフト表</p>
+    </div>
+
+    <div class="readonly-notice">
+        <i class="fas fa-info-circle"></i>
+        こちらは確認専用のページです。シフトの編集はできません。
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>
+                        シフトカレンダー
+                    </h5>
+                </div>
+                <div class="card-body py-2">
+                    <!-- モバイル用スクロールヒント -->
+                    <div class="d-md-none alert alert-info py-1 mb-2" style="font-size: 0.75rem;">
+                        <i class="fas fa-hand-point-right me-1"></i>
+                        横スワイプで全体表示
+                    </div>
+                    <div class="calendar-container">
+                        <div id="calendar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- シフト詳細モーダル -->
+<div class="modal fade" id="shiftDetailModal" tabindex="-1" aria-labelledby="shiftDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="shiftDetailModalLabel">
+                    <i class="fas fa-info-circle me-2"></i>
+                    シフト詳細
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="shiftDetailContent">
+                    <!-- シフト詳細がここに表示されます -->
+                </div>
+                <div class="alert alert-info mt-3 mb-0" style="font-size: 0.9rem;">
+                    <i class="fas fa-lock me-2"></i>
+                    こちらは確認専用です。シフトの変更は管理者にお問い合わせください。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/locales/ja.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    
+    // 画面サイズに応じた初期ビューを決定（管理者用と同じロジック）
+    var initialView = 'dayGridMonth';
+    
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: initialView,
+        locale: 'ja',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        buttonText: {
+            today: '今日',
+            month: '月',
+            week: '週',
+            day: '日',
+            list: 'リスト'
+        },
+        height: 'auto',
+        events: '{% url "shift_management:staff_api_shifts" %}',
+        eventDisplay: 'block',
+        dayMaxEvents: true,
+        moreLinkClick: 'popover',
+        
+        // 読み取り専用設定
+        editable: false,
+        selectable: false,
+        selectMirror: false,
+        
+        // イベントクリック時の詳細表示
+        eventClick: function(info) {
+            var event = info.event;
+            
+            // シフト種別名を取得
+            var shiftTypeName = 'N/A';
+            var titleParts = event.title.split(' (');
+            if (titleParts.length > 1) {
+                shiftTypeName = titleParts[1].replace(')', '');
+            }
+            
+            var content = `
+                <div class="shift-detail">
+                    <div class="row mb-3">
+                        <div class="col-4">
+                            <strong><i class="fas fa-user me-2 text-primary"></i>スタッフ</strong>
+                        </div>
+                        <div class="col-8">
+                            ${titleParts[0]}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-4">
+                            <strong><i class="fas fa-briefcase me-2 text-success"></i>シフト種別</strong>
+                        </div>
+                        <div class="col-8">
+                            <span class="badge" style="background-color: ${event.backgroundColor}; color: white;">
+                                ${shiftTypeName}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-4">
+                            <strong><i class="fas fa-calendar me-2 text-info"></i>日付</strong>
+                        </div>
+                        <div class="col-8">
+                            ${event.start.toLocaleDateString('ja-JP', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'long'
+                            })}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-0">
+                        <div class="col-4">
+                            <strong><i class="fas fa-clock me-2 text-warning"></i>時間</strong>
+                        </div>
+                        <div class="col-8">
+                            <span class="badge bg-light text-dark border">
+                                ${event.start.toLocaleTimeString('ja-JP', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })} 〜 
+                                ${event.end ? event.end.toLocaleTimeString('ja-JP', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                }) : ''}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('shiftDetailContent').innerHTML = content;
+            var modal = new bootstrap.Modal(document.getElementById('shiftDetailModal'));
+            modal.show();
+        },
+        
+        // その他のカレンダー設定
+        eventTimeFormat: {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        },
+        
+        // レスポンシブ対応（管理者用と同じ）
+        windowResize: function() {
+            calendar.updateSize();
+        }
+    });
+    
+    calendar.render();
+});
+</script>
+{% endblock %} 

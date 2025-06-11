@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}ログイン - シフト管理システム{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-container {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .login-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .login-header h2 {
+        color: #2c3e50;
+        margin-bottom: 10px;
+    }
+    
+    .login-header p {
+        color: #7f8c8d;
+        margin: 0;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 16px;
+        transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+    }
+    
+    .btn-login {
+        width: 100%;
+        padding: 12px;
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.3s, transform 0.2s;
+    }
+    
+    .btn-login:hover {
+        background: #2980b9;
+        transform: translateY(-1px);
+    }
+    
+    .btn-login:active {
+        transform: translateY(0);
+    }
+    
+    .alert {
+        padding: 10px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .login-footer {
+        text-align: center;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        color: #7f8c8d;
+        font-size: 14px;
+    }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+        .login-container {
+            margin: 50px auto;
+            padding: 25px;
+            max-width: 90%;
+        }
+        
+        .login-header h2 {
+            font-size: 1.5rem;
+        }
+        
+        .login-header p {
+            font-size: 0.9rem;
+        }
+        
+        .form-control {
+            padding: 10px;
+            font-size: 16px; /* iOS Safariでズームを防ぐため16px以上 */
+        }
+        
+        .btn-login {
+            padding: 12px;
+            font-size: 16px;
+        }
+        
+        .login-footer {
+            font-size: 13px;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        .login-container {
+            margin: 30px auto;
+            padding: 20px;
+            max-width: 95%;
+            border-radius: 8px;
+        }
+        
+        .login-header {
+            margin-bottom: 25px;
+        }
+        
+        .login-header h2 {
+            font-size: 1.4rem;
+        }
+        
+        .form-group {
+            margin-bottom: 18px;
+        }
+        
+        .form-control {
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .btn-login {
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .login-footer {
+            margin-top: 18px;
+            padding-top: 18px;
+            font-size: 12px;
+        }
+    }
+    
+    @media (max-width: 400px) {
+        .login-container {
+            margin: 20px auto;
+            padding: 18px;
+            max-width: 98%;
+        }
+        
+        .login-header h2 {
+            font-size: 1.3rem;
+        }
+        
+        .login-header p {
+            font-size: 0.85rem;
+        }
+        
+        .form-control {
+            padding: 10px;
+        }
+        
+        .btn-login {
+            padding: 12px;
+            font-size: 15px;
+        }
+    }
+    
+    /* タッチデバイス対応 */
+    @media (hover: none) and (pointer: coarse) {
+        .btn-login {
+            min-height: 44px; /* タッチターゲットサイズ */
+        }
+        
+        .form-control {
+            min-height: 44px;
+        }
+        
+        .btn-login:hover {
+            transform: none; /* タッチデバイスではホバーエフェクトを無効化 */
+        }
+    }
+    
+    /* ダークモード対応 */
+    @media (prefers-color-scheme: dark) {
+        .login-container {
+            background: #2c3e50;
+            color: #ecf0f1;
+        }
+        
+        .login-header h2 {
+            color: #ecf0f1;
+        }
+        
+        .login-header p {
+            color: #bdc3c7;
+        }
+        
+        .form-control {
+            background: #34495e;
+            border-color: #4a5f7a;
+            color: #ecf0f1;
+        }
+        
+        .form-control:focus {
+            border-color: #3498db;
+            background: #34495e;
+        }
+        
+        .login-footer {
+            color: #bdc3c7;
+            border-top-color: #4a5f7a;
+        }
+    }
+    
+    /* アニメーション */
+    .login-container {
+        animation: fadeInUp 0.5s ease-out;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* フォーカス時のアクセシビリティ向上 */
+    .form-control:focus,
+    .btn-login:focus {
+        outline: 2px solid #3498db;
+        outline-offset: 2px;
+    }
+    
+    /* 高コントラストモード対応 */
+    @media (prefers-contrast: high) {
+        .login-container {
+            border: 2px solid #000;
+        }
+        
+        .form-control {
+            border: 2px solid #000;
+        }
+        
+        .btn-login {
+            border: 2px solid #000;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <h2>わかくさシフト</h2>
+        <p>ログインしてシフト管理を開始</p>
+    </div>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <form method="post" novalidate>
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="{{ form.username.id_for_label }}">ユーザー名</label>
+            {{ form.username }}
+            {% if form.username.errors %}
+                <div class="alert alert-danger">
+                    {{ form.username.errors.0 }}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.password.id_for_label }}">パスワード</label>
+            {{ form.password }}
+            {% if form.password.errors %}
+                <div class="alert alert-danger">
+                    {{ form.password.errors.0 }}
+                </div>
+            {% endif %}
+        </div>
+        
+        <button type="submit" class="btn-login">
+            <i class="fas fa-sign-in-alt me-2"></i>
+            ログイン
+        </button>
+    </form>
+    
+    <div class="login-footer">
+        <p>管理者にアカウント作成を依頼してください</p>
+        <p class="mt-2">
+            <small>
+                <strong>テストアカウント:</strong><br>
+                管理者: admin / 一般: staff (パスワード: staff123)
+            </small>
+        </p>
+    </div>
+</div>
+{% endblock %} 

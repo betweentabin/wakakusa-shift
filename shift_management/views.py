@@ -7,8 +7,9 @@ from django.db.models import Q
 from django.urls import reverse
 from django.template.loader import render_to_string
 import json
-import datetime
 import calendar
+import datetime
+from datetime import date, timedelta
 import csv
 from io import StringIO
 import tempfile
@@ -20,7 +21,63 @@ from .forms import (
     ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
     BulkShiftForm, ShiftExportForm, ShiftReasonForm  # 新規追加フォーム
 )
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import AuthenticationForm
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.core.paginator import Paginator
+from django.db import connection
 
+# 認証関連のビュー
+def user_login(request):
+    """ログインビュー"""
+    if request.user.is_authenticated:
+        # 既にログイン済みの場合は権限に応じてリダイレクト
+        if request.user.is_superuser or request.user.is_staff:
+            return redirect('shift_management:calendar')
+        else:
+            return redirect('shift_management:staff_view')
+    
+    if request.method == 'POST':
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                messages.success(request, f'ようこそ、{username}さん！')
+                next_url = request.GET.get('next')
+                if next_url:
+                    return redirect(next_url)
+                # 権限に応じてリダイレクト先を決定
+                elif user.is_superuser or user.is_staff:
+                    return redirect('shift_management:calendar')
+                else:
+                    return redirect('shift_management:staff_view')
+        else:
+            messages.error(request, 'ユーザー名またはパスワードが正しくありません。')
+    else:
+        form = AuthenticationForm()
+    
+    return render(request, 'registration/login.html', {'form': form})
+
+def user_logout(request):
+    """ログアウトビュー"""
+    logout(request)
+    messages.success(request, 'ログアウトしました。')
+    return redirect('shift_management:login')
+
+@login_required
+def home_redirect(request):
+    """ホームページリダイレクト - 権限に応じて適切なページにリダイレクト"""
+    if request.user.is_superuser or request.user.is_staff:
+        return redirect('shift_management:calendar')
+    else:
+        return redirect('shift_management:staff_view')
+
+@login_required
 def shift_calendar(request):
     """シフトカレンダー表示"""
     today = timezone.now().date()
@@ -82,11 +139,13 @@ def shift_calendar(request):
     
     return render(request, 'shift_management/calendar.html', context)
 
+@login_required
 def staff_list(request):
     """スタッフ一覧表示"""
     staffs = Staff.objects.all()
     return render(request, 'shift_management/staff_list.html', {'staffs': staffs})
 
+@login_required
 def staff_create(request):
     """スタッフ新規作成"""
     if request.method == 'POST':
@@ -100,6 +159,7 @@ def staff_create(request):
     
     return render(request, 'shift_management/staff_form.html', {'form': form, 'is_create': True})
 
+@login_required
 def staff_edit(request, pk):
     """スタッフ編集"""
     staff = get_object_or_404(Staff, pk=pk)
@@ -114,6 +174,7 @@ def staff_edit(request, pk):
     
     return render(request, 'shift_management/staff_form.html', {'form': form, 'staff': staff, 'is_create': False})
 
+@login_required
 def staff_delete(request, pk):
     """スタッフ削除"""
     staff = get_object_or_404(Staff, pk=pk)
@@ -125,6 +186,7 @@ def staff_delete(request, pk):
     
     return render(request, 'shift_management/staff_delete.html', {'staff': staff})
 
+@login_required
 def shift_create(request):
     """シフト新規作成"""
     if request.method == 'POST':
@@ -146,6 +208,7 @@ def shift_create(request):
     
     return render(request, 'shift_management/shift_form.html', {'form': form, 'is_create': True})
 
+@login_required
 def shift_edit(request, pk):
     """シフト編集"""
     shift = get_object_or_404(Shift, pk=pk)
@@ -161,6 +224,7 @@ def shift_edit(request, pk):
     
     return render(request, 'shift_management/shift_form.html', {'form': form, 'shift': shift, 'is_create': False})
 
+@login_required
 def shift_delete(request, pk):
     """シフト削除"""
     shift = get_object_or_404(Shift, pk=pk)
@@ -172,6 +236,7 @@ def shift_delete(request, pk):
     
     return render(request, 'shift_management/shift_delete.html', {'shift': shift})
 
+@login_required
 def shift_reason_create(request):
     """事由登録（公休、有給等）"""
     if request.method == 'POST':
@@ -193,6 +258,7 @@ def shift_reason_create(request):
     
     return render(request, 'shift_management/shift_reason_form.html', {'form': form})
 
+@login_required
 def bulk_shift_create(request):
     """複数シフト一括登録（新規追加）"""
     if request.method == 'POST':
@@ -268,11 +334,13 @@ def bulk_shift_create(request):
     
     return render(request, 'shift_management/bulk_shift_form.html', {'form': form})
 
+@login_required
 def shift_type_list(request):
     """シフト種別一覧表示"""
     shift_types = ShiftType.objects.all()
     return render(request, 'shift_management/shift_type_list.html', {'shift_types': shift_types})
 
+@login_required
 def shift_type_create(request):
     """シフト種別新規作成"""
     if request.method == 'POST':
@@ -286,6 +354,7 @@ def shift_type_create(request):
     
     return render(request, 'shift_management/shift_type_form.html', {'form': form, 'is_create': True})
 
+@login_required
 def shift_type_edit(request, pk):
     """シフト種別編集"""
     shift_type = get_object_or_404(ShiftType, pk=pk)
@@ -300,6 +369,7 @@ def shift_type_edit(request, pk):
     
     return render(request, 'shift_management/shift_type_form.html', {'form': form, 'shift_type': shift_type, 'is_create': False})
 
+@login_required
 def shift_type_delete(request, pk):
     """シフト種別削除"""
     shift_type = get_object_or_404(ShiftType, pk=pk)
@@ -310,11 +380,13 @@ def shift_type_delete(request, pk):
     
     return render(request, 'shift_management/shift_type_delete.html', {'shift_type': shift_type})
 
+@login_required
 def template_list(request):
     """シフトテンプレート一覧表示"""
     templates = ShiftTemplate.objects.all()
     return render(request, 'shift_management/template_list.html', {'templates': templates})
 
+@login_required
 def template_create(request):
     """シフトテンプレート新規作成"""
     if request.method == 'POST':
@@ -328,6 +400,7 @@ def template_create(request):
     
     return render(request, 'shift_management/template_form.html', {'form': form, 'is_create': True})
 
+@login_required
 def template_edit(request, pk):
     """シフトテンプレート編集"""
     template = get_object_or_404(ShiftTemplate, pk=pk)
@@ -366,6 +439,7 @@ def template_edit(request, pk):
     
     return render(request, 'shift_management/template_edit.html', context)
 
+@login_required
 def template_delete(request, pk):
     """シフトテンプレート削除"""
     template = get_object_or_404(ShiftTemplate, pk=pk)
@@ -376,6 +450,7 @@ def template_delete(request, pk):
     
     return render(request, 'shift_management/template_delete.html', {'template': template})
 
+@login_required
 def template_apply(request, pk):
     """シフトテンプレートを適用"""
     template = get_object_or_404(ShiftTemplate, pk=pk)
@@ -445,6 +520,7 @@ def template_apply(request, pk):
     
     return render(request, 'shift_management/template_apply.html', {'form': form, 'template': template})
 
+@login_required
 def template_detail_delete(request, pk):
     """シフトテンプレート詳細を削除"""
     detail = get_object_or_404(ShiftTemplateDetail, pk=pk)
@@ -459,6 +535,7 @@ def template_detail_delete(request, pk):
     # For GET request, display confirmation page
     return render(request, 'shift_management/template_detail_delete.html', {'detail': detail})
 
+@login_required
 def shift_export(request):
     """シフト表の印刷・エクスポート（新規追加）"""
     if request.method == 'POST':
@@ -593,6 +670,7 @@ def shift_export(request):
     
     return render(request, 'shift_management/shift_export.html', {'form': form})
 
+@login_required
 def api_shifts(request):
     """シフトデータをJSON形式で返すAPI"""
     print("[DEBUG] api_shifts called") # DEBUG
@@ -657,6 +735,7 @@ def api_shifts(request):
         
     return JsonResponse(events, safe=False)
 
+@login_required
 @require_POST
 def api_shift_update(request):
     """ドラッグ＆ドロップでシフトを更新するAPI（新規追加）"""
@@ -692,6 +771,7 @@ def api_shift_update(request):
     except Exception as e:
         return JsonResponse({'error': f'エラーが発生しました: {str(e)}'}, status=500)
 
+@login_required
 @require_POST
 def api_shift_delete(request):
     """Ajax用シフト削除API"""
@@ -705,6 +785,7 @@ def api_shift_delete(request):
     except Shift.DoesNotExist:
         return JsonResponse({'error': 'シフトが存在しません'}, status=404)
 
+@login_required
 def time_chart(request):
     """時間チャート表示"""
     # 表示期間の設定（デフォルトは今月）
@@ -840,3 +921,274 @@ def time_chart(request):
     }
     
     return render(request, 'shift_management/time_chart.html', context)
+
+@login_required
+def staff_shift_view(request):
+    """スタッフ用シフト確認ビュー（読み取り専用）"""
+    # 現在の年月を取得（URLパラメータがあればそれを使用）
+    year = int(request.GET.get('year', timezone.now().year))
+    month = int(request.GET.get('month', timezone.now().month))
+    
+    # 月の最初と最後の日を取得
+    first_day = date(year, month, 1)
+    last_day = date(year, month, calendar.monthrange(year, month)[1])
+    
+    # カレンダー表示用の日付リストを作成
+    calendar_days = []
+    current_date = first_day
+    
+    # 月の最初の週の空白日を追加
+    start_weekday = first_day.weekday()  # 0=月曜日, 6=日曜日
+    # 日曜日を0にするため調整
+    start_weekday = (start_weekday + 1) % 7
+    
+    for _ in range(start_weekday):
+        calendar_days.append(None)
+    
+    # 月の日付を追加
+    while current_date <= last_day:
+        calendar_days.append(current_date)
+        current_date += timedelta(days=1)
+    
+    # 週を完成させるため空白日を追加
+    while len(calendar_days) % 7 != 0:
+        calendar_days.append(None)
+    
+    # 週ごとにグループ化
+    weeks = []
+    for i in range(0, len(calendar_days), 7):
+        weeks.append(calendar_days[i:i+7])
+    
+    # 該当月のシフトを取得
+    shifts = Shift.objects.filter(
+        date__range=[first_day, last_day]
+    ).select_related('staff', 'shift_type').order_by('date', 'start_time')
+    
+    # 日付ごとにシフトをグループ化
+    shifts_by_date = {}
+    for shift in shifts:
+        if shift.date not in shifts_by_date:
+            shifts_by_date[shift.date] = []
+        shifts_by_date[shift.date].append(shift)
+    
+    # 前月・次月の計算
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+    
+    context = {
+        'year': year,
+        'month': month,
+        'weeks': weeks,
+        'shifts_by_date': shifts_by_date,
+        'prev_year': prev_year,
+        'prev_month': prev_month,
+        'next_year': next_year,
+        'next_month': next_month,
+        'month_name': f'{year}年{month}月',
+        'is_staff_view': True,  # スタッフビューフラグ
+    }
+    
+    return render(request, 'shift_management/staff_calendar.html', context)
+
+@login_required
+def staff_api_shifts(request):
+    """スタッフ用シフトデータAPI（読み取り専用）"""
+    try:
+        # パラメータを取得
+        start_date_str = request.GET.get('start')
+        end_date_str = request.GET.get('end')
+        
+        if not start_date_str or not end_date_str:
+            return JsonResponse({'error': '開始日と終了日が必要です'}, status=400)
+        
+        # 日付文字列をパース
+        try:
+            # ISO形式の日付文字列をパース
+            start_date = datetime.datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
+            end_date = datetime.datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
+        except ValueError:
+            # フォールバック: 別の形式を試す
+            start_date = datetime.datetime.strptime(start_date_str[:10], '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
+        
+        # シフトデータを取得（通常のシフトのみ）
+        shifts = Shift.objects.filter(
+            date__range=[start_date, end_date],
+            is_deleted_with_reason=False,  # 事由付き削除されていないもののみ
+            start_time__isnull=False,      # 開始時間があるもののみ
+            end_time__isnull=False         # 終了時間があるもののみ
+        ).select_related('staff', 'shift_type')
+        
+        # FullCalendar用のイベントデータを作成
+        events = []
+        for shift in shifts:
+            # シフト種別の情報を取得
+            if shift.shift_type:
+                shift_type_name = shift.shift_type.name
+                shift_color = shift.shift_type.color
+            else:
+                shift_type_name = '未設定'
+                shift_color = '#6c757d'  # グレー色
+            
+            # 開始・終了時刻を組み合わせ
+            start_datetime = datetime.datetime.combine(shift.date, shift.start_time)
+            end_datetime = datetime.datetime.combine(shift.date, shift.end_time)
+            
+            event = {
+                'id': shift.id,
+                'title': f'{shift.staff.name} ({shift_type_name})',
+                'start': start_datetime.isoformat(),
+                'end': end_datetime.isoformat(),
+                'color': shift_color,
+                'staff_id': shift.staff.id,
+                'shift_type_id': shift.shift_type.id if shift.shift_type else None,
+                'is_reason': False,
+                'editable': False,  # スタッフビューでは編集不可
+                'startEditable': False,
+                'durationEditable': False,
+            }
+            events.append(event)
+        
+        # 事由データも取得（事由付きシフト）
+        reason_shifts = Shift.objects.filter(
+            date__range=[start_date, end_date],
+            is_deleted_with_reason=True
+        ).select_related('staff')
+        
+        for reason_shift in reason_shifts:
+            # 事由の表示名を取得
+            reason_display = dict(Shift.DELETION_REASON_CHOICES).get(reason_shift.deletion_reason, reason_shift.deletion_reason or 'その他')
+            
+            event = {
+                'id': f'reason_{reason_shift.id}',
+                'title': f'{reason_shift.staff.name} ({reason_display})',
+                'start': reason_shift.date.isoformat(),
+                'end': reason_shift.date.isoformat(),
+                'color': '#e74c3c',
+                'staff_id': reason_shift.staff.id,
+                'is_reason': True,
+                'allDay': True,
+                'editable': False,  # スタッフビューでは編集不可
+            }
+            events.append(event)
+        
+        return JsonResponse(events, safe=False)
+        
+    except Exception as e:
+        return JsonResponse({'error': f'エラーが発生しました: {str(e)}'}, status=500)
+
+# ヘルスチェック・監視用ビュー
+def health_check(request):
+    """
+    システムヘルスチェック
+    /health/ エンドポイントで使用
+    """
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.datetime.now().isoformat(),
+        'checks': {}
+    }
+    
+    # データベース接続チェック
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        health_status['checks']['database'] = 'ok'
+    except Exception as e:
+        health_status['checks']['database'] = f'error: {str(e)}'
+        health_status['status'] = 'unhealthy'
+    
+    # キャッシュチェック
+    try:
+        from django.core.cache import cache
+        cache_key = 'health_check_test'
+        cache.set(cache_key, 'test_value', 30)
+        cached_value = cache.get(cache_key)
+        if cached_value == 'test_value':
+            health_status['checks']['cache'] = 'ok'
+        else:
+            health_status['checks']['cache'] = 'error: cache not working'
+            health_status['status'] = 'unhealthy'
+    except Exception as e:
+        health_status['checks']['cache'] = f'error: {str(e)}'
+        health_status['status'] = 'unhealthy'
+    
+    # ディスク容量チェック
+    try:
+        from django.conf import settings
+        disk_usage = os.statvfs(settings.BASE_DIR)
+        free_space = disk_usage.f_bavail * disk_usage.f_frsize
+        total_space = disk_usage.f_blocks * disk_usage.f_frsize
+        usage_percent = ((total_space - free_space) / total_space) * 100
+        
+        if usage_percent > 90:
+            health_status['checks']['disk'] = f'warning: {usage_percent:.1f}% used'
+            health_status['status'] = 'degraded'
+        else:
+            health_status['checks']['disk'] = f'ok: {usage_percent:.1f}% used'
+    except Exception as e:
+        health_status['checks']['disk'] = f'error: {str(e)}'
+    
+    # ログディレクトリチェック
+    try:
+        from django.conf import settings
+        log_dir = os.path.join(settings.BASE_DIR, 'logs')
+        if os.path.exists(log_dir) and os.access(log_dir, os.W_OK):
+            health_status['checks']['logs'] = 'ok'
+        else:
+            health_status['checks']['logs'] = 'error: log directory not writable'
+            health_status['status'] = 'unhealthy'
+    except Exception as e:
+        health_status['checks']['logs'] = f'error: {str(e)}'
+    
+    # HTTPステータスコードを設定
+    status_code = 200
+    if health_status['status'] == 'unhealthy':
+        status_code = 503
+    elif health_status['status'] == 'degraded':
+        status_code = 200  # 警告レベルは200で返す
+    
+    return JsonResponse(health_status, status=status_code)
+
+def readiness_check(request):
+    """
+    レディネスチェック（アプリケーションが準備完了かどうか）
+    /ready/ エンドポイントで使用
+    """
+    try:
+        # 必要なテーブルが存在するかチェック
+        from shift_management.models import Staff, ShiftType, Shift
+        
+        # 簡単なクエリを実行
+        Staff.objects.exists()
+        ShiftType.objects.exists()
+        Shift.objects.exists()
+        
+        return JsonResponse({
+            'status': 'ready',
+            'timestamp': datetime.datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'not_ready',
+            'error': str(e),
+            'timestamp': datetime.datetime.now().isoformat()
+        }, status=503)
+
+def liveness_check(request):
+    """
+    ライブネスチェック（アプリケーションが生きているかどうか）
+    /live/ エンドポイントで使用
+    """
+    return JsonResponse({
+        'status': 'alive',
+        'timestamp': datetime.datetime.now().isoformat()
+    })

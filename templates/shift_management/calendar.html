@@ -204,14 +204,16 @@
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
       display: flex !important;
       flex-direction: row !important;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: center;
-      gap: 4px;
+      gap: 2px;
     }
 
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
       flex: 0 0 auto;
-      min-width: 60px;
+      min-width: 45px;
+      font-size: 0.8rem;
+      padding: 6px 8px;
     }
 
     .fc-button {
@@ -278,13 +280,13 @@
   /* 超小型画面向け調整 */
   @media (max-width: 480px) {
     .fc-header-toolbar .fc-toolbar-title {
-      font-size: 1.1rem;
+      font-size: 1rem;
     }
 
     .fc-button {
       font-size: 0.75rem;
       padding: 6px 8px;
-      min-height: 32px;
+      min-height: 36px;
       min-width: 50px;
     }
 
@@ -292,15 +294,101 @@
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
       display: flex !important;
       flex-direction: row !important;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: center;
-      gap: 2px;
+      gap: 1px;
     }
 
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
       flex: 0 0 auto;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
+      padding: 4px 5px;
+      min-width: 38px;
+    }
+    
+    /* カードのパディング調整 */
+    .card-body {
+      padding: 10px;
+    }
+    
+    .card-header {
+      padding: 8px 10px;
+    }
+    
+    /* フォーム要素の調整 */
+    .form-control {
+      font-size: 14px;
+      padding: 6px 8px;
+    }
+    
+    .btn {
+      font-size: 0.8rem;
+      padding: 6px 10px;
+    }
+    
+    /* シフト凡例の調整 */
+    .shift-legend {
+      margin-bottom: 15px;
+    }
+    
+    .shift-type-item {
+      margin-right: 10px;
+      margin-bottom: 8px;
+      font-size: 0.8rem;
+    }
+    
+    .shift-type-color {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  
+  /* 極小画面（400px以下）向け調整 */
+  @media (max-width: 400px) {
+    .fc-header-toolbar .fc-toolbar-title {
+      font-size: 0.9rem;
+    }
+    
+    .fc-button {
+      font-size: 0.65rem;
+      padding: 3px 5px;
+      min-height: 30px;
+      min-width: 35px;
+    }
+    
+    .card-body {
+      padding: 8px;
+    }
+    
+    .card-header {
+      padding: 6px 8px;
+    }
+    
+    .form-control {
+      font-size: 13px;
       padding: 5px 6px;
+    }
+    
+    .btn {
+      font-size: 0.75rem;
+      padding: 5px 8px;
+    }
+    
+    .shift-type-item {
+      font-size: 0.75rem;
+      margin-right: 8px;
+      margin-bottom: 6px;
+    }
+    
+    .shift-type-color {
+      width: 14px;
+      height: 14px;
+    }
+    
+    .quick-action-fab {
+      width: 48px;
+      height: 48px;
+      font-size: 1rem;
     }
   }
 
@@ -738,7 +826,7 @@
           }
           
           // 編集・削除ボタンのリンクを設定
-          document.getElementById('editShiftBtn').href = `/shift-management/shift/${shiftId}/edit/`;
+          document.getElementById('editShiftBtn').href = `/shift/${shiftId}/edit/`;
           document.getElementById('deleteShiftBtn').dataset.shiftId = shiftId;
           
           // モーダルを表示
