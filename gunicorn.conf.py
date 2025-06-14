@@ -18,16 +18,16 @@ timeout = 30
 keepalive = 2
 
 # ログ設定
-accesslog = "logs/gunicorn_access.log"
-errorlog = "logs/gunicorn_error.log"
+accesslog = "/var/log/wakakusa_shift/gunicorn_access.log"
+errorlog = "/var/log/wakakusa_shift/gunicorn_error.log"
 loglevel = "info"
-access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 
 # プロセス設定
 daemon = False
-pidfile = "logs/gunicorn.pid"
-user = None
-group = None
+pidfile = "/var/run/wakakusa_shift/gunicorn.pid"
+user = "taigakuwata"
+group = "taigakuwata"
 tmp_upload_dir = None
 
 # セキュリティ設定
@@ -78,3 +78,6 @@ if os.environ.get('DJANGO_SETTINGS_MODULE') == 'core.settings.production':
     timeout = 60
     max_requests = 500
     workers = min(multiprocessing.cpu_count() * 2 + 1, 8)  # 最大8ワーカー
+
+# 再起動設定
+reload = False
