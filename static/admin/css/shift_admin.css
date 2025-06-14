@@ -1,0 +1,188 @@
+/* シフト承認用Admin画面スタイル */
+
+/* 承認待ちの行をハイライト */
+.admin-shift-changelist .results tbody tr:has(td:contains("承認待ち")) {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107;
+}
+
+/* 承認済みの行 */
+.admin-shift-changelist .results tbody tr:has(td:contains("承認済み")) {
+    background-color: #f8f9fa;
+}
+
+/* 却下された行 */
+.admin-shift-changelist .results tbody tr:has(td:contains("却下")) {
+    background-color: #f8d7da;
+    border-left: 4px solid #dc3545;
+}
+
+/* アクションボタンのスタイル改善 */
+.admin .actions select {
+    margin-right: 10px;
+}
+
+.admin .actions .button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.admin .actions .button:hover {
+    background-color: #0056b3;
+}
+
+/* 承認状態バッジのスタイル */
+.approval-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+    min-width: 80px;
+}
+
+.approval-badge.pending {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.approval-badge.approved {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.approval-badge.rejected {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* テーブルヘッダーのスタイル改善 */
+.admin .results th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* 承認待ち件数の表示 */
+.admin-shift-changelist .results-summary {
+    background-color: #e9ecef;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.pending-count {
+    color: #856404;
+    font-weight: bold;
+    background-color: #fff3cd;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+/* フィルターサイドバーの改善 */
+#changelist-filter h3 {
+    background-color: #007bff;
+    color: white;
+    padding: 8px 10px;
+    margin: 0;
+    font-size: 13px;
+}
+
+#changelist-filter ul {
+    margin: 0;
+    padding: 0;
+}
+
+#changelist-filter li {
+    border-bottom: 1px solid #eee;
+}
+
+#changelist-filter li a {
+    display: block;
+    padding: 8px 10px;
+    text-decoration: none;
+    color: #333;
+}
+
+#changelist-filter li a:hover {
+    background-color: #f8f9fa;
+}
+
+#changelist-filter li.selected a {
+    background-color: #007bff;
+    color: white;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .admin .results table {
+        font-size: 12px;
+    }
+    
+    .approval-badge {
+        min-width: 60px;
+        font-size: 10px;
+        padding: 2px 4px;
+    }
+    
+    .admin .actions {
+        text-align: center;
+    }
+    
+    .admin .actions select,
+    .admin .actions .button {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+    }
+}
+
+/* 詳細画面での承認情報の強調 */
+.form-row .approval-status {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    border-left: 4px solid #007bff;
+}
+
+.form-row .approval-status h3 {
+    margin-top: 0;
+    color: #007bff;
+}
+
+/* 承認理由入力欄のスタイル */
+.form-row textarea[name="rejection_reason"] {
+    width: 100%;
+    min-height: 80px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+/* 成功・警告メッセージのスタイル改善 */
+.messagelist .success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.messagelist .warning {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+}
+
+.messagelist .error {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+} 

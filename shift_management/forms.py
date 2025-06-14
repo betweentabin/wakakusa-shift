@@ -221,6 +221,8 @@ class ShiftForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['shift_type'].required = False
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
 
 class ShiftReasonForm(forms.ModelForm):
     """事由登録フォーム（公休、有給等）"""
@@ -244,6 +246,8 @@ class ShiftReasonForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['deletion_reason'].required = True
         self.fields['deletion_reason'].empty_label = "選択してください"
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -341,7 +345,7 @@ class BulkShiftForm(forms.Form):
     )
     staff = forms.ModelMultipleChoiceField(
         label='スタッフ（複数選択可）',
-        queryset=Staff.objects.filter(is_active=True),
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
         widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'})
     )
     shift_type = forms.ModelChoiceField(
@@ -470,6 +474,11 @@ class ShiftTemplateDetailForm(forms.ModelForm):
             'weekday': forms.Select(attrs={'class': 'form-select'}),
         }
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+    
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
         start_time_str = self.cleaned_data.get('start_time')
@@ -560,7 +569,7 @@ class ShiftExportForm(forms.Form):
     )
     staff = forms.ModelMultipleChoiceField(
         label='スタッフ（複数選択可、未選択の場合は全員）',
-        queryset=Staff.objects.filter(is_active=True),
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
         required=False,
         widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'})
     )

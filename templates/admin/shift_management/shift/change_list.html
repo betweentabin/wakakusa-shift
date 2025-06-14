@@ -1,0 +1,151 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .approval-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .approval-summary h2 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .approval-stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px 20px;
+            border-radius: 6px;
+            text-align: center;
+            min-width: 120px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 28px;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .stat-pending .stat-number {
+            color: #ffc107;
+        }
+        
+        .stat-approved .stat-number {
+            color: #28a745;
+        }
+        
+        .stat-rejected .stat-number {
+            color: #dc3545;
+        }
+        
+        .quick-actions {
+            margin-top: 15px;
+        }
+        
+        .quick-action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-right: 10px;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        
+        .quick-action-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 768px) {
+            .approval-stats {
+                justify-content: center;
+            }
+            
+            .stat-item {
+                min-width: 100px;
+                padding: 10px 15px;
+            }
+            
+            .stat-number {
+                font-size: 24px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content_title %}
+    <div class="approval-summary">
+        <h2>🔄 シフト承認管理</h2>
+        <div class="approval-stats">
+            <div class="stat-item stat-pending">
+                <span class="stat-number">{{ pending_shifts_count|default:0 }}</span>
+                <span class="stat-label">承認待ち</span>
+            </div>
+            <div class="stat-item stat-approved">
+                <span class="stat-number">{{ approved_shifts_count|default:0 }}</span>
+                <span class="stat-label">承認済み</span>
+            </div>
+            <div class="stat-item stat-rejected">
+                <span class="stat-number">{{ rejected_shifts_count|default:0 }}</span>
+                <span class="stat-label">却下</span>
+            </div>
+        </div>
+        
+        {% if pending_shifts_count > 0 %}
+        <div class="quick-actions">
+            <a href="?approval_status__exact=pending" class="quick-action-btn">
+                🕐 承認待ちのみ表示
+            </a>
+            <a href="{% url 'admin:shift_management_shift_changelist' %}" class="quick-action-btn">
+                📋 全て表示
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    
+    {% if pending_shifts_count > 0 %}
+        <div class="messagelist">
+            <div class="warning">
+                <strong>⚠️ 注意:</strong> {{ pending_shifts_count }}件のシフトが承認待ちです。
+                承認されるまでカレンダーには表示されません。
+            </div>
+        </div>
+    {% endif %}
+    
+    {{ block.super }}
+{% endblock %}
+
+{% block result_list %}
+    {% if pending_shifts_count == 0 and approved_shifts_count == 0 and rejected_shifts_count == 0 %}
+        <div style="text-align: center; padding: 40px; color: #666;">
+            <h3>📅 シフトがまだ登録されていません</h3>
+            <p>スタッフがシフトを登録すると、ここに表示されます。</p>
+        </div>
+    {% else %}
+        {{ block.super }}
+    {% endif %}
+{% endblock %} 

@@ -116,8 +116,11 @@ def shift_calendar(request):
         start_date = form.cleaned_data['start_date']
         end_date = form.cleaned_data['end_date']
     
-    # 日付範囲内のシフトを取得
-    shifts = Shift.objects.filter(date__range=[start_date, end_date]).select_related('staff', 'shift_type')
+    # 日付範囲内の承認済みシフトを取得
+    shifts = Shift.objects.filter(
+        date__range=[start_date, end_date],
+        approval_status='approved'
+    ).select_related('staff', 'shift_type')
     
     # スタッフ一覧を取得
     staff_list = Staff.objects.filter(is_active=True)
@@ -168,8 +171,12 @@ def staff_create(request):
     if request.method == 'POST':
         form = StaffForm(request.POST)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'スタッフを登録しました。')
+            # フォームのsaveメソッドを使用してユーザーアカウント作成処理も含めて保存
+            staff = form.save()
+            # 新規登録時は承認待ち状態に設定（フォーム保存後に更新）
+            staff.approval_status = 'pending'
+            staff.save()
+            messages.success(request, 'スタッフを登録しました。管理者の承認をお待ちください。')
             return redirect('shift_management:staff_list')
     else:
         form = StaffForm()
@@ -209,7 +216,13 @@ def shift_create(request):
     if request.method == 'POST':
         form = ShiftForm(request.POST)
         if form.is_valid():
-            form.save()
+            shift = form.save(commit=False)
+            # 管理者が作成したシフトは承認済み状態で保存
+            shift.approval_status = 'approved'
+            shift.approved_at = timezone.now()
+            shift.approved_by = request.user
+            shift.created_by = request.user
+            shift.save()
             messages.success(request, 'シフトを登録しました。')
             # カレンダー更新フラグを追加してリダイレクト
             return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
@@ -232,7 +245,11 @@ def shift_edit(request, pk):
     if request.method == 'POST':
         form = ShiftForm(request.POST, instance=shift)
         if form.is_valid():
-            form.save()
+            shift = form.save(commit=False)
+            # 管理者が編集したシフトは承認済み状態を維持
+            if not shift.created_by:
+                shift.created_by = request.user
+            shift.save()
             messages.success(request, 'シフトを更新しました。')
             # カレンダー更新フラグを追加してリダイレクト
             return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
@@ -320,7 +337,11 @@ def bulk_shift_create(request):
                             shift_type=shift_type,
                             date=current_date,
                             start_time=start_time,
-                            end_time=end_time
+                            end_time=end_time,
+                            approval_status='approved',  # 管理者が作成したシフトは承認済み
+                            approved_at=timezone.now(),
+                            approved_by=request.user,
+                            created_by=request.user
                         )
                         shifts_created += 1
                 
@@ -569,10 +590,11 @@ def shift_export(request):
             else:
                 staff_list = Staff.objects.filter(is_active=True)
             
-            # シフトデータ取得
+            # 承認済みシフトデータ取得
             shifts = Shift.objects.filter(
                 date__range=[start_date, end_date],
-                staff__in=staff_list
+                staff__in=staff_list,
+                approval_status='approved'  # 承認済みのシフトのみ
             ).select_related('staff', 'shift_type').order_by('date', 'start_time')
             
             # 日付範囲の全日付リスト作成
@@ -713,8 +735,12 @@ def api_shifts(request):
         return JsonResponse({'error': '日付形式が正しくありません'}, status=400)
     
     print(f"[DEBUG] Querying shifts between {start_date} and {end_date}") # DEBUG
-    shifts = Shift.objects.filter(date__range=[start_date, end_date]).select_related('staff', 'shift_type')
-    print(f"[DEBUG] Found {shifts.count()} shifts") # DEBUG
+    # 承認済みのシフトのみを表示
+    shifts = Shift.objects.filter(
+        date__range=[start_date, end_date],
+        approval_status='approved'
+    ).select_related('staff', 'shift_type')
+    print(f"[DEBUG] Found {shifts.count()} approved shifts") # DEBUG
     
     events = []
     for shift in shifts:
@@ -829,9 +855,10 @@ def time_chart(request):
         start_date = datetime.date(year, month, 1)
         end_date = datetime.date(year, month, last_day)
     
-    # 期間内のシフトを取得
+    # 期間内の承認済みシフトを取得
     shifts = Shift.objects.filter(
         date__range=[start_date, end_date],
+        approval_status='approved',   # 承認済みのシフトのみ
         is_deleted_with_reason=False  # 事由付きシフトは除外
     ).select_related('staff', 'shift_type').order_by('date', 'start_time')
     
@@ -1029,8 +1056,11 @@ def staff_shift_create(request):
             shift = form.save(commit=False)
             # スタッフを自分に固定
             shift.staff = staff_obj
+            # スタッフが作成したシフトは承認待ち状態に設定
+            shift.approval_status = 'pending'
+            shift.created_by = request.user
             shift.save()
-            messages.success(request, 'シフトを登録しました。')
+            messages.success(request, 'シフトを登録しました。管理者の承認をお待ちください。')
             return redirect('shift_management:staff_view')
     else:
         # GETパラメータから初期値を設定
@@ -1067,8 +1097,13 @@ def staff_shift_edit(request, pk):
             shift = form.save(commit=False)
             # スタッフを自分に固定
             shift.staff = staff_obj
+            # 編集時は再度承認待ち状態に設定
+            shift.approval_status = 'pending'
+            shift.approved_at = None
+            shift.approved_by = None
+            shift.rejection_reason = ''
             shift.save()
-            messages.success(request, 'シフトを更新しました。')
+            messages.success(request, 'シフトを更新しました。管理者の承認をお待ちください。')
             return redirect('shift_management:staff_view')
     else:
         form = ShiftForm(instance=shift)
@@ -1131,9 +1166,10 @@ def staff_api_shifts(request):
         if not staff_obj:
             return JsonResponse({'error': f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません'}, status=400)
         
-        # 全スタッフのシフトデータを取得（通常のシフトのみ）
+        # 全スタッフの承認済みシフトデータを取得（通常のシフトのみ）
         shifts = Shift.objects.filter(
             date__range=[start_date, end_date],
+            approval_status='approved',    # 承認済みのシフトのみ
             is_deleted_with_reason=False,  # 事由付き削除されていないもののみ
             start_time__isnull=False,      # 開始時間があるもののみ
             end_time__isnull=False         # 終了時間があるもののみ
@@ -1303,10 +1339,199 @@ def readiness_check(request):
 
 def liveness_check(request):
     """
-    ライブネスチェック（アプリケーションが生きているかどうか）
-    /live/ エンドポイントで使用
+    Liveness probe - アプリケーションが生きているかチェック
     """
-    return JsonResponse({
-        'status': 'alive',
-        'timestamp': datetime.datetime.now().isoformat()
-    })
+    try:
+        # 簡単なデータベース接続チェック
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        
+        return JsonResponse({
+            'status': 'healthy',
+            'timestamp': timezone.now().isoformat(),
+            'checks': {
+                'database': 'ok'
+            }
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'unhealthy',
+            'timestamp': timezone.now().isoformat(),
+            'error': str(e)
+        }, status=503)
+
+@login_required
+def api_pending_shifts(request):
+    """承認待ちシフトを取得するAPI"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({'error': '権限がありません'}, status=403)
+    
+    try:
+        pending_shifts = Shift.objects.filter(
+            approval_status='pending'
+        ).select_related('staff', 'shift_type', 'created_by').order_by('-created_at')
+        
+        shifts_data = []
+        for shift in pending_shifts:
+            created_by_name = "システム"
+            if shift.created_by:
+                if hasattr(shift.created_by, 'staff') and shift.created_by.staff:
+                    created_by_name = f"{shift.created_by.staff.name} (スタッフ)"
+                else:
+                    created_by_name = f"{shift.created_by.username} (管理者)"
+            
+            shifts_data.append({
+                'id': shift.id,
+                'staff_name': shift.staff.name,
+                'date': shift.date.strftime('%Y-%m-%d'),
+                'date_display': shift.date.strftime('%m月%d日'),
+                'weekday': ['月', '火', '水', '木', '金', '土', '日'][shift.date.weekday()],
+                'shift_type': shift.shift_type.name,
+                'shift_type_color': shift.shift_type.color,
+                'start_time': shift.start_time.strftime('%H:%M') if shift.start_time else '',
+                'end_time': shift.end_time.strftime('%H:%M') if shift.end_time else '',
+                'notes': shift.notes or '',
+                'created_by': created_by_name,
+                'created_at': shift.created_at.strftime('%Y-%m-%d %H:%M'),
+            })
+        
+        return JsonResponse({
+            'shifts': shifts_data,
+            'count': len(shifts_data)
+        })
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_POST
+def api_approve_shift(request):
+    """シフトを承認するAPI"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({'error': '権限がありません'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        shift_id = data.get('shift_id')
+        
+        if not shift_id:
+            return JsonResponse({'error': 'シフトIDが必要です'}, status=400)
+        
+        shift = get_object_or_404(Shift, id=shift_id)
+        
+        if shift.approval_status != 'pending':
+            return JsonResponse({'error': 'このシフトは既に処理済みです'}, status=400)
+        
+        # シフトを承認
+        shift.approval_status = 'approved'
+        shift.approved_at = timezone.now()
+        shift.approved_by = request.user
+        shift.rejection_reason = ''
+        shift.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{shift.staff.name}さんの{shift.date.strftime("%m月%d日")}のシフトを承認しました',
+            'shift': {
+                'id': shift.id,
+                'staff_name': shift.staff.name,
+                'date_display': shift.date.strftime('%m月%d日'),
+                'shift_type': shift.shift_type.name,
+            }
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '無効なJSONデータです'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_POST
+def api_reject_shift(request):
+    """シフトを却下するAPI"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({'error': '権限がありません'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        shift_id = data.get('shift_id')
+        rejection_reason = data.get('rejection_reason', '')
+        
+        if not shift_id:
+            return JsonResponse({'error': 'シフトIDが必要です'}, status=400)
+        
+        shift = get_object_or_404(Shift, id=shift_id)
+        
+        if shift.approval_status != 'pending':
+            return JsonResponse({'error': 'このシフトは既に処理済みです'}, status=400)
+        
+        # シフトを却下
+        shift.approval_status = 'rejected'
+        shift.approved_at = None
+        shift.approved_by = None
+        shift.rejection_reason = rejection_reason
+        shift.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{shift.staff.name}さんの{shift.date.strftime("%m月%d日")}のシフトを却下しました',
+            'shift': {
+                'id': shift.id,
+                'staff_name': shift.staff.name,
+                'date_display': shift.date.strftime('%m月%d日'),
+                'shift_type': shift.shift_type.name,
+            }
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '無効なJSONデータです'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_POST
+def api_bulk_approve_shifts(request):
+    """複数のシフトを一括承認するAPI"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({'error': '権限がありません'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        shift_ids = data.get('shift_ids', [])
+        
+        if not shift_ids:
+            return JsonResponse({'error': 'シフトIDが必要です'}, status=400)
+        
+        shifts = Shift.objects.filter(
+            id__in=shift_ids,
+            approval_status='pending'
+        )
+        
+        approved_count = 0
+        approved_shifts = []
+        
+        for shift in shifts:
+            shift.approval_status = 'approved'
+            shift.approved_at = timezone.now()
+            shift.approved_by = request.user
+            shift.rejection_reason = ''
+            shift.save()
+            approved_count += 1
+            approved_shifts.append({
+                'id': shift.id,
+                'staff_name': shift.staff.name,
+                'date_display': shift.date.strftime('%m月%d日'),
+                'shift_type': shift.shift_type.name,
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{approved_count}件のシフトを一括承認しました',
+            'approved_shifts': approved_shifts,
+            'count': approved_count
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': '無効なJSONデータです'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

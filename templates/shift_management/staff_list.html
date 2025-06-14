@@ -89,9 +89,13 @@
                       <i class="fas fa-envelope me-2 text-muted"></i>
                       メールアドレス
                     </th>
-                    <th style="width: 12%;">
+                    <th style="width: 10%;">
                       <i class="fas fa-toggle-on me-2 text-muted"></i>
                       ステータス
+                    </th>
+                    <th style="width: 12%;">
+                      <i class="fas fa-check-circle me-2 text-muted"></i>
+                      承認状態
                     </th>
                     <th style="width: 10%;">
                       <i class="fas fa-cogs me-2 text-muted"></i>
@@ -148,6 +152,24 @@
                       {% endif %}
                     </td>
                     <td>
+                      {% if staff.approval_status == 'approved' %}
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                          <i class="fas fa-check me-1"></i>
+                          承認済み
+                        </span>
+                      {% elif staff.approval_status == 'pending' %}
+                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">
+                          <i class="fas fa-clock me-1"></i>
+                          承認待ち
+                        </span>
+                      {% elif staff.approval_status == 'rejected' %}
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                          <i class="fas fa-times me-1"></i>
+                          却下
+                        </span>
+                      {% endif %}
+                    </td>
+                    <td>
                       <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                           <i class="fas fa-ellipsis-v"></i>
@@ -171,7 +193,7 @@
                   </tr>
                   {% empty %}
                   <tr>
-                    <td colspan="6" class="text-center py-5">
+                    <td colspan="7" class="text-center py-5">
                       <div class="text-muted">
                         <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
                         <div class="h5">スタッフが登録されていません</div>
@@ -222,17 +244,35 @@
                       </div>
                     </div>
                     <div class="text-end">
-                      {% if staff.is_active %}
-                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 mb-2">
-                          <i class="fas fa-check-circle me-1"></i>
-                          アクティブ
-                        </span>
-                      {% else %}
-                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 mb-2">
-                          <i class="fas fa-times-circle me-1"></i>
-                          非アクティブ
-                        </span>
-                      {% endif %}
+                      <div class="mb-2">
+                        {% if staff.is_active %}
+                          <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-1">
+                            <i class="fas fa-check-circle me-1"></i>
+                            アクティブ
+                          </span>
+                        {% else %}
+                          <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-1">
+                            <i class="fas fa-times-circle me-1"></i>
+                            非アクティブ
+                          </span>
+                        {% endif %}
+                        {% if staff.approval_status == 'approved' %}
+                          <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                            <i class="fas fa-check me-1"></i>
+                            承認済み
+                          </span>
+                        {% elif staff.approval_status == 'pending' %}
+                          <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">
+                            <i class="fas fa-clock me-1"></i>
+                            承認待ち
+                          </span>
+                        {% elif staff.approval_status == 'rejected' %}
+                          <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">
+                            <i class="fas fa-times me-1"></i>
+                            却下
+                          </span>
+                        {% endif %}
+                      </div>
                       <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                           <i class="fas fa-ellipsis-v"></i>

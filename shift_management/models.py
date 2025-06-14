@@ -3,12 +3,34 @@ from django.contrib.auth.models import User
 
 class Staff(models.Model):
     """スタッフ（従業員）情報モデル"""
+    APPROVAL_STATUS_CHOICES = [
+        ('pending', '承認待ち'),
+        ('approved', '承認済み'),
+        ('rejected', '却下'),
+    ]
+    
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ユーザーアカウント")
     name = models.CharField(max_length=100, verbose_name="名前")
     phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="電話番号")
     email = models.EmailField(blank=True, null=True, verbose_name="メールアドレス")
     position = models.CharField(max_length=100, blank=True, null=True, verbose_name="役職/担当")
     is_active = models.BooleanField(default=True, verbose_name="有効")
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default='pending',
+        verbose_name="承認状態"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="承認日時")
+    approved_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='approved_staff',
+        verbose_name="承認者"
+    )
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="却下理由")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
@@ -19,6 +41,14 @@ class Staff(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def is_approved(self):
+        """承認済みかどうかを判定"""
+        return self.approval_status == 'approved'
+    
+    def is_pending(self):
+        """承認待ちかどうかを判定"""
+        return self.approval_status == 'pending'
 
 
 class ShiftType(models.Model):
@@ -47,6 +77,12 @@ class Shift(models.Model):
         ('absenteeism', '欠勤'),
         ('other', 'その他'),
     ]
+    
+    APPROVAL_STATUS_CHOICES = [
+        ('pending', '承認待ち'),
+        ('approved', '承認済み'),
+        ('rejected', '却下'),
+    ]
 
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
     shift_type = models.ForeignKey(ShiftType, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="シフト種別")
@@ -65,6 +101,32 @@ class Shift(models.Model):
         null=True,
         verbose_name="削除事由"
     )
+    
+    # シフト承認関連フィールド
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default='approved',  # 管理者が作成したシフトはデフォルトで承認済み
+        verbose_name="承認状態"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="承認日時")
+    approved_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='approved_shifts',
+        verbose_name="承認者"
+    )
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="却下理由")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_shifts',
+        verbose_name="作成者"
+    )
 
     class Meta:
         verbose_name = "シフト"
@@ -79,7 +141,27 @@ class Shift(models.Model):
             time_str = ""
             if self.start_time and self.end_time:
                 time_str = f" ({self.start_time}〜{self.end_time})"
-            return f"{self.staff.name} - {self.date}{time_str}"
+            approval_str = ""
+            if self.approval_status == 'pending':
+                approval_str = " [承認待ち]"
+            elif self.approval_status == 'rejected':
+                approval_str = " [却下]"
+            return f"{self.staff.name} - {self.date}{time_str}{approval_str}"
+    
+    def is_approved(self):
+        """承認済みかどうかを判定"""
+        return self.approval_status == 'approved'
+    
+    def is_pending(self):
+        """承認待ちかどうかを判定"""
+        return self.approval_status == 'pending'
+    
+    def is_staff_created(self):
+        """スタッフが作成したシフトかどうかを判定"""
+        if not self.created_by:
+            return False
+        # スタッフユーザーかどうかを判定（管理者でない場合）
+        return not self.created_by.is_staff
 
 
 class ShiftTemplate(models.Model):

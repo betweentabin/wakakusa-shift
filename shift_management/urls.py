@@ -62,6 +62,12 @@ urlpatterns = [
     path('api/shift-update/', views.api_shift_update, name='api_shift_update'),
     path('api/shift-delete/', views.api_shift_delete, name='api_shift_delete'),
     
+    # 承認関連API（新規追加）
+    path('api/pending-shifts/', views.api_pending_shifts, name='api_pending_shifts'),
+    path('api/approve-shift/', views.api_approve_shift, name='api_approve_shift'),
+    path('api/reject-shift/', views.api_reject_shift, name='api_reject_shift'),
+    path('api/bulk-approve-shifts/', views.api_bulk_approve_shifts, name='api_bulk_approve_shifts'),
+    
     # 時間チャート
     path('time-chart/', views.time_chart, name='time_chart'),
 ]
