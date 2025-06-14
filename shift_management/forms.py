@@ -224,6 +224,37 @@ class ShiftForm(forms.ModelForm):
         # 承認済みのアクティブなスタッフのみを選択肢として表示
         self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
 
+class StaffShiftForm(forms.ModelForm):
+    """スタッフ用シフトフォーム（承認待ちスタッフでも使用可能）"""
+    # 明示的にフィールドを定義して必須属性を制御
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    start_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
+    )
+    end_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
+    )
+    
+    class Meta:
+        model = Shift
+        fields = ['staff', 'shift_type', 'date', 'start_time', 'end_time', 'notes']
+        widgets = {
+            'staff': forms.HiddenInput(),  # スタッフフィールドは非表示
+            'shift_type': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['shift_type'].required = False
+        # スタッフフィールドは非表示なので、クエリセット制限は不要
+
 class ShiftReasonForm(forms.ModelForm):
     """事由登録フォーム（公休、有給等）"""
     class Meta:

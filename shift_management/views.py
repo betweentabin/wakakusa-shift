@@ -18,7 +18,7 @@ import os
 from weasyprint import HTML, CSS
 from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 from .forms import (
-    StaffForm, ShiftTypeForm, ShiftForm, ShiftTemplateForm, 
+    StaffForm, ShiftTypeForm, ShiftForm, StaffShiftForm, ShiftTemplateForm, 
     ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
     BulkShiftForm, ShiftExportForm, ShiftReasonForm  # 新規追加フォーム
 )
@@ -1003,9 +1003,10 @@ def staff_shift_view(request):
     for i in range(0, len(calendar_days), 7):
         weeks.append(calendar_days[i:i+7])
     
-    # 該当月のシフトを取得
+    # 該当月の承認済みシフトを取得
     shifts = Shift.objects.filter(
-        date__range=[first_day, last_day]
+        date__range=[first_day, last_day],
+        approval_status='approved'  # 承認済みのシフトのみ表示
     ).select_related('staff', 'shift_type').order_by('date', 'start_time')
     
     # 日付ごとにシフトをグループ化
@@ -1051,7 +1052,7 @@ def staff_shift_create(request):
         return redirect('shift_management:staff_view')
     
     if request.method == 'POST':
-        form = ShiftForm(request.POST)
+        form = StaffShiftForm(request.POST)
         if form.is_valid():
             shift = form.save(commit=False)
             # スタッフを自分に固定
@@ -1068,10 +1069,7 @@ def staff_shift_create(request):
         if 'date' in request.GET:
             initial['date'] = request.GET.get('date')
         
-        form = ShiftForm(initial=initial)
-        # スタッフフィールドを非表示にして自分に固定
-        form.fields['staff'].widget = forms.HiddenInput()
-        form.fields['staff'].initial = staff_obj.id
+        form = StaffShiftForm(initial=initial)
     
     return render(request, 'shift_management/staff_shift_form.html', {
         'form': form, 
@@ -1092,7 +1090,7 @@ def staff_shift_edit(request, pk):
     shift = get_object_or_404(Shift, pk=pk, staff=staff_obj)
     
     if request.method == 'POST':
-        form = ShiftForm(request.POST, instance=shift)
+        form = StaffShiftForm(request.POST, instance=shift)
         if form.is_valid():
             shift = form.save(commit=False)
             # スタッフを自分に固定
@@ -1106,10 +1104,7 @@ def staff_shift_edit(request, pk):
             messages.success(request, 'シフトを更新しました。管理者の承認をお待ちください。')
             return redirect('shift_management:staff_view')
     else:
-        form = ShiftForm(instance=shift)
-        # スタッフフィールドを非表示にして自分に固定
-        form.fields['staff'].widget = forms.HiddenInput()
-        form.fields['staff'].initial = staff_obj.id
+        form = StaffShiftForm(instance=shift)
     
     return render(request, 'shift_management/staff_shift_form.html', {
         'form': form, 
