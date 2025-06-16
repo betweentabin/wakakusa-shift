@@ -1341,7 +1341,7 @@ def liveness_check(request):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
         
-        return JsonResponse({
+    return JsonResponse({
             'status': 'healthy',
             'timestamp': timezone.now().isoformat(),
             'checks': {

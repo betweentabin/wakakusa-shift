@@ -829,19 +829,19 @@
       <div class="mobile-quick-actions d-md-none">
         <a href="{% url 'shift_management:shift_create' %}" class="quick-action-fab" title="新規シフト登録">
           <i class="fas fa-plus"></i>
-        </a>
+                </a>
         <a href="{% url 'shift_management:staff_list' %}" class="quick-action-fab" title="スタッフ管理">
           <i class="fas fa-users"></i>
-        </a>
+                </a>
         <a href="{% url 'shift_management:shift_export' %}" class="quick-action-fab" title="エクスポート">
           <i class="fas fa-download"></i>
-        </a>
-      </div>
-    </div>
-  </div>
+                </a>
+              </div>
+              </div>
+              </div>
   
   </div> <!-- main-content-container終了 -->
-</div>
+              </div>
 
 <!-- 却下理由入力モーダル -->
 <div class="modal fade" id="rejectModal" tabindex="-1">
@@ -850,69 +850,69 @@
       <div class="modal-header">
         <h5 class="modal-title">シフト却下理由</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
+            </div>
       <div class="modal-body">
         <div class="mb-3">
           <label for="rejectionReason" class="form-label">却下理由（任意）</label>
           <textarea class="form-control" id="rejectionReason" rows="3" placeholder="却下理由を入力してください..."></textarea>
+          </div>
         </div>
-      </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
         <button type="button" class="btn btn-danger" id="confirmRejectBtn">却下する</button>
       </div>
     </div>
   </div>
-</div>
-
-<!-- シフト詳細モーダル -->
-<div class="modal fade" id="shiftDetailModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">シフト詳細</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="shiftDetailContent">
-        <!-- シフト詳細がJSで挿入される -->
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-        <a href="#" class="btn btn-primary" id="editShiftBtn">編集</a>
-        <button type="button" class="btn btn-danger" id="deleteShiftBtn" data-shift-id="">削除</button>
+  </div>
+  
+  <!-- シフト詳細モーダル -->
+  <div class="modal fade" id="shiftDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">シフト詳細</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="shiftDetailContent">
+          <!-- シフト詳細がJSで挿入される -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+          <a href="#" class="btn btn-primary" id="editShiftBtn">編集</a>
+          <button type="button" class="btn btn-danger" id="deleteShiftBtn" data-shift-id="">削除</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-<!-- 日付クリック時の新規シフト登録モーダル -->
-<div class="modal fade" id="newShiftModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">新規シフト登録</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p>選択した日付: <span id="selectedDate"></span></p>
-        <p>以下のオプションから選択してください:</p>
-        <div class="d-grid gap-2">
-          <a href="#" class="btn btn-primary" id="singleShiftBtn">
-            <i class="fas fa-user"></i> 単一シフト登録
-          </a>
-          <a href="#" class="btn btn-success" id="bulkShiftBtn">
-            <i class="fas fa-users"></i> 複数シフト一括登録
-          </a>
-          <a href="#" class="btn btn-info" id="templateBtn">
-            <i class="fas fa-clipboard-list"></i> テンプレート適用
-          </a>
-          <a href="#" class="btn btn-warning" id="reasonBtn">
-            <i class="fas fa-calendar-times"></i> 事由登録
-          </a>
+  
+  <!-- 日付クリック時の新規シフト登録モーダル -->
+  <div class="modal fade" id="newShiftModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新規シフト登録</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+        <div class="modal-body">
+          <p>選択した日付: <span id="selectedDate"></span></p>
+          <p>以下のオプションから選択してください:</p>
+          <div class="d-grid gap-2">
+            <a href="#" class="btn btn-primary" id="singleShiftBtn">
+              <i class="fas fa-user"></i> 単一シフト登録
+            </a>
+            <a href="#" class="btn btn-success" id="bulkShiftBtn">
+              <i class="fas fa-users"></i> 複数シフト一括登録
+            </a>
+            <a href="#" class="btn btn-info" id="templateBtn">
+              <i class="fas fa-clipboard-list"></i> テンプレート適用
+            </a>
+            <a href="#" class="btn btn-warning" id="reasonBtn">
+              <i class="fas fa-calendar-times"></i> 事由登録
+            </a>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
       </div>
     </div>
   </div>
@@ -1090,7 +1090,7 @@
       document.getElementById('refreshApprovalPanel').addEventListener('click', function() {
         loadPendingShifts();
       });
-      
+    
       // 一括承認ボタン
       document.getElementById('bulkApproveBtn').addEventListener('click', function() {
         const selectedShifts = getSelectedShifts();
@@ -1260,9 +1260,9 @@
         if (data.success) {
           showMessage(data.message, 'success');
           loadPendingShifts();
-          if (calendar) {
-            calendar.refetchEvents();
-          }
+        if (calendar) {
+          calendar.refetchEvents();
+        }
         } else {
           throw new Error(data.error || '承認に失敗しました');
         }
@@ -1360,25 +1360,25 @@
                         type === 'error' ? 'alert-danger' : 
                         type === 'warning' ? 'alert-warning' : 'alert-info';
       
-      const alertDiv = document.createElement('div');
+        const alertDiv = document.createElement('div');
       alertDiv.className = `alert ${alertClass} alert-dismissible fade show`;
-      alertDiv.innerHTML = `
+        alertDiv.innerHTML = `
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      `;
-      
+        `;
+        
       // アラートを表示
-      const container = document.querySelector('.container-fluid.py-4');
-      if (container) {
-        container.insertBefore(alertDiv, container.firstChild);
-      }
-      
+           const container = document.querySelector('.container-fluid.py-4');
+           if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+        }
+        
       // 5秒後に自動削除
-      setTimeout(() => {
+        setTimeout(() => {
         if (alertDiv.parentNode) {
           alertDiv.remove();
-        }
-      }, 5000);
+          }
+        }, 5000);
     }
     
     // グローバル関数として定義（HTMLから呼び出すため）
