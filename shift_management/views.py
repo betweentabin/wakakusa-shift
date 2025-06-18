@@ -882,7 +882,7 @@ def time_chart(request):
     for date in date_list:
         chart_data[date] = []
     
-    # シフトデータを日付別に分類
+    # シフトデータを日付別に分類（重複対応）
     for shift in shifts:
         if shift.start_time and shift.end_time and shift.date in chart_data:
             # 開始時間と終了時間を分単位で計算（6:00を0分とする）
@@ -895,6 +895,13 @@ def time_chart(request):
                 left_percent = (start_minutes / total_minutes) * 100
                 width_percent = ((end_minutes - start_minutes) / total_minutes) * 100
                 
+                # 重複レベルを計算（同じ時間帯にいるスタッフ数）
+                overlap_level = 0
+                for existing_shift in chart_data[shift.date]:
+                    if (start_minutes < existing_shift['end_minutes'] and 
+                        end_minutes > existing_shift['start_minutes']):
+                        overlap_level += 1
+                
                 chart_data[shift.date].append({
                     'staff_name': shift.staff.name,
                     'shift_type': shift.shift_type.name if shift.shift_type else '未設定',
@@ -906,6 +913,8 @@ def time_chart(request):
                     'color': shift.shift_type.color if shift.shift_type else '#3498db',
                     'start_time': shift.start_time,
                     'end_time': shift.end_time,
+                    'overlap_level': overlap_level,  # 重複レベルを追加
+                    'staff_id': shift.staff.id,  # スタッフIDを追加
                 })
     
     # 時間軸のラベルを作成
@@ -1341,7 +1350,7 @@ def liveness_check(request):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
         
-    return JsonResponse({
+        return JsonResponse({
             'status': 'healthy',
             'timestamp': timezone.now().isoformat(),
             'checks': {

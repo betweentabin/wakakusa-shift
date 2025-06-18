@@ -5,13 +5,82 @@
 import time
 import logging
 from django.core.cache import cache
-from django.http import HttpResponseTooManyRequests, JsonResponse
+from django.http import HttpResponseTooManyRequests, JsonResponse, HttpResponseForbidden
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 from django.contrib.auth.models import AnonymousUser
 import hashlib
 
 logger = logging.getLogger(__name__)
+
+class IPWhitelistMiddleware(MiddlewareMixin):
+    """
+    IPホワイトリストミドルウェア
+    許可されたIPアドレスからのみアクセスを許可
+    """
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+        # 許可するIPアドレスのリスト（設定から取得）
+        self.allowed_ips = getattr(settings, 'ALLOWED_IPS', [])
+        # IPホワイトリストを有効にするかどうか
+        self.enable_ip_whitelist = getattr(settings, 'ENABLE_IP_WHITELIST', False)
+        super().__init__(get_response)
+    
+    def process_request(self, request):
+        # IPホワイトリストが無効の場合はスキップ
+        if not self.enable_ip_whitelist:
+            return None
+        
+        # 管理者は制限を適用しない
+        if hasattr(request, 'user') and request.user.is_superuser:
+            return None
+        
+        # ヘルスチェックエンドポイントは除外
+        if request.path in ['/health/', '/ready/', '/live/']:
+            return None
+        
+        # クライアントIPを取得
+        client_ip = self.get_client_ip(request)
+        
+        # IPホワイトリストをチェック
+        if not self.is_ip_allowed(client_ip):
+            logger.warning(f"Access denied for IP: {client_ip}")
+            return HttpResponseForbidden("アクセスが拒否されました。許可されていないIPアドレスです。")
+        
+        return None
+    
+    def get_client_ip(self, request):
+        """クライアントIPアドレスを取得"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+    
+    def is_ip_allowed(self, ip):
+        """IPアドレスが許可されているかチェック"""
+        if not self.allowed_ips:
+            return True  # リストが空の場合は全て許可
+        
+        # 完全一致チェック
+        if ip in self.allowed_ips:
+            return True
+        
+        # CIDR記法のチェック（例: 192.168.1.0/24）
+        import ipaddress
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            for allowed_ip in self.allowed_ips:
+                if '/' in allowed_ip:  # CIDR記法
+                    network = ipaddress.ip_network(allowed_ip, strict=False)
+                    if ip_obj in network:
+                        return True
+        except ValueError:
+            pass
+        
+        return False
 
 class RateLimitMiddleware(MiddlewareMixin):
     """

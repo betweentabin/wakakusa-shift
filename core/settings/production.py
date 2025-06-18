@@ -13,6 +13,7 @@ DEBUG = False
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # 静的ファイル配信
+    'shift_management.middleware.security.IPWhitelistMiddleware',  # IPホワイトリスト（追加）
     'shift_management.middleware.security.RateLimitMiddleware',  # レート制限
     'shift_management.middleware.security.SecurityHeadersMiddleware',  # セキュリティヘッダー
     'shift_management.middleware.security.MaintenanceModeMiddleware',  # メンテナンスモード
@@ -190,3 +191,16 @@ MANAGERS = ADMINS
 
 # エラー報告設定
 SERVER_EMAIL = DEFAULT_FROM_EMAIL 
+
+# IPホワイトリスト設定（必要に応じて有効化）
+ENABLE_IP_WHITELIST = os.environ.get('ENABLE_IP_WHITELIST', 'False').lower() == 'true'
+ALLOWED_IPS = [
+    # 例: 会社のIPアドレス
+    # '203.0.113.100',        # 特定のIP
+    # '192.168.1.0/24',       # ネットワーク範囲
+    # '10.0.0.0/8',           # プライベートネットワーク
+]
+
+# 環境変数からも設定可能
+if os.environ.get('ALLOWED_IPS'):
+    ALLOWED_IPS.extend(os.environ.get('ALLOWED_IPS').split(',')) 
