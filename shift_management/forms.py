@@ -45,12 +45,13 @@ class StaffForm(forms.ModelForm):
 
     class Meta:
         model = Staff
-        fields = ['name', 'phone', 'email', 'position', 'is_active']
+        fields = ['name', 'phone', 'email', 'position', 'role_type', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'position': forms.TextInput(attrs={'class': 'form-control'}),
+            'role_type': forms.Select(attrs={'class': 'form-select'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -60,6 +61,11 @@ class StaffForm(forms.ModelForm):
         if self.instance and self.instance.pk and self.instance.user:
             self.fields['username'].initial = self.instance.user.username
             self.fields['create_user_account'].initial = True
+        
+        # role_typeフィールドを必須にし、デフォルト値を設定
+        self.fields['role_type'].required = True
+        if not self.instance.pk:  # 新規作成時のみ
+            self.fields['role_type'].initial = 'user'
 
     def clean_username(self):
         username = self.cleaned_data.get('username')

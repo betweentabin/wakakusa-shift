@@ -15,7 +15,11 @@ import csv
 from io import StringIO
 import tempfile
 import os
-from weasyprint import HTML, CSS
+try:
+    from weasyprint import HTML, CSS
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
 from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 from .forms import (
     StaffForm, ShiftTypeForm, ShiftForm, StaffShiftForm, ShiftTemplateForm, 
@@ -116,14 +120,39 @@ def shift_calendar(request):
         start_date = form.cleaned_data['start_date']
         end_date = form.cleaned_data['end_date']
     
-    # 日付範囲内の承認済みシフトを取得
+    # 現在のユーザーに対応するStaffオブジェクトを取得
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じてスタッフ一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        # 管理者は全スタッフを表示
+        staff_list = Staff.objects.filter(is_active=True)
+    elif current_staff and current_staff.role_type == 'staff':
+        # 職員は職員とアルバイトを表示
+        staff_list = Staff.objects.filter(
+            is_active=True,
+            role_type__in=['staff', 'part_time']
+        )
+    elif current_staff and current_staff.role_type == 'part_time':
+        # アルバイトは同じアルバイトのみ表示
+        staff_list = Staff.objects.filter(
+            is_active=True,
+            role_type='part_time'
+        )
+    elif current_staff and current_staff.role_type == 'user':
+        # 利用者は自分のみ表示
+        staff_list = Staff.objects.filter(id=current_staff.id)
+    else:
+        # 対応するStaffオブジェクトがない場合は空のクエリセット
+        staff_list = Staff.objects.none()
+    
+    # 日付範囲内のシフトを取得（承認済み + 承認待ち）
+    # 権限に応じてシフトも制限
     shifts = Shift.objects.filter(
         date__range=[start_date, end_date],
-        approval_status='approved'
+        approval_status__in=['approved', 'pending'],
+        staff__in=staff_list  # 権限に応じて制限されたスタッフのシフトのみ
     ).select_related('staff', 'shift_type')
-    
-    # スタッフ一覧を取得
-    staff_list = Staff.objects.filter(is_active=True)
     
     # シフト種別一覧を取得
     shift_types = ShiftType.objects.all()
@@ -155,6 +184,8 @@ def shift_calendar(request):
         'shift_types': shift_types,
         'start_date': start_date,
         'end_date': end_date,
+        'current_staff': current_staff,  # 現在のスタッフ情報を追加
+        'user_role': current_staff.role_type if current_staff else 'none',  # ユーザーの権限種別を追加
     }
     
     return render(request, 'shift_management/calendar.html', context)
@@ -606,57 +637,67 @@ def shift_export(request):
             
             # 出力形式に応じた処理
             if format_type == 'pdf':
-                # PDF出力
-                context = {
-                    'start_date': start_date,
-                    'end_date': end_date,
-                    'staff_list': staff_list,
-                    'date_list': date_list,
-                    'shifts': shifts,
-                }
+                # PDF出力機能の利用可否をチェック
+                if not WEASYPRINT_AVAILABLE:
+                    messages.error(request, 'PDF出力機能は現在利用できません。CSVでの出力をお試しください。')
+                    return redirect('shift_management:shift_export')
                 
-                # HTMLテンプレートをレンダリング
-                html_string = render_to_string('shift_management/shift_pdf_template.html', context)
-                
-                # WeasyPrintでPDF生成
-                html = HTML(string=html_string)
-                css = CSS(string='''
-                    @page {
-                        size: A4 landscape;
-                        margin: 1cm;
+                try:
+                    # PDF出力
+                    context = {
+                        'start_date': start_date,
+                        'end_date': end_date,
+                        'staff_list': staff_list,
+                        'date_list': date_list,
+                        'shifts': shifts,
                     }
-                    body {
-                        font-family: sans-serif;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                    }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 4px;
-                        text-align: center;
-                        font-size: 12px;
-                    }
-                    th {
-                        background-color: #f2f2f2;
-                    }
-                    .shift-entry {
-                        margin-bottom: 2px;
-                        padding: 2px;
-                        border-radius: 3px;
-                    }
-                ''')
-                
-                # PDFファイル生成
-                pdf_file = html.write_pdf(stylesheets=[css])
-                
-                # レスポンス作成
-                response = HttpResponse(pdf_file, content_type='application/pdf')
-                filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.pdf'
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
-                
-                return response
+                    
+                    # HTMLテンプレートをレンダリング
+                    html_string = render_to_string('shift_management/shift_pdf_template.html', context)
+                    
+                    # WeasyPrintでPDF生成
+                    html = HTML(string=html_string)
+                    css = CSS(string='''
+                        @page {
+                            size: A4 landscape;
+                            margin: 1cm;
+                        }
+                        body {
+                            font-family: sans-serif;
+                        }
+                        table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        th, td {
+                            border: 1px solid #ddd;
+                            padding: 4px;
+                            text-align: center;
+                            font-size: 12px;
+                        }
+                        th {
+                            background-color: #f2f2f2;
+                        }
+                        .shift-entry {
+                            margin-bottom: 2px;
+                            padding: 2px;
+                            border-radius: 3px;
+                        }
+                    ''')
+                    
+                    # PDFファイル生成
+                    pdf_file = html.write_pdf(stylesheets=[css])
+                    
+                    # レスポンス作成
+                    response = HttpResponse(pdf_file, content_type='application/pdf')
+                    filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.pdf'
+                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    
+                    return response
+                    
+                except Exception as e:
+                    messages.error(request, f'PDF生成中にエラーが発生しました: {str(e)}。CSVでの出力をお試しください。')
+                    return redirect('shift_management:shift_export')
                 
             elif format_type == 'csv':
                 # CSV出力
@@ -734,13 +775,33 @@ def api_shifts(request):
         print(f"[DEBUG] Error: Date format incorrect for start={start_date_str} or end={end_date_str}") # DEBUG
         return JsonResponse({'error': '日付形式が正しくありません'}, status=400)
     
-    print(f"[DEBUG] Querying shifts between {start_date} and {end_date}") # DEBUG
-    # 承認済みのシフトのみを表示
+    # 現在のユーザーに対応するStaffオブジェクトを取得
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じてスタッフ一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        # 管理者は全スタッフのシフトを表示
+        staff_filter = Q()  # 制限なし
+    elif current_staff and current_staff.role_type == 'staff':
+        # 職員は職員とアルバイトのシフトを表示
+        staff_filter = Q(staff__role_type__in=['staff', 'part_time'])
+    elif current_staff and current_staff.role_type == 'part_time':
+        # アルバイトは同じアルバイトのシフトのみ表示
+        staff_filter = Q(staff__role_type='part_time')
+    elif current_staff and current_staff.role_type == 'user':
+        # 利用者は自分のシフトのみ表示
+        staff_filter = Q(staff=current_staff)
+    else:
+        # 対応するStaffオブジェクトがない場合は何も表示しない
+        staff_filter = Q(pk__isnull=True)  # 何も取得しない条件
+    
+    print(f"[DEBUG] Querying shifts between {start_date} and {end_date} with staff filter") # DEBUG
+    # 承認済み + 承認待ちのシフトを表示（権限に応じて制限）
     shifts = Shift.objects.filter(
         date__range=[start_date, end_date],
-        approval_status='approved'
-    ).select_related('staff', 'shift_type')
-    print(f"[DEBUG] Found {shifts.count()} approved shifts") # DEBUG
+        approval_status__in=['approved', 'pending']
+    ).filter(staff_filter).select_related('staff', 'shift_type')
+    print(f"[DEBUG] Found {shifts.count()} shifts (approved + pending) with permission filter") # DEBUG
     
     events = []
     for shift in shifts:
@@ -760,15 +821,26 @@ def api_shifts(request):
             })
         else:
             # 通常のシフトの場合
+            # 承認状態に応じてタイトルと色を調整
+            title_suffix = ""
+            color = shift.shift_type.color if shift.shift_type else '#3498db'
+            
+            if shift.approval_status == 'pending':
+                title_suffix = " [申請中]"
+                # 承認待ちは色を薄くして点線で表示
+                color = '#ffc107'  # 黄色系で承認待ちを表現
+            
             events.append({
                 'id': shift.id,
-                'title': f'{shift.staff.name} ({shift.shift_type.name if shift.shift_type else "未設定"})',
+                'title': f'{shift.staff.name} ({shift.shift_type.name if shift.shift_type else "未設定"}){title_suffix}',
                 'start': f'{shift.date.isoformat()}T{shift.start_time.isoformat()}',
                 'end': f'{shift.date.isoformat()}T{shift.end_time.isoformat()}',
-                'color': shift.shift_type.color if shift.shift_type else '#3498db',
+                'color': color,
                 'staff_id': shift.staff.id,
                 'shift_type_id': shift.shift_type.id if shift.shift_type else None,
                 'is_reason': False,
+                'approval_status': shift.approval_status,
+                'is_pending': shift.approval_status == 'pending',
             })
     
     if events: # DEBUG
@@ -855,15 +927,37 @@ def time_chart(request):
         start_date = datetime.date(year, month, 1)
         end_date = datetime.date(year, month, last_day)
     
-    # 期間内の承認済みシフトを取得
+    # 現在のユーザーに対応するStaffオブジェクトを取得
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じてスタッフ一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        # 管理者は全スタッフのシフトを表示
+        staff_filter = Q()  # 制限なし
+        staff_list = Staff.objects.filter(is_active=True).order_by('name')
+    elif current_staff and current_staff.role_type == 'staff':
+        # 職員は職員とアルバイトのシフトを表示
+        staff_filter = Q(staff__role_type__in=['staff', 'part_time'])
+        staff_list = Staff.objects.filter(is_active=True, role_type__in=['staff', 'part_time']).order_by('name')
+    elif current_staff and current_staff.role_type == 'part_time':
+        # アルバイトは同じアルバイトのシフトのみ表示
+        staff_filter = Q(staff__role_type='part_time')
+        staff_list = Staff.objects.filter(is_active=True, role_type='part_time').order_by('name')
+    elif current_staff and current_staff.role_type == 'user':
+        # 利用者は自分のシフトのみ表示
+        staff_filter = Q(staff=current_staff)
+        staff_list = Staff.objects.filter(id=current_staff.id).order_by('name')
+    else:
+        # 対応するStaffオブジェクトがない場合は何も表示しない
+        staff_filter = Q(pk__isnull=True)  # 何も取得しない条件
+        staff_list = Staff.objects.none()
+    
+    # 期間内のシフトを取得（承認済み + 承認待ち）（権限に応じて制限）
     shifts = Shift.objects.filter(
         date__range=[start_date, end_date],
-        approval_status='approved',   # 承認済みのシフトのみ
+        approval_status__in=['approved', 'pending'],  # 承認済み + 承認待ち
         is_deleted_with_reason=False  # 事由付きシフトは除外
-    ).select_related('staff', 'shift_type').order_by('date', 'start_time')
-    
-    # スタッフ一覧を取得
-    staff_list = Staff.objects.filter(is_active=True).order_by('name')
+    ).filter(staff_filter).select_related('staff', 'shift_type').order_by('date', 'start_time')
     
     # 日付リストを作成
     date_list = []
@@ -902,19 +996,31 @@ def time_chart(request):
                         end_minutes > existing_shift['start_minutes']):
                         overlap_level += 1
                 
+                # 承認状態に応じて表示を調整
+                display_name = shift.staff.name
+                shift_type_name = shift.shift_type.name if shift.shift_type else '未設定'
+                color = shift.shift_type.color if shift.shift_type else '#3498db'
+                
+                if shift.approval_status == 'pending':
+                    display_name += " [申請中]"
+                    shift_type_name += " [申請中]"
+                    color = '#ffc107'  # 承認待ちは黄色
+                
                 chart_data[shift.date].append({
-                    'staff_name': shift.staff.name,
-                    'shift_type': shift.shift_type.name if shift.shift_type else '未設定',
+                    'staff_name': display_name,
+                    'shift_type': shift_type_name,
                     'start_minutes': start_minutes,
                     'end_minutes': end_minutes,
                     'duration': end_minutes - start_minutes,
                     'left_percent': round(left_percent, 2),
                     'width_percent': round(width_percent, 2),
-                    'color': shift.shift_type.color if shift.shift_type else '#3498db',
+                    'color': color,
                     'start_time': shift.start_time,
                     'end_time': shift.end_time,
                     'overlap_level': overlap_level,  # 重複レベルを追加
                     'staff_id': shift.staff.id,  # スタッフIDを追加
+                    'approval_status': shift.approval_status,
+                    'is_pending': shift.approval_status == 'pending',
                 })
     
     # 時間軸のラベルを作成
@@ -971,6 +1077,8 @@ def time_chart(request):
         'peak_time': peak_time,
         'total_days': len(date_list),
         'total_shifts': total_shifts,
+        'current_staff': current_staff,  # 現在のスタッフ情報を追加
+        'user_role': current_staff.role_type if current_staff else 'none',  # ユーザーの権限種別を追加
     }
     
     return render(request, 'shift_management/time_chart.html', context)
@@ -1170,14 +1278,31 @@ def staff_api_shifts(request):
         if not staff_obj:
             return JsonResponse({'error': f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません'}, status=400)
         
-        # 全スタッフの承認済みシフトデータを取得（通常のシフトのみ）
+        # 権限に応じてシフトデータを制限
+        if request.user.is_superuser or staff_obj.role_type == 'manager':
+            # 管理者は全スタッフのシフトを表示
+            staff_filter = Q()
+        elif staff_obj.role_type == 'staff':
+            # 職員は職員とアルバイトのシフトを表示
+            staff_filter = Q(staff__role_type__in=['staff', 'part_time'])
+        elif staff_obj.role_type == 'part_time':
+            # アルバイトは同じアルバイトのシフトのみ表示
+            staff_filter = Q(staff__role_type='part_time')
+        elif staff_obj.role_type == 'user':
+            # 利用者は自分のシフトのみ表示
+            staff_filter = Q(staff=staff_obj)
+        else:
+            # 不明な権限の場合は自分のシフトのみ
+            staff_filter = Q(staff=staff_obj)
+        
+        # 全スタッフのシフトデータを取得（承認済み + 承認待ち）（権限に応じて制限）
         shifts = Shift.objects.filter(
             date__range=[start_date, end_date],
-            approval_status='approved',    # 承認済みのシフトのみ
+            approval_status__in=['approved', 'pending'],  # 承認済み + 承認待ち
             is_deleted_with_reason=False,  # 事由付き削除されていないもののみ
             start_time__isnull=False,      # 開始時間があるもののみ
             end_time__isnull=False         # 終了時間があるもののみ
-        ).select_related('staff', 'shift_type')
+        ).filter(staff_filter).select_related('staff', 'shift_type')
         
         # FullCalendar用のイベントデータを作成
         events = []
@@ -1197,9 +1322,20 @@ def staff_api_shifts(request):
             # 自分のシフトかどうかを判定
             is_own_shift = shift.staff.id == staff_obj.id
             
+            # 承認状態に応じてタイトルと色を調整
+            title_suffix = ""
+            if shift.approval_status == 'pending':
+                title_suffix = " [申請中]"
+                if is_own_shift:
+                    # 自分の承認待ちシフトは黄色
+                    shift_color = '#ffc107'
+                else:
+                    # 他人の承認待ちシフトは薄い色
+                    shift_color = '#f8f9fa'
+            
             event = {
                 'id': shift.id,
-                'title': f'{shift.staff.name} ({shift_type_name})',
+                'title': f'{shift.staff.name} ({shift_type_name}){title_suffix}',
                 'start': start_datetime.isoformat(),
                 'end': end_datetime.isoformat(),
                 'color': shift_color,
@@ -1207,9 +1343,11 @@ def staff_api_shifts(request):
                 'shift_type_id': shift.shift_type.id if shift.shift_type else None,
                 'is_reason': False,
                 'is_own_shift': is_own_shift,
-                'editable': is_own_shift,  # 自分のシフトのみ編集可能
-                'startEditable': is_own_shift,
-                'durationEditable': is_own_shift,
+                'approval_status': shift.approval_status,
+                'is_pending': shift.approval_status == 'pending',
+                'editable': is_own_shift and shift.approval_status == 'pending',  # 自分の承認待ちシフトのみ編集可能
+                'startEditable': is_own_shift and shift.approval_status == 'pending',
+                'durationEditable': is_own_shift and shift.approval_status == 'pending',
             }
             events.append(event)
         
@@ -1379,9 +1517,14 @@ def api_pending_shifts(request):
         for shift in pending_shifts:
             created_by_name = "システム"
             if shift.created_by:
-                if hasattr(shift.created_by, 'staff') and shift.created_by.staff:
-                    created_by_name = f"{shift.created_by.staff.name} (スタッフ)"
-                else:
+                try:
+                    # Staffモデルとの関連を確認
+                    staff_obj = get_staff_for_user(shift.created_by)
+                    if staff_obj:
+                        created_by_name = f"{staff_obj.name} (スタッフ)"
+                    else:
+                        created_by_name = f"{shift.created_by.username} (管理者)"
+                except Exception:
                     created_by_name = f"{shift.created_by.username} (管理者)"
             
             shifts_data.append({
@@ -1390,8 +1533,8 @@ def api_pending_shifts(request):
                 'date': shift.date.strftime('%Y-%m-%d'),
                 'date_display': shift.date.strftime('%m月%d日'),
                 'weekday': ['月', '火', '水', '木', '金', '土', '日'][shift.date.weekday()],
-                'shift_type': shift.shift_type.name,
-                'shift_type_color': shift.shift_type.color,
+                'shift_type': shift.shift_type.name if shift.shift_type else '未設定',
+                'shift_type_color': shift.shift_type.color if shift.shift_type else '#6c757d',
                 'start_time': shift.start_time.strftime('%H:%M') if shift.start_time else '',
                 'end_time': shift.end_time.strftime('%H:%M') if shift.end_time else '',
                 'notes': shift.notes or '',

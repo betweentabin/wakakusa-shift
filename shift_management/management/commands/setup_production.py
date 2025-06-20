@@ -103,38 +103,101 @@ class Command(BaseCommand):
     def create_sample_data(self):
         """サンプルデータを作成"""
         self.stdout.write('📊 サンプルデータを作成中...')
-
-        # シフト種別のサンプルデータ
-        shift_types_data = [
-            {'name': '早番', 'color': '#28a745', 'start_time': '08:00', 'end_time': '17:00'},
-            {'name': '遅番', 'color': '#dc3545', 'start_time': '13:00', 'end_time': '22:00'},
-            {'name': '夜勤', 'color': '#6f42c1', 'start_time': '22:00', 'end_time': '08:00'},
-            {'name': '日勤', 'color': '#007bff', 'start_time': '09:00', 'end_time': '18:00'},
+        
+        # シフト種別の作成
+        shift_types = [
+            {'name': '早番', 'color': '#28a745', 'start_time': '09:00', 'end_time': '17:00'},
+            {'name': '遅番', 'color': '#dc3545', 'start_time': '13:00', 'end_time': '21:00'},
+            {'name': '夜勤', 'color': '#6f42c1', 'start_time': '22:00', 'end_time': '06:00'},
+            {'name': '休日出勤', 'color': '#fd7e14', 'start_time': '10:00', 'end_time': '18:00'},
         ]
-
-        for shift_data in shift_types_data:
+        
+        for shift_type_data in shift_types:
             shift_type, created = ShiftType.objects.get_or_create(
-                name=shift_data['name'],
-                defaults=shift_data
+                name=shift_type_data['name'],
+                defaults={
+                    'color': shift_type_data['color'],
+                    'start_time': shift_type_data['start_time'],
+                    'end_time': shift_type_data['end_time'],
+                }
             )
             if created:
-                self.stdout.write(f'  ✅ シフト種別 "{shift_type.name}" を作成')
-
-        # サンプルスタッフデータ
-        sample_staff_data = [
-            {'name': '田中太郎', 'position': '看護師', 'email': 'tanaka@example.com'},
-            {'name': '佐藤花子', 'position': '看護師', 'email': 'sato@example.com'},
-            {'name': '鈴木一郎', 'position': '介護士', 'email': 'suzuki@example.com'},
+                self.stdout.write(f'  ✅ シフト種別「{shift_type.name}」を作成')
+        
+        # 各権限レベルのサンプルスタッフを作成
+        sample_staff = [
+            {
+                'name': '管理者 太郎',
+                'role_type': 'manager',
+                'email': 'manager@example.com',
+                'position': '管理者',
+                'username': 'manager',
+                'password': 'password123'
+            },
+            {
+                'name': '職員 花子',
+                'role_type': 'staff',
+                'email': 'staff@example.com',
+                'position': '正職員',
+                'username': 'staff',
+                'password': 'password123'
+            },
+            {
+                'name': 'アルバイト 次郎',
+                'role_type': 'part_time',
+                'email': 'parttime1@example.com',
+                'position': 'アルバイト',
+                'username': 'parttime1',
+                'password': 'password123'
+            },
+            {
+                'name': 'アルバイト 三郎',
+                'role_type': 'part_time',
+                'email': 'parttime2@example.com',
+                'position': 'アルバイト',
+                'username': 'parttime2',
+                'password': 'password123'
+            },
+            {
+                'name': '利用者 四郎',
+                'role_type': 'user',
+                'email': 'user@example.com',
+                'position': '利用者',
+                'username': 'user',
+                'password': 'password123'
+            },
         ]
-
-        for staff_data in sample_staff_data:
-            staff, created = Staff.objects.get_or_create(
-                name=staff_data['name'],
-                defaults=staff_data
+        
+        for staff_data in sample_staff:
+            # ユーザーアカウントを作成
+            user, user_created = User.objects.get_or_create(
+                username=staff_data['username'],
+                defaults={
+                    'email': staff_data['email'],
+                    'first_name': staff_data['name'].split()[0],
+                    'last_name': staff_data['name'].split()[1] if len(staff_data['name'].split()) > 1 else '',
+                }
             )
-            if created:
-                self.stdout.write(f'  ✅ スタッフ "{staff.name}" を作成')
-
+            if user_created:
+                user.set_password(staff_data['password'])
+                user.save()
+            
+            # スタッフレコードを作成
+            staff, staff_created = Staff.objects.get_or_create(
+                user=user,
+                defaults={
+                    'name': staff_data['name'],
+                    'email': staff_data['email'],
+                    'position': staff_data['position'],
+                    'role_type': staff_data['role_type'],
+                    'is_active': True,
+                    'approval_status': 'approved',  # サンプルデータは承認済みで作成
+                }
+            )
+            
+            if staff_created:
+                self.stdout.write(f'  ✅ スタッフ「{staff.name}」({staff.get_role_type_display()})を作成')
+        
         self.stdout.write(
             self.style.SUCCESS('✅ サンプルデータの作成が完了しました')
         )

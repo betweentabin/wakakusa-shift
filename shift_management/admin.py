@@ -9,10 +9,15 @@ from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
 
 @admin.register(Staff)
 class StaffAdmin(admin.ModelAdmin):
-    list_display = ['name', 'email', 'phone', 'position', 'approval_status_display', 'is_active', 'created_at']
-    list_filter = ['approval_status', 'is_active', 'created_at', 'approved_at']
+    list_display = ['name', 'role_type_display', 'email', 'phone', 'position', 'approval_status_display', 'is_active', 'created_at']
+    list_filter = ['role_type', 'approval_status', 'is_active', 'created_at', 'approved_at']
     search_fields = ['name', 'email', 'phone']
     readonly_fields = ['created_at', 'updated_at', 'approved_at', 'approved_by']
+    
+    def role_type_display(self, obj):
+        """権限種別をアイコン付きで表示"""
+        return obj.get_role_display_with_icon()
+    role_type_display.short_description = '権限種別'
     
     def approval_status_display(self, obj):
         """承認状態を色付きで表示"""
@@ -27,7 +32,7 @@ class StaffAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('基本情報', {
-            'fields': ('name', 'email', 'phone', 'position', 'is_active')
+            'fields': ('name', 'email', 'phone', 'position', 'role_type', 'is_active')
         }),
         ('承認情報', {
             'fields': ('approval_status', 'approved_at', 'approved_by', 'rejection_reason')

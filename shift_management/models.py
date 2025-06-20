@@ -9,11 +9,24 @@ class Staff(models.Model):
         ('rejected', '却下'),
     ]
     
+    ROLE_TYPE_CHOICES = [
+        ('user', '利用者'),
+        ('part_time', 'アルバイト'),
+        ('staff', '職員'),
+        ('manager', '管理者'),
+    ]
+    
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="ユーザーアカウント")
     name = models.CharField(max_length=100, verbose_name="名前")
     phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="電話番号")
     email = models.EmailField(blank=True, null=True, verbose_name="メールアドレス")
     position = models.CharField(max_length=100, blank=True, null=True, verbose_name="役職/担当")
+    role_type = models.CharField(
+        max_length=20,
+        choices=ROLE_TYPE_CHOICES,
+        default='user',
+        verbose_name="権限種別"
+    )
     is_active = models.BooleanField(default=True, verbose_name="有効")
     approval_status = models.CharField(
         max_length=20,
@@ -49,6 +62,38 @@ class Staff(models.Model):
     def is_pending(self):
         """承認待ちかどうかを判定"""
         return self.approval_status == 'pending'
+    
+    def get_role_display_with_icon(self):
+        """権限種別をアイコン付きで表示"""
+        role_icons = {
+            'user': '👤',
+            'part_time': '🎒',
+            'staff': '👔',
+            'manager': '👑',
+        }
+        icon = role_icons.get(self.role_type, '👤')
+        return f"{icon} {self.get_role_type_display()}"
+    
+    def can_view_staff_shifts(self, target_staff):
+        """対象スタッフのシフトを閲覧できるかどうかを判定"""
+        # 自分のシフトは常に閲覧可能
+        if self == target_staff:
+            return True
+        
+        # 管理者は全員のシフトを閲覧可能
+        if self.role_type == 'manager':
+            return True
+        
+        # 職員は職員とアルバイトのシフトを閲覧可能
+        if self.role_type == 'staff':
+            return target_staff.role_type in ['staff', 'part_time']
+        
+        # アルバイトは同じアルバイトのシフトを閲覧可能
+        if self.role_type == 'part_time':
+            return target_staff.role_type == 'part_time'
+        
+        # 利用者は自分のシフトのみ閲覧可能（上記で処理済み）
+        return False
 
 
 class ShiftType(models.Model):

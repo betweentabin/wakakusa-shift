@@ -1,0 +1,24 @@
+/* 承認待ちシフトのスタイル */
+.fc-event.pending-shift {
+  border-style: dashed !important;
+  border-width: 2px !important;
+  opacity: 0.8;
+  background-color: #fff3cd !important;
+  border-color: #ffc107 !important;
+  color: #856404 !important;
+}
+
+.fc-event.pending-shift .fc-event-title {
+  font-weight: bold;
+}
+
+.fc-event.pending-shift:hover {
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+/* 承認済みシフトのスタイル */
+.fc-event.approved-shift {
+  border-style: solid !important;
+  border-width: 1px !important;
+} 

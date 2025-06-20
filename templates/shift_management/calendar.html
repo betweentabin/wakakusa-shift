@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
+{% load chart_filters %}
 
 {% block title %}シフトカレンダー{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
 <link rel="stylesheet" href="{% static 'css/calendar_mobile.css' %}">
+<link href="{% static 'css/pending-shift.css' %}" rel="stylesheet">
 <style>
   .calendar-container {
     margin-bottom: 15px;
@@ -291,6 +293,31 @@
       width: 100%;
       justify-content: flex-end;
     }
+  }
+  
+  /* 承認待ちシフトのスタイル */
+  .fc-event.pending-shift {
+    border-style: dashed !important;
+    border-width: 2px !important;
+    opacity: 0.8;
+    background-color: #fff3cd !important;
+    border-color: #ffc107 !important;
+    color: #856404 !important;
+  }
+  
+  .fc-event.pending-shift .fc-event-title {
+    font-weight: bold;
+  }
+  
+  .fc-event.pending-shift:hover {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  
+  /* 承認済みシフトのスタイル */
+  .fc-event.approved-shift {
+    border-style: solid !important;
+    border-width: 1px !important;
   }
 
   /* モバイル向けカレンダー調整 */
@@ -652,8 +679,49 @@
     </div>
   </div>
 
+  <!-- 権限情報パネル -->
+  {% if current_staff %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="alert alert-info border-0 shadow-sm">
+        <div class="d-flex align-items-center">
+          <div class="me-3">
+            <i class="fas fa-info-circle fa-2x text-info"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h6 class="alert-heading mb-1">
+              <i class="fas fa-shield-alt me-2"></i>
+              アクセス権限情報
+            </h6>
+            <div class="mb-2">
+              <strong>{{ current_staff.name }}</strong> として
+              <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2">
+                {{ current_staff.get_role_display_with_icon }}
+              </span>
+              でログイン中
+            </div>
+            <div class="small text-muted">
+              {% if user_role == 'manager' %}
+                <i class="fas fa-check-circle text-success me-1"></i>全スタッフのシフト表示・編集・承認が可能です
+              {% elif user_role == 'staff' %}
+                <i class="fas fa-users text-info me-1"></i>職員・アルバイトのシフト表示が可能です
+              {% elif user_role == 'part_time' %}
+                <i class="fas fa-user-friends text-warning me-1"></i>アルバイトスタッフのシフト表示が可能です
+              {% elif user_role == 'user' %}
+                <i class="fas fa-user text-secondary me-1"></i>自分のシフトのみ表示・編集が可能です
+              {% else %}
+                <i class="fas fa-exclamation-triangle text-danger me-1"></i>権限が設定されていません
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- 承認パネル（管理者のみ表示） -->
-  {% if user.is_superuser or user.is_staff %}
+  {% if user.is_superuser or user_role == 'manager' %}
   <div class="row mb-3">
     <div class="col-12">
       <div class="approval-panel">
@@ -1027,6 +1095,15 @@
           hour: '2-digit',
           minute: '2-digit',
           hour12: false
+        },
+        // イベント表示時のスタイル調整
+        eventDidMount: function(info) {
+          // 承認状態に応じてCSSクラスを追加
+          if (info.event.extendedProps.is_pending) {
+            info.el.classList.add('pending-shift');
+          } else if (info.event.extendedProps.approval_status === 'approved') {
+            info.el.classList.add('approved-shift');
+          }
         },
         // ドラッグ＆ドロップ機能（新規追加）
         editable: true,

@@ -77,15 +77,19 @@
                       <i class="fas fa-user me-2 text-muted"></i>
                       名前
                     </th>
-                    <th style="width: 15%;">
+                    <th style="width: 12%;">
                       <i class="fas fa-briefcase me-2 text-muted"></i>
                       役職/担当
                     </th>
-                    <th style="width: 18%;">
+                    <th style="width: 12%;">
+                      <i class="fas fa-shield-alt me-2 text-muted"></i>
+                      権限種別
+                    </th>
+                    <th style="width: 15%;">
                       <i class="fas fa-phone me-2 text-muted"></i>
                       電話番号
                     </th>
-                    <th style="width: 25%;">
+                    <th style="width: 20%;">
                       <i class="fas fa-envelope me-2 text-muted"></i>
                       メールアドレス
                     </th>
@@ -97,7 +101,7 @@
                       <i class="fas fa-check-circle me-2 text-muted"></i>
                       承認状態
                     </th>
-                    <th style="width: 10%;">
+                    <th style="width: 7%;">
                       <i class="fas fa-cogs me-2 text-muted"></i>
                       操作
                     </th>
@@ -119,6 +123,11 @@
                     </td>
                     <td>
                       <span class="text-muted">{{ staff.position|default:"未設定" }}</span>
+                    </td>
+                    <td>
+                      <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                        {{ staff.get_role_display_with_icon }}
+                      </span>
                     </td>
                     <td>
                       {% if staff.phone %}
@@ -193,7 +202,7 @@
                   </tr>
                   {% empty %}
                   <tr>
-                    <td colspan="7" class="text-center py-5">
+                    <td colspan="8" class="text-center py-5">
                       <div class="text-muted">
                         <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
                         <div class="h5">スタッフが登録されていません</div>
@@ -227,6 +236,10 @@
                         {% else %}
                           <i class="fas fa-briefcase me-1"></i>役職未設定
                         {% endif %}
+                        <br>
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 mt-1">
+                          {{ staff.get_role_display_with_icon }}
+                        </span>
                       </div>
                       <div class="small">
                         {% if staff.phone %}
