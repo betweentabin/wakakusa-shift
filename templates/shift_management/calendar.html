@@ -888,6 +888,14 @@
               <a href="{% url 'shift_management:shift_export' %}" class="btn btn-outline-primary">
                 <i class="fas fa-download"></i> エクスポート
               </a>
+              <a href="{% url 'shift_management:leave_request_list' %}" class="btn btn-outline-success">
+                <i class="fas fa-user-clock"></i> 休み・通院申請
+              </a>
+              {% if user_role == 'manager' %}
+              <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-outline-info">
+                <i class="fas fa-handshake"></i> シフト打診
+              </a>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -977,6 +985,11 @@
             <a href="#" class="btn btn-warning" id="reasonBtn">
               <i class="fas fa-calendar-times"></i> 事由登録
             </a>
+            {% if user_role == 'manager' %}
+            <a href="#" class="btn btn-outline-info" id="proposalBtn">
+              <i class="fas fa-handshake"></i> シフト打診
+            </a>
+            {% endif %}
           </div>
         </div>
         <div class="modal-footer">
@@ -1084,6 +1097,11 @@
           
           const reasonBaseUrl = "{% url 'shift_management:shift_reason_create' %}";
           document.getElementById('reasonBtn').href = `${reasonBaseUrl}?date=${info.dateStr}`;
+          
+          {% if user_role == 'manager' %}
+          const proposalBaseUrl = "{% url 'shift_management:shift_proposal_create' %}";
+          document.getElementById('proposalBtn').href = `${proposalBaseUrl}?date=${info.dateStr}`;
+          {% endif %}
           
           // モーダルを表示
           const modal = new bootstrap.Modal(document.getElementById('newShiftModal'));

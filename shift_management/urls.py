@@ -70,4 +70,15 @@ urlpatterns = [
     
     # 時間チャート
     path('time-chart/', views.time_chart, name='time_chart'),
+    
+    # 休み・通院申請機能
+    path('leave-request/', views.leave_request_list, name='leave_request_list'),
+    path('leave-request/create/', views.leave_request_create, name='leave_request_create'),
+    path('api/approve-leave-request/', views.api_approve_leave_request, name='api_approve_leave_request'),
+    path('api/reject-leave-request/', views.api_reject_leave_request, name='api_reject_leave_request'),
+    
+    # シフト打診機能
+    path('shift-proposal/', views.shift_proposal_list, name='shift_proposal_list'),
+    path('shift-proposal/create/', views.shift_proposal_create, name='shift_proposal_create'),
+    path('shift-proposal/<int:pk>/respond/', views.shift_proposal_respond, name='shift_proposal_respond'),
 ]

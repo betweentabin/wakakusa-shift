@@ -20,11 +20,16 @@ try:
     WEASYPRINT_AVAILABLE = True
 except ImportError:
     WEASYPRINT_AVAILABLE = False
-from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from .models import (
+    Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant
+)
 from .forms import (
     StaffForm, ShiftTypeForm, ShiftForm, StaffShiftForm, ShiftTemplateForm, 
     ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
-    BulkShiftForm, ShiftExportForm, ShiftReasonForm  # 新規追加フォーム
+    BulkShiftForm, ShiftExportForm, ShiftReasonForm,
+    LeaveRequestForm, ShiftProposalForm, ShiftProposalResponseForm,
+    StaffCompatibilityForm, HolidayForm, EventForm, EventParticipantForm
 )
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -1592,6 +1597,112 @@ def api_approve_shift(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
+# 休み・通院申請機能
+@login_required
+def leave_request_list(request):
+    """休み・通院申請一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じて申請一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        leave_requests = LeaveRequest.objects.all()
+    elif current_staff:
+        leave_requests = LeaveRequest.objects.filter(staff=current_staff)
+    else:
+        leave_requests = LeaveRequest.objects.none()
+    
+    # ページネーション
+    paginator = Paginator(leave_requests.select_related('staff', 'user', 'approved_by'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/leave_request_list.html', context)
+
+
+@login_required
+def leave_request_create(request):
+    """休み・通院申請作成"""
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。')
+        return redirect('shift_management:leave_request_list')
+    
+    if request.method == 'POST':
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            leave_request = form.save(commit=False)
+            leave_request.user = request.user
+            leave_request.staff = staff_obj
+            leave_request.save()
+            messages.success(request, '休み・通院申請を送信しました。管理者の承認をお待ちください。')
+            return redirect('shift_management:leave_request_list')
+    else:
+        form = LeaveRequestForm()
+    
+    return render(request, 'shift_management/leave_request_form.html', {
+        'form': form, 'staff_obj': staff_obj, 'is_create': True
+    })
+
+
+@login_required
+def shift_proposal_list(request):
+    """シフト打診一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        sent_proposals = ShiftProposal.objects.filter(proposed_by=request.user)
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff) if current_staff else ShiftProposal.objects.none()
+    elif current_staff:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff)
+    else:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.none()
+    
+    context = {
+        'sent_proposals': sent_proposals.select_related('proposed_to', 'shift_type')[:10],
+        'received_proposals': received_proposals.select_related('proposed_by', 'shift_type')[:10],
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/shift_proposal_list.html', context)
+
+
+@login_required
+def shift_proposal_create(request):
+    """シフト打診作成"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        messages.error(request, 'シフト打診の作成権限がありません。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalForm(request.POST)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.proposed_by = request.user
+            proposal.save()
+            messages.success(request, f'{proposal.proposed_to.name}さんにシフト打診を送信しました。')
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        initial = {}
+        if 'date' in request.GET:
+            initial['shift_date'] = request.GET.get('date')
+        if 'staff' in request.GET:
+            initial['proposed_to'] = request.GET.get('staff')
+        form = ShiftProposalForm(initial=initial)
+    
+    return render(request, 'shift_management/shift_proposal_form.html', {
+        'form': form, 'is_create': True
+    })
+
 @login_required
 @require_POST
 def api_reject_shift(request):
@@ -1634,6 +1745,112 @@ def api_reject_shift(request):
         return JsonResponse({'error': '無効なJSONデータです'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# 休み・通院申請機能
+@login_required
+def leave_request_list(request):
+    """休み・通院申請一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じて申請一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        leave_requests = LeaveRequest.objects.all()
+    elif current_staff:
+        leave_requests = LeaveRequest.objects.filter(staff=current_staff)
+    else:
+        leave_requests = LeaveRequest.objects.none()
+    
+    # ページネーション
+    paginator = Paginator(leave_requests.select_related('staff', 'user', 'approved_by'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/leave_request_list.html', context)
+
+
+@login_required
+def leave_request_create(request):
+    """休み・通院申請作成"""
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。')
+        return redirect('shift_management:leave_request_list')
+    
+    if request.method == 'POST':
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            leave_request = form.save(commit=False)
+            leave_request.user = request.user
+            leave_request.staff = staff_obj
+            leave_request.save()
+            messages.success(request, '休み・通院申請を送信しました。管理者の承認をお待ちください。')
+            return redirect('shift_management:leave_request_list')
+    else:
+        form = LeaveRequestForm()
+    
+    return render(request, 'shift_management/leave_request_form.html', {
+        'form': form, 'staff_obj': staff_obj, 'is_create': True
+    })
+
+
+@login_required
+def shift_proposal_list(request):
+    """シフト打診一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        sent_proposals = ShiftProposal.objects.filter(proposed_by=request.user)
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff) if current_staff else ShiftProposal.objects.none()
+    elif current_staff:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff)
+    else:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.none()
+    
+    context = {
+        'sent_proposals': sent_proposals.select_related('proposed_to', 'shift_type')[:10],
+        'received_proposals': received_proposals.select_related('proposed_by', 'shift_type')[:10],
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/shift_proposal_list.html', context)
+
+
+@login_required
+def shift_proposal_create(request):
+    """シフト打診作成"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        messages.error(request, 'シフト打診の作成権限がありません。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalForm(request.POST)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.proposed_by = request.user
+            proposal.save()
+            messages.success(request, f'{proposal.proposed_to.name}さんにシフト打診を送信しました。')
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        initial = {}
+        if 'date' in request.GET:
+            initial['shift_date'] = request.GET.get('date')
+        if 'staff' in request.GET:
+            initial['proposed_to'] = request.GET.get('staff')
+        form = ShiftProposalForm(initial=initial)
+    
+    return render(request, 'shift_management/shift_proposal_form.html', {
+        'form': form, 'is_create': True
+    })
 
 @login_required
 @require_POST
@@ -1682,3 +1899,212 @@ def api_bulk_approve_shifts(request):
         return JsonResponse({'error': '無効なJSONデータです'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# 休み・通院申請機能
+@login_required
+def leave_request_list(request):
+    """休み・通院申請一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限に応じて申請一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        leave_requests = LeaveRequest.objects.all()
+    elif current_staff:
+        leave_requests = LeaveRequest.objects.filter(staff=current_staff)
+    else:
+        leave_requests = LeaveRequest.objects.none()
+    
+    # ページネーション
+    paginator = Paginator(leave_requests.select_related('staff', 'user', 'approved_by'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/leave_request_list.html', context)
+
+
+@login_required
+def leave_request_create(request):
+    """休み・通院申請作成"""
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。')
+        return redirect('shift_management:leave_request_list')
+    
+    if request.method == 'POST':
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            leave_request = form.save(commit=False)
+            leave_request.user = request.user
+            leave_request.staff = staff_obj
+            leave_request.save()
+            messages.success(request, '休み・通院申請を送信しました。管理者の承認をお待ちください。')
+            return redirect('shift_management:leave_request_list')
+    else:
+        form = LeaveRequestForm()
+    
+    return render(request, 'shift_management/leave_request_form.html', {
+        'form': form, 'staff_obj': staff_obj, 'is_create': True
+    })
+
+
+@login_required
+def shift_proposal_list(request):
+    """シフト打診一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        sent_proposals = ShiftProposal.objects.filter(proposed_by=request.user)
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff) if current_staff else ShiftProposal.objects.none()
+    elif current_staff:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff)
+    else:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.none()
+    
+    context = {
+        'sent_proposals': sent_proposals.select_related('proposed_to', 'shift_type')[:10],
+        'received_proposals': received_proposals.select_related('proposed_by', 'shift_type')[:10],
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/shift_proposal_list.html', context)
+
+
+@login_required
+def shift_proposal_create(request):
+    """シフト打診作成"""
+    if not (request.user.is_superuser or request.user.is_staff):
+        messages.error(request, 'シフト打診の作成権限がありません。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalForm(request.POST)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.proposed_by = request.user
+            proposal.save()
+            messages.success(request, f'{proposal.proposed_to.name}さんにシフト打診を送信しました。')
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        initial = {}
+        if 'date' in request.GET:
+            initial['shift_date'] = request.GET.get('date')
+        if 'staff' in request.GET:
+            initial['proposed_to'] = request.GET.get('staff')
+        form = ShiftProposalForm(initial=initial)
+    
+    return render(request, 'shift_management/shift_proposal_form.html', {
+        'form': form, 'is_create': True
+    })
+@login_required
+@require_http_methods(["POST"])
+def api_approve_leave_request(request):
+    """休み申請を承認するAPI"""
+    try:
+        request_id = request.POST.get('id')
+        if not request_id:
+            return JsonResponse({'success': False, 'message': 'IDが指定されていません'})
+        
+        leave_request = get_object_or_404(LeaveRequest, id=request_id)
+        
+        # 管理者権限チェック
+        current_staff = get_staff_for_user(request.user)
+        if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+            return JsonResponse({'success': False, 'message': '権限がありません'})
+        
+        leave_request.approval_status = 'approved'
+        leave_request.approved_by = request.user
+        leave_request.approved_at = timezone.now()
+        leave_request.save()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'{leave_request.staff.name}の休み申請を承認しました'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})
+
+@login_required
+@require_http_methods(["POST"])
+def api_reject_leave_request(request):
+    """休み申請を拒否するAPI"""
+    try:
+        request_id = request.POST.get('id')
+        if not request_id:
+            return JsonResponse({'success': False, 'message': 'IDが指定されていません'})
+        
+        leave_request = get_object_or_404(LeaveRequest, id=request_id)
+        
+        # 管理者権限チェック
+        current_staff = get_staff_for_user(request.user)
+        if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+            return JsonResponse({'success': False, 'message': '権限がありません'})
+        
+        leave_request.approval_status = 'rejected'
+        leave_request.approved_by = request.user
+        leave_request.approved_at = timezone.now()
+        leave_request.save()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'{leave_request.staff.name}の休み申請を拒否しました'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})@login_required
+def shift_proposal_respond(request, pk):
+    """シフト打診への回答"""
+    # 現在のユーザーのStaffオブジェクトを取得
+    current_staff = get_staff_for_user(request.user)
+    if not current_staff:
+        messages.error(request, 'スタッフ情報が見つかりません。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    proposal = get_object_or_404(ShiftProposal, pk=pk, proposed_to=current_staff)
+    
+    if proposal.status != 'pending':
+        messages.error(request, 'この打診は既に回答済みです。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalResponseForm(request.POST, instance=proposal)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.responded_at = timezone.now()
+            proposal.save()
+            
+            # 承諾の場合はシフトを作成
+            if proposal.status == 'accepted':
+                try:
+                    Shift.objects.create(
+                        staff=proposal.proposed_to,
+                        date=proposal.shift_date,
+                        start_time=proposal.start_time,
+                        end_time=proposal.end_time,
+                        shift_type=proposal.shift_type,
+                        approval_status='approved'
+                    )
+                    messages.success(request, 'シフト打診を承諾し、シフトを作成しました。')
+                except Exception as e:
+                    messages.error(request, f'シフト作成中にエラーが発生しました: {str(e)}')
+            else:
+                messages.success(request, 'シフト打診を拒否しました。')
+            
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        form = ShiftProposalResponseForm(instance=proposal)
+    
+    return render(request, 'shift_management/shift_proposal_response.html', {
+        'form': form,
+        'proposal': proposal,
+    })

@@ -4,7 +4,10 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
-from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from .models import (
+    Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant
+)
 
 
 @admin.register(Staff)
@@ -235,4 +238,157 @@ class ShiftTemplateAdmin(admin.ModelAdmin):
 class ShiftTemplateDetailAdmin(admin.ModelAdmin):
     list_display = ['template', 'staff', 'weekday', 'shift_type', 'start_time', 'end_time']
     list_filter = ['template', 'weekday', 'shift_type']
-    search_fields = ['template__name', 'staff__name'] 
+    search_fields = ['template__name', 'staff__name']
+
+
+@admin.register(LeaveRequest)
+class LeaveRequestAdmin(admin.ModelAdmin):
+    list_display = ['staff', 'request_type', 'start_date', 'end_date', 'priority_display', 'approval_status_display', 'created_at']
+    list_filter = ['request_type', 'priority', 'approval_status', 'created_at']
+    search_fields = ['staff__name', 'reason']
+    date_hierarchy = 'start_date'
+    readonly_fields = ['created_at', 'updated_at', 'approved_at', 'approved_by']
+    
+    def priority_display(self, obj):
+        colors = {'low': '#6c757d', 'medium': '#ffc107', 'high': '#dc3545'}
+        icons = {'low': '📝', 'medium': '⚠️', 'high': '🚨'}
+        color = colors.get(obj.priority, '#6c757d')
+        icon = icons.get(obj.priority, '📝')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.get_priority_display()
+        )
+    priority_display.short_description = '緊急度'
+    
+    def approval_status_display(self, obj):
+        if obj.approval_status == 'pending':
+            return format_html('<span style="color: orange; font-weight: bold;">🕐 承認待ち</span>')
+        elif obj.approval_status == 'approved':
+            return format_html('<span style="color: green; font-weight: bold;">✅ 承認済み</span>')
+        elif obj.approval_status == 'rejected':
+            return format_html('<span style="color: red; font-weight: bold;">❌ 却下</span>')
+        return obj.approval_status
+    approval_status_display.short_description = '承認状態'
+    
+    actions = ['approve_requests', 'reject_requests']
+    
+    def approve_requests(self, request, queryset):
+        updated = 0
+        for leave_request in queryset:
+            if leave_request.approval_status == 'pending':
+                leave_request.approval_status = 'approved'
+                leave_request.approved_at = timezone.now()
+                leave_request.approved_by = request.user
+                leave_request.rejection_reason = ''
+                leave_request.save()
+                updated += 1
+        if updated:
+            messages.success(request, f'{updated}件の休み申請を承認しました。')
+    approve_requests.short_description = '選択された申請を承認する'
+    
+    def reject_requests(self, request, queryset):
+        updated = 0
+        for leave_request in queryset:
+            if leave_request.approval_status == 'pending':
+                leave_request.approval_status = 'rejected'
+                leave_request.approved_at = None
+                leave_request.approved_by = None
+                leave_request.save()
+                updated += 1
+        if updated:
+            messages.success(request, f'{updated}件の休み申請を却下しました。')
+    reject_requests.short_description = '選択された申請を却下する'
+
+
+@admin.register(ShiftProposal)
+class ShiftProposalAdmin(admin.ModelAdmin):
+    list_display = ['proposed_to', 'shift_date', 'start_time', 'end_time', 'status_display', 'proposed_by_user', 'created_at']
+    list_filter = ['status', 'shift_date', 'shift_type']
+    search_fields = ['proposed_to__name', 'proposed_by__username']
+    date_hierarchy = 'shift_date'
+    readonly_fields = ['created_at', 'updated_at', 'responded_at']
+    
+    def status_display(self, obj):
+        colors = {'pending': '#ffc107', 'accepted': '#28a745', 'declined': '#dc3545', 'expired': '#6c757d'}
+        icons = {'pending': '🕐', 'accepted': '✅', 'declined': '❌', 'expired': '⏰'}
+        color = colors.get(obj.status, '#6c757d')
+        icon = icons.get(obj.status, '🕐')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.get_status_display()
+        )
+    status_display.short_description = '回答状況'
+    
+    def proposed_by_user(self, obj):
+        return obj.proposed_by.username
+    proposed_by_user.short_description = '打診者'
+
+
+@admin.register(StaffCompatibility)
+class StaffCompatibilityAdmin(admin.ModelAdmin):
+    list_display = ['staff1', 'staff2', 'compatibility_display', 'set_by_user', 'created_at']
+    list_filter = ['compatibility_level', 'created_at']
+    search_fields = ['staff1__name', 'staff2__name']
+    
+    def compatibility_display(self, obj):
+        colors = {1: '#dc3545', 2: '#ffc107', 3: '#6c757d', 4: '#28a745'}
+        icons = {1: '❌', 2: '⚠️', 3: '➖', 4: '✅'}
+        color = colors.get(obj.compatibility_level, '#6c757d')
+        icon = icons.get(obj.compatibility_level, '➖')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.get_compatibility_level_display()
+        )
+    compatibility_display.short_description = '相性レベル'
+    
+    def set_by_user(self, obj):
+        return obj.set_by.username
+    set_by_user.short_description = '設定者'
+
+
+@admin.register(Holiday)
+class HolidayAdmin(admin.ModelAdmin):
+    list_display = ['date', 'name', 'holiday_type_display', 'is_active']
+    list_filter = ['holiday_type', 'is_active', 'date']
+    search_fields = ['name']
+    date_hierarchy = 'date'
+    
+    def holiday_type_display(self, obj):
+        colors = {'national': '#dc3545', 'company': '#007bff', 'regional': '#28a745'}
+        color = colors.get(obj.holiday_type, '#6c757d')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color, obj.get_holiday_type_display()
+        )
+    holiday_type_display.short_description = '祝日種別'
+
+
+@admin.register(Event)
+class EventAdmin(admin.ModelAdmin):
+    list_display = ['title', 'event_type', 'start_datetime', 'end_datetime', 'location', 'created_by_user']
+    list_filter = ['event_type', 'start_datetime']
+    search_fields = ['title', 'description', 'location']
+    date_hierarchy = 'start_datetime'
+    readonly_fields = ['created_at', 'updated_at']
+    
+    def created_by_user(self, obj):
+        return obj.created_by.username
+    created_by_user.short_description = '作成者'
+
+
+@admin.register(EventParticipant)
+class EventParticipantAdmin(admin.ModelAdmin):
+    list_display = ['event', 'staff', 'status_display', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['event__title', 'staff__name']
+    
+    def status_display(self, obj):
+        colors = {'invited': '#ffc107', 'accepted': '#28a745', 'declined': '#dc3545', 'maybe': '#6c757d'}
+        icons = {'invited': '📧', 'accepted': '✅', 'declined': '❌', 'maybe': '❓'}
+        color = colors.get(obj.status, '#6c757d')
+        icon = icons.get(obj.status, '📧')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.get_status_display()
+        )
+    status_display.short_description = '参加状況' 

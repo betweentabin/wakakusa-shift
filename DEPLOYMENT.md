@@ -66,7 +66,7 @@ sudo systemctl restart nginx
 ## 🔍 デプロイ後の確認事項
 
 ### 1. アプリケーションの動作確認
-- http://162.43.31.158:8080/ にアクセス
+- http://wakakusa.xrosspoint-bpo.com/ にアクセス
 - ログイン画面が正常に表示されることを確認
 
 ### 2. 権限制御の動作確認

@@ -1,6 +1,9 @@
 from django import forms
 from django.contrib.auth.models import User
-from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from .models import (
+    Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant
+)
 
 # 時間選択肢を生成するヘルパー関数
 def get_time_choices(interval_minutes=30):
@@ -629,3 +632,244 @@ class ShiftExportForm(forms.Form):
             raise forms.ValidationError('終了日は開始日より後である必要があります。')
         
         return cleaned_data
+
+
+class LeaveRequestForm(forms.ModelForm):
+    """休み・通院申請フォーム"""
+    class Meta:
+        model = LeaveRequest
+        fields = ['request_type', 'start_date', 'end_date', 'reason', 'priority']
+        widgets = {
+            'request_type': forms.Select(attrs={'class': 'form-select'}),
+            'start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '申請理由を入力してください'}),
+            'priority': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'request_type': '申請種別',
+            'start_date': '開始日',
+            'end_date': '終了日',
+            'reason': '理由',
+            'priority': '緊急度',
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        end_date = cleaned_data.get('end_date')
+        
+        if start_date and end_date and start_date > end_date:
+            raise forms.ValidationError('終了日は開始日以降である必要があります。')
+        
+        return cleaned_data
+
+
+class ShiftProposalForm(forms.ModelForm):
+    """シフト打診フォーム"""
+    shift_date = forms.DateField(
+        label='シフト日',
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    start_time = forms.ChoiceField(
+        label='開始時間',
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    end_time = forms.ChoiceField(
+        label='終了時間',
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    response_deadline = forms.DateTimeField(
+        label='回答期限',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+        required=False
+    )
+    
+    class Meta:
+        model = ShiftProposal
+        fields = ['proposed_to', 'shift_date', 'start_time', 'end_time', 'shift_type', 'position', 'message', 'response_deadline']
+        widgets = {
+            'proposed_to': forms.Select(attrs={'class': 'form-select'}),
+            'shift_type': forms.Select(attrs={'class': 'form-select'}),
+            'position': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '担当ポジション（任意）'}),
+            'message': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'メッセージ（任意）'}),
+        }
+        labels = {
+            'proposed_to': '打診先スタッフ',
+            'shift_type': 'シフト種別',
+            'position': '担当ポジション',
+            'message': 'メッセージ',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['proposed_to'].queryset = Staff.objects.filter(is_active=True, role_type='user')
+        self.fields['shift_type'].required = False
+        self.fields['position'].required = False
+        self.fields['message'].required = False
+    
+    def clean_start_time(self):
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(start_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+    
+    def clean_end_time(self):
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(end_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        
+        if start_time and end_time and start_time >= end_time:
+            raise forms.ValidationError('終了時間は開始時間より後である必要があります。')
+        
+        return cleaned_data
+
+
+class ShiftProposalResponseForm(forms.ModelForm):
+    """シフト打診回答フォーム"""
+    class Meta:
+        model = ShiftProposal
+        fields = ['status', 'response_message']
+        widgets = {
+            'status': forms.RadioSelect(attrs={'class': 'form-check-input'}),
+            'response_message': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '回答メッセージ（任意）'}),
+        }
+        labels = {
+            'status': '回答',
+            'response_message': 'メッセージ',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 回答用の選択肢のみに制限
+        self.fields['status'].choices = [
+            ('accepted', '承諾'),
+            ('declined', '拒否'),
+        ]
+        self.fields['response_message'].required = False
+
+
+class StaffCompatibilityForm(forms.ModelForm):
+    """スタッフ間相性設定フォーム"""
+    class Meta:
+        model = StaffCompatibility
+        fields = ['staff1', 'staff2', 'compatibility_level', 'reason']
+        widgets = {
+            'staff1': forms.Select(attrs={'class': 'form-select'}),
+            'staff2': forms.Select(attrs={'class': 'form-select'}),
+            'compatibility_level': forms.RadioSelect(attrs={'class': 'form-check-input'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '設定理由を入力してください（管理者のみ閲覧可能）'}),
+        }
+        labels = {
+            'staff1': 'スタッフ1',
+            'staff2': 'スタッフ2', 
+            'compatibility_level': '相性レベル',
+            'reason': '設定理由',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['staff1'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+        self.fields['staff2'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+        self.fields['reason'].required = False
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        staff1 = cleaned_data.get('staff1')
+        staff2 = cleaned_data.get('staff2')
+        
+        if staff1 and staff2 and staff1 == staff2:
+            raise forms.ValidationError('同じスタッフを選択することはできません。')
+        
+        return cleaned_data
+
+
+class HolidayForm(forms.ModelForm):
+    """祝日・休日設定フォーム"""
+    class Meta:
+        model = Holiday
+        fields = ['date', 'name', 'holiday_type', 'is_active']
+        widgets = {
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '祝日名を入力してください'}),
+            'holiday_type': forms.Select(attrs={'class': 'form-select'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'date': '日付',
+            'name': '祝日名',
+            'holiday_type': '祝日種別',
+            'is_active': '有効',
+        }
+
+
+class EventForm(forms.ModelForm):
+    """イベント作成フォーム"""
+    start_datetime = forms.DateTimeField(
+        label='開始日時',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'})
+    )
+    end_datetime = forms.DateTimeField(
+        label='終了日時',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'})
+    )
+    
+    class Meta:
+        model = Event
+        fields = ['title', 'description', 'event_type', 'start_datetime', 'end_datetime', 'location']
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'イベントタイトルを入力してください'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'イベントの説明を入力してください'}),
+            'event_type': forms.Select(attrs={'class': 'form-select'}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '場所を入力してください（任意）'}),
+        }
+        labels = {
+            'title': 'タイトル',
+            'description': '説明',
+            'event_type': 'イベント種別',
+            'location': '場所',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['description'].required = False
+        self.fields['location'].required = False
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_datetime = cleaned_data.get('start_datetime')
+        end_datetime = cleaned_data.get('end_datetime')
+        
+        if start_datetime and end_datetime and start_datetime >= end_datetime:
+            raise forms.ValidationError('終了日時は開始日時より後である必要があります。')
+        
+        return cleaned_data
+
+
+class EventParticipantForm(forms.ModelForm):
+    """イベント参加者追加フォーム"""
+    participants = forms.ModelMultipleChoiceField(
+        label='参加者（複数選択可）',
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
+        widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '8'})
+    )
+    
+    class Meta:
+        model = EventParticipant
+        fields = ['participants']

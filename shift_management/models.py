@@ -250,4 +250,214 @@ class ShiftTemplateDetail(models.Model):
         unique_together = ['template', 'staff', 'weekday']
 
     def __str__(self):
-        return f"{self.template.name} - {self.staff.name} - {self.get_weekday_display()}" 
+        return f"{self.template.name} - {self.staff.name} - {self.get_weekday_display()}"
+
+
+class LeaveRequest(models.Model):
+    """休み・通院申請モデル"""
+    REQUEST_TYPE_CHOICES = [
+        ('paid_leave', '有給休暇'),
+        ('sick_leave', '病気休暇'),
+        ('medical_appointment', '通院'),
+        ('other', 'その他'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', '通常'),
+        ('medium', '重要'),
+        ('high', '緊急'),
+    ]
+    
+    APPROVAL_STATUS_CHOICES = [
+        ('pending', '承認待ち'),
+        ('approved', '承認済み'),
+        ('rejected', '却下'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="申請者")
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
+    request_type = models.CharField(max_length=50, choices=REQUEST_TYPE_CHOICES, verbose_name="申請種別")
+    start_date = models.DateField(verbose_name="開始日")
+    end_date = models.DateField(verbose_name="終了日")
+    reason = models.TextField(blank=True, null=True, verbose_name="理由")
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='low', verbose_name="緊急度")
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default='pending',
+        verbose_name="承認状態"
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_leave_requests',
+        verbose_name="承認者"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name="承認日時")
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="却下理由")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="申請日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "休み・通院申請"
+        verbose_name_plural = "休み・通院申請"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.staff.name} - {self.get_request_type_display()} ({self.start_date}〜{self.end_date})"
+    
+    def is_approved(self):
+        return self.approval_status == 'approved'
+    
+    def is_pending(self):
+        return self.approval_status == 'pending'
+    
+    def get_duration_days(self):
+        return (self.end_date - self.start_date).days + 1
+
+
+class ShiftProposal(models.Model):
+    """シフト打診モデル"""
+    STATUS_CHOICES = [
+        ('pending', '回答待ち'),
+        ('accepted', '承諾'),
+        ('declined', '拒否'),
+        ('expired', '期限切れ'),
+    ]
+    
+    proposed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_proposals', verbose_name="打診者")
+    proposed_to = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="打診先スタッフ")
+    shift_date = models.DateField(verbose_name="シフト日")
+    start_time = models.TimeField(verbose_name="開始時間")
+    end_time = models.TimeField(verbose_name="終了時間")
+    shift_type = models.ForeignKey(ShiftType, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="シフト種別")
+    position = models.CharField(max_length=100, blank=True, null=True, verbose_name="担当ポジション")
+    message = models.TextField(blank=True, null=True, verbose_name="メッセージ")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="回答状況")
+    response_deadline = models.DateTimeField(null=True, blank=True, verbose_name="回答期限")
+    responded_at = models.DateTimeField(null=True, blank=True, verbose_name="回答日時")
+    response_message = models.TextField(blank=True, null=True, verbose_name="回答メッセージ")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="打診日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "シフト打診"
+        verbose_name_plural = "シフト打診"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.proposed_to.name} - {self.shift_date} ({self.get_status_display()})"
+    
+    def is_pending(self):
+        return self.status == 'pending'
+    
+    def is_expired(self):
+        from django.utils import timezone
+        if self.response_deadline and timezone.now() > self.response_deadline:
+            return True
+        return self.status == 'expired'
+
+
+class StaffCompatibility(models.Model):
+    """スタッフ間相性設定モデル"""
+    COMPATIBILITY_CHOICES = [
+        (1, '避ける'),
+        (2, '注意'),
+        (3, '普通'),
+        (4, '良好'),
+    ]
+    
+    staff1 = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name='compatibility_as_staff1', verbose_name="スタッフ1")
+    staff2 = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name='compatibility_as_staff2', verbose_name="スタッフ2")
+    compatibility_level = models.IntegerField(choices=COMPATIBILITY_CHOICES, verbose_name="相性レベル")
+    reason = models.TextField(blank=True, null=True, verbose_name="設定理由")
+    set_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="設定者")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="設定日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "スタッフ間相性設定"
+        verbose_name_plural = "スタッフ間相性設定"
+        unique_together = ['staff1', 'staff2']
+    
+    def __str__(self):
+        return f"{self.staff1.name} ⇔ {self.staff2.name} ({self.get_compatibility_level_display()})"
+
+
+class Holiday(models.Model):
+    """祝日・休日モデル"""
+    HOLIDAY_TYPE_CHOICES = [
+        ('national', '国民の祝日'),
+        ('company', '会社休日'),
+        ('regional', '地域休日'),
+    ]
+    
+    date = models.DateField(unique=True, verbose_name="日付")
+    name = models.CharField(max_length=100, verbose_name="祝日名")
+    holiday_type = models.CharField(max_length=20, choices=HOLIDAY_TYPE_CHOICES, default='national', verbose_name="祝日種別")
+    is_active = models.BooleanField(default=True, verbose_name="有効")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    
+    class Meta:
+        verbose_name = "祝日・休日"
+        verbose_name_plural = "祝日・休日"
+        ordering = ['date']
+    
+    def __str__(self):
+        return f"{self.date} - {self.name}"
+
+
+class Event(models.Model):
+    """イベントモデル（会議、研修等）"""
+    EVENT_TYPE_CHOICES = [
+        ('meeting', '会議'),
+        ('training', '研修'),
+        ('event', 'イベント'),
+        ('maintenance', 'メンテナンス'),
+        ('other', 'その他'),
+    ]
+    
+    title = models.CharField(max_length=200, verbose_name="タイトル")
+    description = models.TextField(blank=True, null=True, verbose_name="説明")
+    event_type = models.CharField(max_length=50, choices=EVENT_TYPE_CHOICES, verbose_name="イベント種別")
+    start_datetime = models.DateTimeField(verbose_name="開始日時")
+    end_datetime = models.DateTimeField(verbose_name="終了日時")
+    location = models.CharField(max_length=200, blank=True, null=True, verbose_name="場所")
+    participants = models.ManyToManyField(Staff, through='EventParticipant', verbose_name="参加者")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作成者")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "イベント"
+        verbose_name_plural = "イベント"
+        ordering = ['start_datetime']
+    
+    def __str__(self):
+        return f"{self.title} ({self.start_datetime.strftime('%Y-%m-%d %H:%M')})"
+
+
+class EventParticipant(models.Model):
+    """イベント参加者モデル"""
+    STATUS_CHOICES = [
+        ('invited', '招待済み'),
+        ('accepted', '参加'),
+        ('declined', '不参加'),
+        ('maybe', '未定'),
+    ]
+    
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, verbose_name="イベント")
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='invited', verbose_name="参加状況")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="招待日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "イベント参加者"
+        verbose_name_plural = "イベント参加者"
+        unique_together = ['event', 'staff']
+    
+    def __str__(self):
+        return f"{self.event.title} - {self.staff.name} ({self.get_status_display()})" 

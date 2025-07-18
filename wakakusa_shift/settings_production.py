@@ -4,12 +4,12 @@ from .settings import *
 # 本番環境用設定
 DEBUG = False
 
-# 本番環境で使用するドメインを設定（後で更新）
+# 本番環境で使用するドメインを設定
 ALLOWED_HOSTS = [
-    '162.43.31.158',  # サーバーIP
+    'wakakusa.xrosspoint-bpo.com',  # メインドメイン
+    '162.43.31.158',  # サーバーIP（バックアップ用）
     'localhost',
     '127.0.0.1',
-    # 'your-domain.com',  # ドメイン取得後に追加
 ]
 
 # データベース設定（PostgreSQL）
