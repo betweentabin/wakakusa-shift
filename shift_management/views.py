@@ -20,15 +20,22 @@ try:
     WEASYPRINT_AVAILABLE = True
 except ImportError:
     WEASYPRINT_AVAILABLE = False
-from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from .models import (
+    Organization, Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant,
+    Notification, create_notification
+)
 from .forms import (
-    StaffForm, ShiftTypeForm, ShiftForm, StaffShiftForm, ShiftTemplateForm, 
-    ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm,
-    BulkShiftForm, ShiftExportForm, ShiftReasonForm  # 新規追加フォーム
+    OrganizationForm, OrganizationSelectForm, StaffForm, ShiftTypeForm, ShiftForm, StaffShiftForm, ShiftTemplateForm, 
+    ShiftTemplateDetailForm, DateRangeForm, TemplateApplyForm, BulkShiftForm, CalendarBulkShiftForm,
+    AdvancedBulkShiftForm, ShiftExportForm, ShiftReasonForm,  # 既存フォーム
+    LeaveRequestForm, ShiftProposalForm, ShiftProposalResponseForm, StaffCompatibilityForm,  # 新規フォーム
+    HolidayForm, EventForm, EventParticipantForm, CalendarLeaveRequestForm
 )
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required  
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
@@ -52,9 +59,15 @@ def get_staff_for_user(user):
 
 # 認証関連のビュー
 def user_login(request):
-    """ログインビュー"""
+    """ログインビュー（組織自動選択対応）"""
     if request.user.is_authenticated:
         # 既にログイン済みの場合は権限に応じてリダイレクト
+        current_staff = get_staff_for_user(request.user)
+        if current_staff and current_staff.organization:
+            # スタッフの組織を自動選択
+            request.session['current_organization_id'] = current_staff.organization.id
+            request.session['current_organization_name'] = current_staff.organization.name
+        
         if request.user.is_superuser or request.user.is_staff:
             return redirect('shift_management:calendar')
         else:
@@ -68,12 +81,27 @@ def user_login(request):
             user = authenticate(username=username, password=password)
             if user is not None:
                 login(request, user)
-                messages.success(request, f'ようこそ、{username}さん！')
+                
+                # ログイン成功後に組織を自動選択
+                current_staff = get_staff_for_user(user)
+                if current_staff and current_staff.organization:
+                    request.session['current_organization_id'] = current_staff.organization.id
+                    request.session['current_organization_name'] = current_staff.organization.name
+                    messages.success(
+                        request, 
+                        f'ようこそ、{username}さん！組織「{current_staff.organization.name}」でログインしました。'
+                    )
+                else:
+                    messages.success(request, f'ようこそ、{username}さん！')
+                
                 next_url = request.GET.get('next')
                 if next_url:
                     return redirect(next_url)
                 # 権限に応じてリダイレクト先を決定
-                elif user.is_superuser or user.is_staff:
+                elif user.is_superuser:
+                    # スーパーユーザーは組織選択画面へ
+                    return redirect('shift_management:organization_select')
+                elif user.is_staff or (current_staff and current_staff.role_type == 'manager'):
                     return redirect('shift_management:calendar')
                 else:
                     return redirect('shift_management:staff_view')
@@ -88,19 +116,25 @@ def user_logout(request):
     """ログアウトビュー"""
     logout(request)
     messages.success(request, 'ログアウトしました。')
-    return redirect('shift_management:login')
+    return redirect('login')  # Django標準のログインページにリダイレクト
 
 @login_required
 def home_redirect(request):
     """ホームページリダイレクト - 権限に応じて適切なページにリダイレクト"""
-    if request.user.is_superuser or request.user.is_staff:
+    current_staff = get_staff_for_user(request.user)
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
         return redirect('shift_management:calendar')
     else:
         return redirect('shift_management:staff_view')
 
 @login_required
 def shift_calendar(request):
-    """シフトカレンダー表示"""
+    """シフトカレンダー表示（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト管理画面へのアクセス権限がありません。')
+        return redirect('shift_management:staff_view')
     today = timezone.now().date()
     # デフォルトでは今月の1日から末日までを表示
     year = today.year
@@ -192,25 +226,62 @@ def shift_calendar(request):
 
 @login_required
 def staff_list(request):
-    """スタッフ一覧表示"""
-    staffs = Staff.objects.all()
-    return render(request, 'shift_management/staff_list.html', {'staffs': staffs})
+    """スタッフ一覧表示（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'スタッフ管理画面へのアクセス権限がありません。')
+        return redirect('shift_management:staff_view')
+    
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
+    # 組織に基づいてスタッフをフィルタリング
+    if current_organization and not request.user.is_superuser:
+        # 組織管理者は所属組織のスタッフのみ表示
+        staffs = Staff.objects.filter(organization=current_organization)
+    elif request.user.is_superuser:
+        # スーパーユーザーは全組織のスタッフを表示
+        staffs = Staff.objects.all()
+    else:
+        # 組織が選択されていない場合は空のリストを返す
+        staffs = Staff.objects.none()
+    
+    return render(request, 'shift_management/staff_list.html', {
+        'staffs': staffs,
+        'current_organization': current_organization
+    })
 
 @login_required
 def staff_create(request):
-    """スタッフ新規作成"""
+    """スタッフ新規作成（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'スタッフ作成権限がありません。')
+        return redirect('shift_management:staff_view')
+    
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
     if request.method == 'POST':
         form = StaffForm(request.POST)
         if form.is_valid():
             # フォームのsaveメソッドを使用してユーザーアカウント作成処理も含めて保存
-            staff = form.save()
-            # 新規登録時は承認待ち状態に設定（フォーム保存後に更新）
-            staff.approval_status = 'pending'
+            staff = form.save(commit=False)
+            # 組織管理者の場合は現在の組織を自動設定
+            if current_organization and not request.user.is_superuser:
+                staff.organization = current_organization
+            staff.approval_status = 'pending'  # 新規登録時は承認待ち状態
             staff.save()
             messages.success(request, 'スタッフを登録しました。管理者の承認をお待ちください。')
             return redirect('shift_management:staff_list')
     else:
-        form = StaffForm()
+        # 組織管理者の場合は現在の組織を初期値に設定
+        initial = {}
+        if current_organization and not request.user.is_superuser:
+            initial['organization'] = current_organization
+        form = StaffForm(initial=initial)
     
     return render(request, 'shift_management/staff_form.html', {'form': form, 'is_create': True})
 
@@ -218,6 +289,15 @@ def staff_create(request):
 def staff_edit(request, pk):
     """スタッフ編集"""
     staff = get_object_or_404(Staff, pk=pk)
+    
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
+    # 組織管理者は自分の組織のスタッフのみ編集可能（スーパーユーザーは全て編集可能）
+    if not request.user.is_superuser and current_organization and staff.organization != current_organization:
+        messages.error(request, '他の組織のスタッフは編集できません。')
+        return redirect('shift_management:staff_list')
+    
     if request.method == 'POST':
         form = StaffForm(request.POST, instance=staff)
         if form.is_valid():
@@ -233,6 +313,15 @@ def staff_edit(request, pk):
 def staff_delete(request, pk):
     """スタッフ削除"""
     staff = get_object_or_404(Staff, pk=pk)
+    
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
+    # 組織管理者は自分の組織のスタッフのみ削除可能（スーパーユーザーは全て削除可能）
+    if not request.user.is_superuser and current_organization and staff.organization != current_organization:
+        messages.error(request, '他の組織のスタッフは削除できません。')
+        return redirect('shift_management:staff_list')
+    
     if request.method == 'POST':
         staff.is_active = False
         staff.save()
@@ -243,9 +332,17 @@ def staff_delete(request, pk):
 
 @login_required
 def shift_create(request):
-    """シフト新規作成"""
+    """シフト新規作成（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト作成権限がありません。')
+        return redirect('shift_management:staff_view')
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
     if request.method == 'POST':
-        form = ShiftForm(request.POST)
+        form = ShiftForm(request.POST, organization=current_organization)
         if form.is_valid():
             shift = form.save(commit=False)
             # 管理者が作成したシフトは承認済み状態で保存
@@ -265,7 +362,7 @@ def shift_create(request):
         if 'staff' in request.GET:
             initial['staff'] = request.GET.get('staff')
         
-        form = ShiftForm(initial=initial)
+        form = ShiftForm(initial=initial, organization=current_organization)
     
     return render(request, 'shift_management/shift_form.html', {'form': form, 'is_create': True})
 
@@ -273,8 +370,11 @@ def shift_create(request):
 def shift_edit(request, pk):
     """シフト編集"""
     shift = get_object_or_404(Shift, pk=pk)
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
     if request.method == 'POST':
-        form = ShiftForm(request.POST, instance=shift)
+        form = ShiftForm(request.POST, instance=shift, organization=current_organization)
         if form.is_valid():
             shift = form.save(commit=False)
             # 管理者が編集したシフトは承認済み状態を維持
@@ -285,7 +385,7 @@ def shift_edit(request, pk):
             # カレンダー更新フラグを追加してリダイレクト
             return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
     else:
-        form = ShiftForm(instance=shift)
+        form = ShiftForm(instance=shift, organization=current_organization)
     
     return render(request, 'shift_management/shift_form.html', {'form': form, 'shift': shift, 'is_create': False})
 
@@ -326,8 +426,22 @@ def shift_reason_create(request):
 @login_required
 def bulk_shift_create(request):
     """複数シフト一括登録（新規追加）"""
+    # カレンダー版の一括登録画面へリダイレクト
+    return redirect('shift_management:calendar_bulk_shift_create')
+    
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, '一括シフト作成権限がありません。')
+        return redirect('shift_management:staff_view')
+    
+    # 現在の組織を取得
+    current_organization = request.session.get('current_organization')
+    if current_organization:
+        current_organization = get_object_or_404(Organization, id=current_organization)
+    
     if request.method == 'POST':
-        form = BulkShiftForm(request.POST)
+        form = BulkShiftForm(request.POST, organization=current_organization)
         if form.is_valid():
             start_date = form.cleaned_data['start_date']
             end_date = form.cleaned_data['end_date']
@@ -391,7 +505,98 @@ def bulk_shift_create(request):
             'end_date': request.GET.get('end_date', next_week)
         }
         
-        form = BulkShiftForm(initial=initial)
+        form = BulkShiftForm(initial=initial, organization=current_organization)
+    
+    # シフト種別にデフォルト時間のデータ属性を追加
+    for field in form.fields['shift_type'].choices:
+        if hasattr(field, 'instance') and field.instance:
+            field.attrs = {
+                'data-start-time': field.instance.start_time.strftime('%H:%M'),
+                'data-end-time': field.instance.end_time.strftime('%H:%M')
+            }
+    
+    return render(request, 'shift_management/bulk_shift_form.html', {'form': form})
+
+@login_required  
+def traditional_bulk_shift_create(request):
+    """複数シフト一括登録（従来版：日付範囲+曜日指定）（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, '一括シフト作成権限がありません。')
+        return redirect('shift_management:staff_view')
+    
+    # 現在の組織を取得
+    current_organization = request.session.get('current_organization')
+    if current_organization:
+        current_organization = get_object_or_404(Organization, id=current_organization)
+    
+    if request.method == 'POST':
+        form = BulkShiftForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            staff_list = form.cleaned_data['staff']
+            shift_type = form.cleaned_data['shift_type']
+            weekdays = form.cleaned_data['weekdays']
+            start_time = form.cleaned_data['start_time']
+            end_time = form.cleaned_data['end_time']
+            overwrite = form.cleaned_data['overwrite']
+            
+            # 日付範囲内の各日に対してシフトを作成
+            current_date = start_date
+            shifts_created = 0
+            
+            while current_date <= end_date:
+                weekday = current_date.weekday()
+                
+                # 選択された曜日のみ処理
+                if str(weekday) in weekdays:
+                    for staff in staff_list:
+                        # 既存のシフトをチェック
+                        existing_shifts = Shift.objects.filter(
+                            staff=staff,
+                            date=current_date
+                        )
+                        
+                        if existing_shifts.exists() and not overwrite:
+                            # 既存のシフトがあり、上書きしない設定の場合はスキップ
+                            continue
+                        
+                        # 既存のシフトを削除（上書きする場合）
+                        if existing_shifts.exists() and overwrite:
+                            existing_shifts.delete()
+                        
+                        # 新しいシフトを作成
+                        Shift.objects.create(
+                            staff=staff,
+                            shift_type=shift_type,
+                            date=current_date,
+                            start_time=start_time,
+                            end_time=end_time,
+                            approval_status='approved',  # 管理者が作成したシフトは承認済み
+                            approved_at=timezone.now(),
+                            approved_by=request.user,
+                            created_by=request.user
+                        )
+                        shifts_created += 1
+                
+                current_date += datetime.timedelta(days=1)
+            
+            messages.success(request, f'{shifts_created}件のシフトを一括登録しました。')
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
+    else:
+        # デフォルトでは今日から1週間を設定
+        today = timezone.now().date()
+        next_week = today + datetime.timedelta(days=7)
+        
+        # GETパラメータから初期値を設定
+        initial = {
+            'start_date': request.GET.get('start_date', today),
+            'end_date': request.GET.get('end_date', next_week)
+        }
+        
+        form = BulkShiftForm(initial=initial, organization=current_organization)
     
     # シフト種別にデフォルト時間のデータ属性を追加
     for field in form.fields['shift_type'].choices:
@@ -404,14 +609,306 @@ def bulk_shift_create(request):
     return render(request, 'shift_management/bulk_shift_form.html', {'form': form})
 
 @login_required
+def calendar_bulk_shift_create(request):
+    """カレンダー上での一括シフト登録"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト登録の権限がありません。')
+        return redirect('shift_management:calendar')
+    
+    # 現在の組織を取得
+    current_organization = request.session.get('current_organization')
+    if current_organization:
+        current_organization = get_object_or_404(Organization, id=current_organization)
+    
+    if request.method == 'POST':
+        form = CalendarBulkShiftForm(request.POST)
+        if form.is_valid():
+            try:
+                selected_dates = form.cleaned_data['selected_dates']  # これは既にdateオブジェクトのリスト
+                staff_list = form.cleaned_data['staff']
+                shift_type = form.cleaned_data['shift_type']
+                start_time_str = form.cleaned_data['start_time']
+                end_time_str = form.cleaned_data['end_time']
+                overwrite = form.cleaned_data.get('overwrite', False)
+                individual_times_str = form.cleaned_data.get('individual_times', '')
+                
+                # デバッグ情報
+                print(f"DEBUG: selected_dates = {selected_dates}")
+                print(f"DEBUG: staff_list = {staff_list}")
+                print(f"DEBUG: shift_type = {shift_type}")
+                print(f"DEBUG: start_time_str = {start_time_str}")
+                print(f"DEBUG: end_time_str = {end_time_str}")
+                
+                # 個別時間データの解析
+                individual_times = {}
+                if individual_times_str:
+                    try:
+                        individual_times = json.loads(individual_times_str)
+                    except (json.JSONDecodeError, ValueError):
+                        individual_times = {}
+                
+                # 時間文字列をtimeオブジェクトに変換
+                from django.utils.dateparse import parse_time
+                start_time = parse_time(start_time_str) if isinstance(start_time_str, str) else start_time_str
+                end_time = parse_time(end_time_str) if isinstance(end_time_str, str) else end_time_str
+                
+                created_shifts = []
+                skipped_shifts = []
+                
+                # 各日付と各スタッフの組み合わせでシフトを作成
+                for date in selected_dates:
+                    # 個別時間設定がある場合はそれを使用、なければデフォルトを使用
+                    date_str = date.strftime('%Y-%m-%d') if hasattr(date, 'strftime') else str(date)
+                    if individual_times and date_str in individual_times:
+                        shift_start_time = parse_time(individual_times[date_str]['start_time'])
+                        shift_end_time = parse_time(individual_times[date_str]['end_time'])
+                    else:
+                        shift_start_time = start_time
+                        shift_end_time = end_time
+                    
+                    for staff in staff_list:
+                        # 既存シフトの確認
+                        existing_shift = Shift.objects.filter(
+                            staff=staff,
+                            date=date
+                        ).first()
+                        
+                        if existing_shift and not overwrite:
+                            staff_name = getattr(staff, 'name', f'Staff {staff.id}')
+                            skipped_shifts.append(f'{staff_name} - {date}')
+                            continue
+                        
+                        if existing_shift and overwrite:
+                            # 既存シフトを削除
+                            existing_shift.delete()
+                        
+                        # 新しいシフトを作成（shift-2と同じシンプルな形式）
+                        shift = Shift.objects.create(
+                            staff=staff,
+                            date=date,
+                            start_time=shift_start_time,
+                            end_time=shift_end_time,
+                            shift_type=shift_type,
+                            approval_status='approved'  # 管理者作成なので自動承認
+                        )
+                        staff_name = getattr(staff, 'name', f'Staff {staff.id}')
+                        created_shifts.append(f'{staff_name} - {date}')
+                
+                # 結果メッセージ
+                success_message = f'{len(created_shifts)}件のシフトを登録しました。'
+                if skipped_shifts:
+                    success_message += f' {len(skipped_shifts)}件は既存シフトのためスキップしました。'
+                
+                messages.success(request, success_message)
+                return redirect('shift_management:calendar')
+                
+            except Exception as e:
+                print(f"DEBUG: Exception occurred: {str(e)}")
+                messages.error(request, f'シフト登録中にエラーが発生しました: {str(e)}')
+        else:
+            print(f"DEBUG: Form is not valid. Form type: {type(form)}")
+            print(f"DEBUG: Form fields: {list(form.fields.keys())}")
+            print(f"DEBUG: Form errors: {form.errors}")
+            print(f"DEBUG: POST data: {request.POST}")
+            messages.error(request, f'フォームエラー: {form.errors}')
+    else:
+        form = CalendarBulkShiftForm()
+    
+    # シフト種別のデフォルト時間情報をJSONで渡す
+    shift_types_data = {}
+    if current_organization:
+        shift_types = ShiftType.objects.filter(organization=current_organization)
+    else:
+        shift_types = ShiftType.objects.all()
+        
+    for shift_type in shift_types:
+        try:
+            start_time = shift_type.start_time.strftime('%H:%M') if shift_type.start_time else '09:00'
+            end_time = shift_type.end_time.strftime('%H:%M') if shift_type.end_time else '17:00'
+        except (AttributeError, ValueError):
+            start_time = '09:00'
+            end_time = '17:00'
+            
+        shift_types_data[shift_type.id] = {
+            'start_time': start_time,
+            'end_time': end_time,
+        }
+    
+    # 既存のシフトデータを取得（カレンダー表示用）
+    from datetime import timedelta
+    
+    shift_events = []
+    try:
+        # 現在の月の前後1ヶ月分のシフトを取得
+        today = timezone.now().date()
+        start_date = today.replace(day=1) - timedelta(days=30)
+        end_date = today + timedelta(days=60)
+        
+        shifts_filter = Shift.objects.filter(
+            date__range=[start_date, end_date],
+            is_deleted_with_reason=False
+        )
+        
+        if current_organization:
+            shifts_filter = shifts_filter.filter(staff__organization=current_organization)
+            
+        shifts = shifts_filter.select_related('staff', 'shift_type')
+        
+        # シフトデータをFullCalendar用に整形
+        for shift in shifts:
+            try:
+                # 安全にアクセスできるよう属性の存在確認
+                staff_name = getattr(shift.staff, 'name', 'Unknown Staff')
+                shift_type_name = getattr(shift.shift_type, 'name', 'Unknown Type')
+                shift_type_color = getattr(shift.shift_type, 'color', '#6c757d')
+                
+                shift_events.append({
+                    'title': f'{staff_name} ({shift_type_name})',
+                    'start': shift.date.isoformat(),
+                    'backgroundColor': shift_type_color,
+                    'borderColor': shift_type_color,
+                    'textColor': '#fff',
+                    'extendedProps': {
+                        'staffName': staff_name,
+                        'shiftType': shift_type_name,
+                        'startTime': shift.start_time.strftime('%H:%M') if shift.start_time else '00:00',
+                        'endTime': shift.end_time.strftime('%H:%M') if shift.end_time else '00:00',
+                        'approvalStatus': getattr(shift, 'approval_status', 'pending')
+                    }
+                })
+            except Exception as e:
+                # 個別のシフト処理でエラーが発生した場合はスキップ
+                print(f"シフト処理エラーをスキップ: {e}")
+                continue
+    except Exception as e:
+        # シフトデータ取得でエラーが発生した場合は空のリストを使用
+        print(f"シフトデータ取得エラー: {e}")
+        shift_events = []
+    
+    return render(request, 'shift_management/calendar_bulk_shift_form.html', {
+        'form': form,
+        'shift_types_data': shift_types_data,
+        'existing_shifts': json.dumps(shift_events),
+    })
+
+@login_required
+def advanced_bulk_shift_create(request):
+    """日ごとに異なる時間帯を設定できる高度な一括シフト登録"""
+    if request.method == 'POST':
+        form = AdvancedBulkShiftForm(request.POST)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            staff_list = form.cleaned_data['staff']
+            default_shift_type = form.cleaned_data['shift_type']
+            weekdays = form.cleaned_data['weekdays']
+            time_settings_json = form.cleaned_data['time_settings']
+            overwrite = form.cleaned_data['overwrite']
+            
+            # 時間設定をパース
+            time_settings = {}
+            if time_settings_json:
+                try:
+                    import json
+                    time_settings = json.loads(time_settings_json)
+                except json.JSONDecodeError:
+                    messages.error(request, '時間設定の形式が正しくありません。')
+                    return render(request, 'shift_management/advanced_bulk_shift_form.html', {'form': form})
+            
+            # 日付範囲内の各日に対してシフトを作成
+            current_date = start_date
+            shifts_created = 0
+            
+            while current_date <= end_date:
+                weekday = current_date.weekday()
+                date_str = current_date.strftime('%Y-%m-%d')
+                
+                # 選択された曜日のみ処理
+                if str(weekday) in weekdays:
+                    # 日付ごとの時間設定を取得
+                    if date_str in time_settings:
+                        start_time = time_settings[date_str]['start_time']
+                        end_time = time_settings[date_str]['end_time']
+                    else:
+                        # 時間設定がない場合はデフォルトのシフト種別の時間を使用
+                        if default_shift_type:
+                            start_time = default_shift_type.start_time.strftime('%H:%M')
+                            end_time = default_shift_type.end_time.strftime('%H:%M')
+                        else:
+                            # デフォルトの時間を設定
+                            start_time = '09:00'
+                            end_time = '17:00'
+                    
+                    for staff in staff_list:
+                        # 既存のシフトをチェック
+                        existing_shifts = Shift.objects.filter(
+                            staff=staff,
+                            date=current_date
+                        )
+                        
+                        if existing_shifts.exists() and not overwrite:
+                            # 既存のシフトがあり、上書きしない設定の場合はスキップ
+                            continue
+                        
+                        # 既存のシフトを削除（上書きする場合）
+                        if existing_shifts.exists() and overwrite:
+                            existing_shifts.delete()
+                        
+                        # 新しいシフトを作成
+                        Shift.objects.create(
+                            staff=staff,
+                            shift_type=default_shift_type,
+                            date=current_date,
+                            start_time=start_time,
+                            end_time=end_time,
+                            approval_status='approved',  # 管理者が作成したシフトは承認済み
+                            approved_at=timezone.now(),
+                            approved_by=request.user,
+                            created_by=request.user
+                        )
+                        shifts_created += 1
+                
+                current_date += datetime.timedelta(days=1)
+            
+            messages.success(request, f'{shifts_created}件のシフトを一括登録しました。')
+            return redirect(f"{reverse('shift_management:calendar')}?refresh_calendar=true")
+    else:
+        # デフォルトでは今日から1週間を設定
+        today = timezone.now().date()
+        next_week = today + datetime.timedelta(days=7)
+        
+        # GETパラメータから初期値を設定
+        initial = {
+            'start_date': request.GET.get('start_date', today),
+            'end_date': request.GET.get('end_date', next_week)
+        }
+        
+        form = AdvancedBulkShiftForm(initial=initial)
+    
+    return render(request, 'shift_management/advanced_bulk_shift_form.html', {'form': form})
+
+@login_required
 def shift_type_list(request):
-    """シフト種別一覧表示"""
+    """シフト種別一覧表示（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト種別管理画面へのアクセス権限がありません。')
+        return redirect('shift_management:staff_view')
+    
     shift_types = ShiftType.objects.all()
     return render(request, 'shift_management/shift_type_list.html', {'shift_types': shift_types})
 
 @login_required
 def shift_type_create(request):
-    """シフト種別新規作成"""
+    """シフト種別新規作成（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト種別作成権限がありません。')
+        return redirect('shift_management:staff_view')
     if request.method == 'POST':
         form = ShiftTypeForm(request.POST)
         if form.is_valid():
@@ -451,7 +948,13 @@ def shift_type_delete(request, pk):
 
 @login_required
 def template_list(request):
-    """シフトテンプレート一覧表示"""
+    """シフトテンプレート一覧表示（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'テンプレート管理画面へのアクセス権限がありません。')
+        return redirect('shift_management:staff_view')
+    
     templates = ShiftTemplate.objects.all()
     return render(request, 'shift_management/template_list.html', {'templates': templates})
 
@@ -606,7 +1109,12 @@ def template_detail_delete(request, pk):
 
 @login_required
 def shift_export(request):
-    """シフト表の印刷・エクスポート（新規追加）"""
+    """シフト表の印刷・エクスポート（新規追加）（管理者権限のみ）"""
+    # 管理者権限チェック
+    current_staff = get_staff_for_user(request.user)
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフトエクスポート権限がありません。')
+        return redirect('shift_management:staff_view')
     if request.method == 'POST':
         form = ShiftExportForm(request.POST)
         if form.is_valid():
@@ -795,12 +1303,27 @@ def api_shifts(request):
         # 対応するStaffオブジェクトがない場合は何も表示しない
         staff_filter = Q(pk__isnull=True)  # 何も取得しない条件
     
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
+    print(f"[DEBUG] Current organization: {current_organization}") # DEBUG
     print(f"[DEBUG] Querying shifts between {start_date} and {end_date} with staff filter") # DEBUG
-    # 承認済み + 承認待ちのシフトを表示（権限に応じて制限）
-    shifts = Shift.objects.filter(
+    
+    # 基本クエリ（日付範囲と承認状態）
+    base_query = Shift.objects.filter(
         date__range=[start_date, end_date],
         approval_status__in=['approved', 'pending']
-    ).filter(staff_filter).select_related('staff', 'shift_type')
+    )
+    
+    # 組織フィルタリング（スーパーユーザー以外は必須）
+    if current_organization:
+        base_query = base_query.filter(staff__organization=current_organization)
+    elif not request.user.is_superuser:
+        # 組織が選択されていない場合は空の結果を返す
+        base_query = base_query.none()
+    
+    # 権限フィルタリングを適用
+    shifts = base_query.filter(staff_filter).select_related('staff', 'shift_type')
     print(f"[DEBUG] Found {shifts.count()} shifts (approved + pending) with permission filter") # DEBUG
     
     events = []
@@ -886,19 +1409,39 @@ def api_shift_update(request):
     except Exception as e:
         return JsonResponse({'error': f'エラーが発生しました: {str(e)}'}, status=500)
 
-@login_required
 @require_POST
 def api_shift_delete(request):
     """Ajax用シフト削除API"""
+    # Ajaxリクエストかどうかを確認（Django 2.xとの互換性のため）
+    is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+    if not is_ajax:
+        return JsonResponse({'error': 'Ajaxリクエストのみ許可されています'}, status=400)
+    
+    # ログインチェック
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'ログインが必要です'}, status=401)
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POSTメソッドのみ許可されています'}, status=405)
+    
     shift_id = request.POST.get('shift_id')
     if not shift_id:
         return JsonResponse({'error': 'shift_idが指定されていません'}, status=400)
+    
     try:
         shift = Shift.objects.get(pk=shift_id)
+        
+        # 権限チェック
+        current_staff = get_staff_for_user(request.user)
+        if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+            return JsonResponse({'error': 'シフト削除の権限がありません'}, status=403)
+        
         shift.delete()
-        return JsonResponse({'success': True})
+        return JsonResponse({'success': True, 'message': 'シフトを削除しました'})
     except Shift.DoesNotExist:
         return JsonResponse({'error': 'シフトが存在しません'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def time_chart(request):
@@ -1086,6 +1629,10 @@ def time_chart(request):
 @login_required
 def staff_shift_view(request):
     """スタッフ用シフト確認ビュー（読み取り専用）"""
+    # admin/superuserの場合は管理者カレンダーへリダイレクト
+    if request.user.is_superuser or request.user.is_staff:
+        return redirect('shift_management:calendar')
+    
     # 現在の年月を取得（URLパラメータがあればそれを使用）
     year = int(request.GET.get('year', timezone.now().year))
     month = int(request.GET.get('month', timezone.now().month))
@@ -1278,6 +1825,9 @@ def staff_api_shifts(request):
         if not staff_obj:
             return JsonResponse({'error': f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません'}, status=400)
         
+        # 現在選択中の組織を取得
+        current_organization = get_current_organization(request)
+        
         # 権限に応じてシフトデータを制限
         if request.user.is_superuser or staff_obj.role_type == 'manager':
             # 管理者は全スタッフのシフトを表示
@@ -1295,14 +1845,24 @@ def staff_api_shifts(request):
             # 不明な権限の場合は自分のシフトのみ
             staff_filter = Q(staff=staff_obj)
         
-        # 全スタッフのシフトデータを取得（承認済み + 承認待ち）（権限に応じて制限）
-        shifts = Shift.objects.filter(
+        # 基本クエリ（日付範囲と承認状態）
+        base_query = Shift.objects.filter(
             date__range=[start_date, end_date],
             approval_status__in=['approved', 'pending'],  # 承認済み + 承認待ち
             is_deleted_with_reason=False,  # 事由付き削除されていないもののみ
             start_time__isnull=False,      # 開始時間があるもののみ
             end_time__isnull=False         # 終了時間があるもののみ
-        ).filter(staff_filter).select_related('staff', 'shift_type')
+        )
+        
+        # 組織フィルタリング（スーパーユーザー以外は必須）
+        if current_organization:
+            base_query = base_query.filter(staff__organization=current_organization)
+        elif not request.user.is_superuser:
+            # 組織が選択されていない場合は空の結果を返す
+            base_query = base_query.none()
+        
+        # 権限フィルタリングを適用して最終クエリを作成
+        shifts = base_query.filter(staff_filter).select_related('staff', 'shift_type')
         
         # FullCalendar用のイベントデータを作成
         events = []
@@ -1682,3 +2242,780 @@ def api_bulk_approve_shifts(request):
         return JsonResponse({'error': '無効なJSONデータです'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+def has_organization_management_permission(user):
+    """組織管理権限を持っているかチェック"""
+    # 開発中は全てのログインユーザーに権限を付与
+    return user.is_authenticated
+    
+    # 本番環境では以下のコメントを外す
+    # # スーパーユーザーまたは組織管理専用アカウント
+    # if user.is_superuser:
+    #     return True
+    # 
+    # # 組織管理専用のスタッフアカウント（is_staffかつ特定の条件）
+    # if user.is_staff and user.username in ['org_super_admin']:
+    #     return True
+    # 
+    # # 組織の管理者アカウント（管理者権限を持つスタッフ）
+    # try:
+    #     staff = get_staff_for_user(user)
+    #     if staff and staff.role_type == 'manager' and staff.approval_status == 'approved':
+    #         return True
+    # except:
+    #     pass
+    # 
+    # return False
+
+@login_required
+def organization_list(request):
+    """組織一覧表示（強化されたアクセス制御）"""
+    if not has_organization_management_permission(request.user):
+        messages.warning(request, '🔐 組織管理エリアにアクセスするには、組織管理者権限が必要です。')
+        return redirect('shift_management:organization_admin_login')
+    
+    organizations = Organization.objects.all().order_by('name')
+    
+    # 検索機能
+    search_query = request.GET.get('search', '')
+    if search_query:
+        organizations = organizations.filter(
+            models.Q(name__icontains=search_query) |
+            models.Q(code__icontains=search_query) |
+            models.Q(contact_email__icontains=search_query)
+        )
+    
+    # ページネーション
+    paginator = Paginator(organizations, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'total_count': organizations.count(),
+        'is_super_admin': request.user.is_superuser,
+    }
+    return render(request, 'shift_management/organization_list.html', context)
+
+@login_required
+def organization_create(request):
+    """組織作成（強化されたアクセス制御）"""
+    if not has_organization_management_permission(request.user):
+        messages.warning(request, '🔐 組織作成には組織管理者権限が必要です。')
+        return redirect('shift_management:organization_admin_login')
+    
+    if request.method == 'POST':
+        form = OrganizationForm(request.POST)
+        if form.is_valid():
+            organization = form.save()
+            messages.success(request, f'✅ 組織「{organization.name}」を作成しました。')
+            return redirect('shift_management:organization_list')
+    else:
+        form = OrganizationForm()
+    
+    return render(request, 'shift_management/organization_form.html', {
+        'form': form,
+        'title': '組織作成',
+        'action': '作成'
+    })
+
+@login_required
+def organization_edit(request, pk):
+    """組織編集（強化されたアクセス制御）"""
+    if not has_organization_management_permission(request.user):
+        messages.warning(request, '🔐 組織編集には組織管理者権限が必要です。')
+        return redirect('shift_management:organization_admin_login')
+    
+    organization = get_object_or_404(Organization, pk=pk)
+    
+    if request.method == 'POST':
+        form = OrganizationForm(request.POST, instance=organization)
+        if form.is_valid():
+            organization = form.save()
+            messages.success(request, f'✅ 組織「{organization.name}」を更新しました。')
+            return redirect('shift_management:organization_list')
+    else:
+        form = OrganizationForm(instance=organization)
+    
+    return render(request, 'shift_management/organization_form.html', {
+        'form': form,
+        'organization': organization,
+        'title': '組織編集',
+        'action': '更新'
+    })
+
+@login_required
+def organization_detail(request, pk):
+    """組織詳細表示（強化されたアクセス制御）"""
+    if not has_organization_management_permission(request.user):
+        messages.warning(request, '🔐 組織詳細閲覧には組織管理者権限が必要です。')
+        return redirect('shift_management:organization_admin_login')
+    
+    organization = get_object_or_404(Organization, pk=pk)
+    
+    # 組織のスタッフ一覧
+    staff_list = organization.staff_set.all().order_by('name')
+    
+    # 最近のシフト統計
+    from datetime import datetime, timedelta
+    today = date.today()
+    start_date = today - timedelta(days=30)
+    
+    recent_shifts = Shift.objects.filter(
+        staff__organization=organization,
+        date__gte=start_date
+    ).count()
+    
+    context = {
+        'organization': organization,
+        'staff_list': staff_list,
+        'staff_count': staff_list.count(),
+        'active_staff_count': staff_list.filter(is_active=True, approval_status='approved').count(),
+        'recent_shifts_count': recent_shifts,
+    }
+    return render(request, 'shift_management/organization_detail.html', context)
+
+@login_required
+def organization_select(request):
+    """組織選択画面"""
+    if request.method == 'POST':
+        form = OrganizationSelectForm(request.POST)
+        if form.is_valid():
+            organization = form.cleaned_data['organization']
+            request.session['current_organization_id'] = organization.id
+            request.session['current_organization_name'] = organization.name
+            messages.success(request, f'組織「{organization.name}」を選択しました。')
+            return redirect('shift_management:calendar')
+    else:
+        form = OrganizationSelectForm()
+        # 現在選択中の組織があれば初期値として設定
+        current_org_id = request.session.get('current_organization_id')
+        if current_org_id:
+            try:
+                current_org = Organization.objects.get(id=current_org_id, is_active=True)
+                form.fields['organization'].initial = current_org
+            except Organization.DoesNotExist:
+                pass
+    
+    return render(request, 'shift_management/organization_select.html', {
+        'form': form,
+        'current_organization_id': request.session.get('current_organization_id'),
+        'current_organization_name': request.session.get('current_organization_name'),
+    })
+
+def get_current_organization(request):
+    """現在選択中の組織を取得するヘルパー関数"""
+    org_id = request.session.get('current_organization_id')
+    if org_id:
+        try:
+            return Organization.objects.get(id=org_id, is_active=True)
+        except Organization.DoesNotExist:
+            # 無効な組織IDの場合はセッションをクリア
+            if 'current_organization_id' in request.session:
+                del request.session['current_organization_id']
+            if 'current_organization_name' in request.session:
+                del request.session['current_organization_name']
+    return None
+
+@login_required
+def calendar_view(request):
+    """カレンダー表示（組織フィルタリング対応）"""
+    # 現在選択中の組織を取得
+    current_organization = get_current_organization(request)
+    
+    # スーパーユーザー以外は組織選択が必須
+    if not request.user.is_superuser and not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    # 現在のユーザーに対応するスタッフを取得
+    current_staff = get_staff_for_user(request.user)
+    
+    # 権限チェック
+    user_role = 'admin' if request.user.is_superuser else (
+        current_staff.role_type if current_staff else 'user'
+    )
+    
+    # 組織に基づいてスタッフをフィルタリング
+    if current_organization:
+        staff_list = Staff.objects.filter(
+            organization=current_organization,
+            is_active=True,
+            approval_status='approved'
+        )
+    else:
+        # スーパーユーザーの場合は全組織
+        staff_list = Staff.objects.filter(is_active=True, approval_status='approved')
+    
+    # 権限に応じてスタッフリストをさらにフィルタリング
+    if current_staff and user_role != 'admin':
+        filtered_staff_ids = []
+        for staff in staff_list:
+            if current_staff.can_view_staff_shifts(staff):
+                filtered_staff_ids.append(staff.id)
+        staff_list = staff_list.filter(id__in=filtered_staff_ids)
+    
+    # シフトデータを取得（組織フィルタリング適用）
+    if current_organization:
+        shifts = Shift.objects.filter(
+            staff__organization=current_organization,
+            approval_status='approved'
+        ).select_related('staff', 'shift_type')
+    else:
+        shifts = Shift.objects.filter(
+            approval_status='approved'
+        ).select_related('staff', 'shift_type')
+    
+    # 権限に応じてシフトをフィルタリング
+    if current_staff and user_role != 'admin':
+        visible_staff_ids = [staff.id for staff in staff_list]
+        shifts = shifts.filter(staff_id__in=visible_staff_ids)
+    
+    # シフト種別とテンプレートも組織でフィルタリング
+    shift_types = ShiftType.objects.all()
+    shift_templates = ShiftTemplate.objects.all()
+    
+    # 承認待ちのシフト（管理者のみ）
+    pending_shifts = []
+    if user_role in ['admin', 'manager']:
+        if current_organization:
+            pending_shifts = Shift.objects.filter(
+                staff__organization=current_organization,
+                approval_status='pending'
+            ).select_related('staff', 'shift_type').order_by('-created_at')
+        else:
+            pending_shifts = Shift.objects.filter(
+                approval_status='pending'
+            ).select_related('staff', 'shift_type').order_by('-created_at')
+    
+    # 利用可能な組織一覧（スーパーユーザーまたは管理者の場合）
+    available_organizations = []
+    if request.user.is_superuser:
+        available_organizations = Organization.objects.filter(is_active=True)
+    elif current_staff and current_staff.role_type == 'manager':
+        # 管理者は自分の組織のみ表示
+        available_organizations = Organization.objects.filter(
+            id=current_staff.organization.id, 
+            is_active=True
+        ) if current_staff.organization else []
+
+    context = {
+        'staff_list': staff_list,
+        'shift_types': shift_types,
+        'shifts': shifts,
+        'shift_templates': shift_templates,
+        'current_staff': current_staff,
+        'user_role': user_role,
+        'pending_shifts': pending_shifts,
+        'current_organization': current_organization,
+        'available_organizations': available_organizations,
+        'can_edit': user_role in ['admin', 'manager'],
+        'can_approve': user_role in ['admin', 'manager'],
+    }
+    
+    return render(request, 'shift_management/calendar.html', context)
+
+def organization_admin_login(request):
+    """組織管理専用ログイン画面"""
+    if request.user.is_authenticated and has_organization_management_permission(request.user):
+        return redirect('shift_management:organization_list')
+    
+    if request.method == 'POST':
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                # 組織管理権限をチェック
+                if has_organization_management_permission(user):
+                    login(request, user)
+                    messages.success(
+                        request, 
+                        f'🔐 組織管理者として {username} でログインしました。'
+                    )
+                    next_url = request.GET.get('next')
+                    if next_url:
+                        return redirect(next_url)
+                    return redirect('shift_management:organization_list')
+                else:
+                    messages.error(request, '🚫 組織管理権限がありません。組織管理者またはスーパーアドミンのみアクセス可能です。')
+            else:
+                messages.error(request, '❌ ユーザー名またはパスワードが正しくありません。')
+        else:
+            messages.error(request, '❌ 入力内容に誤りがあります。')
+    else:
+        form = AuthenticationForm()
+    
+    return render(request, 'shift_management/organization_admin_login.html', {
+        'form': form,
+        'title': '組織管理者ログイン'
+    })
+
+
+# wakakusa-shift-2から移植した新機能
+
+@login_required
+def leave_request_list(request):
+    """休み・通院申請一覧"""
+    current_staff = get_staff_for_user(request.user)
+    current_organization = get_current_organization(request)
+    
+    # 権限に応じて申請一覧を制限
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        # 管理者は組織内の全申請を表示
+        if current_organization:
+            leave_requests = LeaveRequest.objects.filter(staff__organization=current_organization)
+        elif request.user.is_superuser:
+            # スーパーユーザーは全組織の申請を表示
+            leave_requests = LeaveRequest.objects.all()
+        else:
+            leave_requests = LeaveRequest.objects.none()
+    elif current_staff:
+        # 一般スタッフは自分の申請のみ
+        leave_requests = LeaveRequest.objects.filter(staff=current_staff)
+    else:
+        leave_requests = LeaveRequest.objects.none()
+    
+    # ページネーション
+    paginator = Paginator(leave_requests.select_related('staff', 'user', 'approved_by'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'current_staff': current_staff,
+        'user_role': current_staff.role_type if current_staff else 'none',
+    }
+    
+    return render(request, 'shift_management/leave_request_list.html', context)
+
+
+@login_required
+def leave_request_create(request):
+    """休み・通院申請作成"""
+    staff_obj = get_staff_for_user(request.user)
+    if not staff_obj:
+        messages.error(request, f'ユーザー名「{request.user.username}」に対応するスタッフ情報が見つかりません。')
+        return redirect('shift_management:leave_request_list')
+    
+    if request.method == 'POST':
+        form = LeaveRequestForm(request.POST)
+        if form.is_valid():
+            leave_request = form.save(commit=False)
+            leave_request.user = request.user
+            leave_request.staff = staff_obj
+            
+            # 組織のフィルタリング（多組織対応）
+            if staff_obj.organization:
+                # 同じ組織の管理者のみに通知
+                managers = User.objects.filter(
+                    Q(is_superuser=True) |
+                    Q(staff__organization=staff_obj.organization, staff__role_type='manager')
+                ).distinct()
+            else:
+                # 組織が設定されていない場合はスーパーユーザーのみ
+                managers = User.objects.filter(is_superuser=True)
+            
+            leave_request.save()
+            
+            # 管理者に通知を送信
+            for manager in managers:
+                create_notification(
+                    recipient=manager,
+                    notification_type='leave_request',
+                    title='新しい休み申請があります',
+                    message=f'{staff_obj.name}さんから{leave_request.get_request_type_display()}の申請が届いています。',
+                    leave_request=leave_request
+                )
+            
+            messages.success(request, '休み・通院申請を送信しました。管理者の承認をお待ちください。')
+            return redirect('shift_management:leave_request_list')
+    else:
+        form = LeaveRequestForm()
+    
+    return render(request, 'shift_management/leave_request_form.html', {
+        'form': form, 'staff_obj': staff_obj, 'is_create': True
+    })
+
+
+@login_required
+def shift_proposal_list(request):
+    """シフト打診一覧"""
+    current_staff = get_staff_for_user(request.user)
+    
+    if request.user.is_superuser or (current_staff and current_staff.role_type == 'manager'):
+        sent_proposals = ShiftProposal.objects.filter(proposed_by=request.user)
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff) if current_staff else ShiftProposal.objects.none()
+    elif current_staff:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.filter(proposed_to=current_staff)
+    else:
+        sent_proposals = ShiftProposal.objects.none()
+        received_proposals = ShiftProposal.objects.none()
+    
+    # user_roleの決定（スーパーユーザーは管理者扱い）
+    if request.user.is_superuser:
+        user_role = 'manager'
+    elif current_staff:
+        user_role = current_staff.role_type
+    else:
+        user_role = 'none'
+    
+    context = {
+        'sent_proposals': sent_proposals.select_related('proposed_to', 'shift_type')[:10],
+        'received_proposals': received_proposals.select_related('proposed_by', 'shift_type')[:10],
+        'current_staff': current_staff,
+        'user_role': user_role,
+    }
+    
+    return render(request, 'shift_management/shift_proposal_list.html', context)
+
+
+@login_required
+def shift_proposal_create(request):
+    """シフト打診作成（管理者権限のみ）"""
+    current_staff = get_staff_for_user(request.user)
+    
+    # 管理者権限チェック（スーパーユーザーまたはmanager権限）
+    if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+        messages.error(request, 'シフト打診の作成は管理者権限が必要です。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalForm(request.POST)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.proposed_by = request.user
+            proposal.save()
+            
+            # 打診先スタッフに通知（ユーザーアカウントがある場合のみ）
+            if proposal.proposed_to.user:
+                create_notification(
+                    recipient=proposal.proposed_to.user,
+                    notification_type='shift_proposal',
+                    title='新しいシフト打診があります',
+                    message=f'{proposal.shift_date}のシフトについて打診が届いています。',
+                    shift_proposal=proposal
+                )
+            
+            messages.success(request, f'{proposal.proposed_to.name}さんにシフト打診を送信しました。')
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        form = ShiftProposalForm()
+        # 組織フィルタリング（実際にシフト勤務をするスタッフのみ対象）
+        if current_staff and current_staff.organization:
+            form.fields['proposed_to'].queryset = Staff.objects.filter(
+                is_active=True,
+                approval_status='approved',
+                organization=current_staff.organization,
+                role_type__in=['staff', 'part_time']  # 職員・アルバイトのみ
+            )
+    
+    return render(request, 'shift_management/shift_proposal_form.html', {
+        'form': form, 'is_create': True
+    })
+
+
+@login_required
+def shift_proposal_respond(request, pk):
+    """シフト打診回答"""
+    proposal = get_object_or_404(ShiftProposal, pk=pk)
+    current_staff = get_staff_for_user(request.user)
+    
+    # 打診先スタッフ本人のみアクセス可能
+    if proposal.proposed_to != current_staff:
+        messages.error(request, 'この打診への回答権限がありません。')
+        return redirect('shift_management:shift_proposal_list')
+    
+    if request.method == 'POST':
+        form = ShiftProposalResponseForm(request.POST, instance=proposal)
+        if form.is_valid():
+            proposal = form.save(commit=False)
+            proposal.responded_at = timezone.now()
+            proposal.save()
+            
+            # 打診者に通知
+            create_notification(
+                recipient=proposal.proposed_by,
+                notification_type=f'shift_proposal_{proposal.status}',
+                title='シフト打診に回答がありました',
+                message=f'{proposal.proposed_to.name}さんが{proposal.shift_date}のシフト打診に回答しました。',
+                shift_proposal=proposal
+            )
+            
+            messages.success(request, 'シフト打診に回答しました。')
+            return redirect('shift_management:shift_proposal_list')
+    else:
+        form = ShiftProposalResponseForm(instance=proposal)
+    
+    return render(request, 'shift_management/shift_proposal_respond.html', {
+        'form': form, 'proposal': proposal
+    })
+
+
+@login_required
+def notification_list(request):
+    """通知一覧"""
+    notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')
+    
+    # ページネーション
+    paginator = Paginator(notifications, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'shift_management/notification_list.html', {
+        'page_obj': page_obj,
+        'unread_count': notifications.filter(is_read=False).count()
+    })
+
+
+@login_required
+def notification_mark_read(request, pk):
+    """通知を既読にする"""
+    notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
+    notification.mark_as_read()
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+    
+    return redirect('shift_management:notification_list')
+
+
+@login_required
+@require_POST
+def api_mark_all_notifications_read(request):
+    """全通知を既読にする"""
+    updated_count = Notification.objects.filter(
+        recipient=request.user,
+        is_read=False
+    ).update(is_read=True)
+    
+    return JsonResponse({
+        'success': True,
+        'updated_count': updated_count
+    })
+
+
+@login_required
+@require_POST
+def api_approve_leave_request(request):
+    """休暇申請を承認"""
+    try:
+        data = json.loads(request.body)
+        leave_request = get_object_or_404(LeaveRequest, id=data['id'])
+        
+        # 権限チェック
+        current_staff = get_staff_for_user(request.user)
+        if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+            return JsonResponse({'success': False, 'error': '承認権限がありません'})
+        
+        leave_request.approval_status = 'approved'
+        leave_request.approved_by = request.user
+        leave_request.approved_at = timezone.now()
+        leave_request.save()
+        
+        # 承認済み申請をシフトとしてカレンダーに反映
+        create_shift_from_leave_request(leave_request)
+        
+        # 申請者に通知
+        if leave_request.user:
+            create_notification(
+                recipient=leave_request.user,
+                notification_type='leave_approved',
+                title='休暇申請が承認されました',
+                message=f'{leave_request.get_request_type_display()}の申請が承認されました。',
+                leave_request=leave_request
+            )
+        
+        return JsonResponse({'success': True})
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+def create_shift_from_leave_request(leave_request):
+    """承認済み休み申請からシフトオブジェクトを作成してカレンダーに反映"""
+    try:
+        from datetime import timedelta
+        
+        # 休み用のシフト種別を取得または作成
+        shift_type_name = leave_request.get_request_type_display()
+        leave_shift_type, created = ShiftType.objects.get_or_create(
+            name=shift_type_name,
+            defaults={
+                'color': '#dc3545' if leave_request.request_type == 'sick_leave' else '#28a745',
+                'start_time': '00:00',
+                'end_time': '23:59',
+                'description': '休み申請による自動作成'
+            }
+        )
+        
+        # 期間中の各日に対してシフトを作成
+        current_date = leave_request.start_date
+        created_shifts = []
+        
+        while current_date <= leave_request.end_date:
+            # 同じ日に既にシフトがある場合はスキップ
+            existing_shift = Shift.objects.filter(
+                staff=leave_request.staff,
+                date=current_date
+            ).first()
+            
+            if not existing_shift:
+                shift = Shift.objects.create(
+                    staff=leave_request.staff,
+                    date=current_date,
+                    start_time=leave_shift_type.start_time,
+                    end_time=leave_shift_type.end_time,
+                    shift_type=leave_shift_type,
+                    approval_status='approved',
+                    approved_by=leave_request.approved_by,
+                    approved_at=leave_request.approved_at,
+                    created_by=leave_request.approved_by,
+                    notes=f'休み申請から自動作成: {leave_request.reason or shift_type_name}'
+                )
+                created_shifts.append(shift)
+            
+            current_date += timedelta(days=1)
+        
+        print(f"休み申請から{len(created_shifts)}件のシフトを作成しました")
+        return created_shifts
+            
+    except Exception as e:
+        print(f"シフト作成エラー: {e}")
+        return []
+
+
+@login_required
+@require_POST
+def api_reject_leave_request(request):
+    """休暇申請を却下"""
+    try:
+        data = json.loads(request.body)
+        leave_request = get_object_or_404(LeaveRequest, id=data['id'])
+        
+        # 権限チェック
+        current_staff = get_staff_for_user(request.user)
+        if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
+            return JsonResponse({'success': False, 'error': '却下権限がありません'})
+        
+        leave_request.approval_status = 'rejected'
+        leave_request.rejection_reason = data.get('reason', '')
+        leave_request.save()
+        
+        # 申請者に通知
+        if leave_request.user:
+            create_notification(
+                recipient=leave_request.user,
+                notification_type='leave_rejected',
+                title='休暇申請が却下されました',
+                message=f'{leave_request.get_request_type_display()}の申請が却下されました。',
+                leave_request=leave_request
+            )
+        
+        return JsonResponse({'success': True})
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+def create_shift_from_leave_request(leave_request):
+    """承認済み休み申請からシフトオブジェクトを作成してカレンダーに反映"""
+    try:
+        from datetime import timedelta
+        
+        # 休み用のシフト種別を取得または作成
+        shift_type_name = leave_request.get_request_type_display()
+        leave_shift_type, created = ShiftType.objects.get_or_create(
+            name=shift_type_name,
+            defaults={
+                'color': '#dc3545' if leave_request.request_type == 'sick_leave' else '#28a745',
+                'start_time': '00:00',
+                'end_time': '23:59',
+                'description': '休み申請による自動作成'
+            }
+        )
+        
+        # 期間中の各日に対してシフトを作成
+        current_date = leave_request.start_date
+        created_shifts = []
+        
+        while current_date <= leave_request.end_date:
+            # 同じ日に既にシフトがある場合はスキップ
+            existing_shift = Shift.objects.filter(
+                staff=leave_request.staff,
+                date=current_date
+            ).first()
+            
+            if not existing_shift:
+                shift = Shift.objects.create(
+                    staff=leave_request.staff,
+                    date=current_date,
+                    start_time=leave_shift_type.start_time,
+                    end_time=leave_shift_type.end_time,
+                    shift_type=leave_shift_type,
+                    approval_status='approved',
+                    approved_by=leave_request.approved_by,
+                    approved_at=leave_request.approved_at,
+                    created_by=leave_request.approved_by,
+                    notes=f'休み申請から自動作成: {leave_request.reason or shift_type_name}'
+                )
+                created_shifts.append(shift)
+            
+            current_date += timedelta(days=1)
+        
+        print(f"休み申請から{len(created_shifts)}件のシフトを作成しました")
+        return created_shifts
+            
+    except Exception as e:
+        print(f"シフト作成エラー: {e}")
+        return []
+@login_required
+@require_POST
+def organization_switch(request):
+    """組織切り替えAPI"""
+    try:
+        data = json.loads(request.body)
+        organization_id = data.get('organization_id')
+        
+        if organization_id:
+            # 指定された組織に切り替え
+            try:
+                organization = Organization.objects.get(id=organization_id, is_active=True)
+                request.session['current_organization_id'] = organization.id
+                request.session['current_organization_name'] = organization.name
+                
+                return JsonResponse({
+                    'success': True,
+                    'organization_id': organization.id,
+                    'organization_name': organization.name
+                })
+            except Organization.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': '指定された組織が見つかりません'
+                })
+        else:
+            # 全組織表示（スーパーユーザーのみ）
+            if request.user.is_superuser:
+                request.session.pop('current_organization_id', None)
+                request.session.pop('current_organization_name', None)
+                
+                return JsonResponse({
+                    'success': True,
+                    'organization_id': None,
+                    'organization_name': '全ての組織'
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': '権限がありません'
+                })
+                
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })

@@ -679,6 +679,40 @@
     </div>
   </div>
 
+  <!-- 組織選択パネル -->
+  {% if user.is_superuser or current_staff.role_type == 'manager' %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body py-2">
+          <div class="row align-items-center">
+            <div class="col-md-3">
+              <label class="form-label mb-1"><i class="fas fa-building me-2"></i>選択中の組織:</label>
+            </div>
+            <div class="col-md-6">
+              <select class="form-select form-select-sm" id="organizationSelect">
+                {% if user.is_superuser %}
+                  <option value="">全ての組織</option>
+                {% endif %}
+                {% for org in available_organizations %}
+                  <option value="{{ org.id }}" {% if current_organization and current_organization.id == org.id %}selected{% endif %}>
+                    {{ org.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="changeOrganization()">
+                <i class="fas fa-sync-alt me-1"></i>切り替え
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- 権限情報パネル -->
   {% if current_staff %}
   <div class="row mb-3">
@@ -867,8 +901,16 @@
               <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success">
                 <i class="fas fa-plus"></i> 新規シフト登録
               </a>
-              <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-success">
-                <i class="fas fa-layer-group"></i> 一括シフト登録
+              <div class="btn-group" role="group">
+                <a href="{% url 'shift_management:calendar_bulk_shift_create' %}" class="btn btn-success">
+                  <i class="fas fa-calendar-plus"></i> カレンダー一括登録
+                </a>
+                <a href="{% url 'shift_management:traditional_bulk_shift_create' %}" class="btn btn-outline-success">
+                  <i class="fas fa-layer-group"></i> 通常一括登録
+                </a>
+              </div>
+              <a href="{% url 'shift_management:advanced_bulk_shift_create' %}" class="btn btn-info">
+                <i class="fas fa-cogs"></i> 高度な一括登録
               </a>
               <a href="{% url 'shift_management:shift_reason_create' %}" class="btn btn-warning">
                 <i class="fas fa-calendar-times"></i> 事由登録
@@ -887,6 +929,18 @@
               </a>
               <a href="{% url 'shift_management:shift_export' %}" class="btn btn-outline-primary">
                 <i class="fas fa-download"></i> エクスポート
+              </a>
+              <!-- wakakusa-shift-2から統合された新機能 -->
+              <a href="{% url 'shift_management:leave_request_list' %}" class="btn btn-outline-success">
+                <i class="fas fa-calendar-check"></i> 休暇申請
+              </a>
+              {% if user.is_superuser or current_staff.role_type == 'manager' %}
+              <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-outline-warning">
+                <i class="fas fa-handshake"></i> シフト打診
+              </a>
+              {% endif %}
+              <a href="{% url 'shift_management:notification_list' %}" class="btn btn-outline-info">
+                <i class="fas fa-bell"></i> 通知
               </a>
             </div>
           </div>
@@ -1324,7 +1378,7 @@
     
     // シフト承認
     function approveShift(shiftId) {
-      fetch('{% url "shift_management:api_approve_shift" %}', {
+      fetch('{% url "shift_management:approve_shift_ajax" %}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1359,7 +1413,7 @@
     
     // シフト却下
     function rejectShift(shiftId, reason = '') {
-      fetch('{% url "shift_management:api_reject_shift" %}', {
+      fetch('{% url "shift_management:reject_shift_ajax" %}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1387,7 +1441,7 @@
     
     // 一括承認
     function bulkApproveShifts(shiftIds) {
-      fetch('{% url "shift_management:api_bulk_approve_shifts" %}', {
+      fetch('{% url "shift_management:bulk_approve_shifts" %}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1547,15 +1601,26 @@
         formData.append('shift_id', shiftId);
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-        fetch(`/shift-management/api/shift-delete/`, { 
+        fetch("{% url 'shift_management:delete_shift_ajax' %}", { 
           method: 'POST',
-          body: formData
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
         })
         .then(response => {
-          if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || '削除に失敗しました。'); });
+          // レスポンスのコンテンツタイプを確認
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.indexOf("application/json") !== -1) {
+            // JSONレスポンスの場合
+            if (!response.ok) {
+              return response.json().then(err => { throw new Error(err.error || '削除に失敗しました。'); });
+            }
+            return response.json();
+          } else {
+            // HTMLレスポンスの場合（おそらくログインページ）
+            throw new Error('ログインが必要です。ページを更新してください。');
           }
-          return response.json();
         })
         .then(data => {
           if (data.success) {
@@ -1609,6 +1674,60 @@
         }
       });
     }
+
+    // 組織切り替え機能
+    window.changeOrganization = function() {
+      const organizationSelect = document.getElementById('organizationSelect');
+      const selectedOrgId = organizationSelect.value;
+      
+      // 組織切り替えAPIを呼び出し
+      fetch('/organization-switch/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+          organization_id: selectedOrgId
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // カレンダーを更新
+          if (calendar) {
+            calendar.refetchEvents();
+          }
+          // 成功メッセージを表示
+          const message = selectedOrgId ? 
+            `組織「${data.organization_name}」に切り替えました。` : 
+            '全ての組織を表示します。';
+          
+          // 一時的な成功メッセージを表示
+          const alertDiv = document.createElement('div');
+          alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+          alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+          alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          `;
+          document.body.appendChild(alertDiv);
+          
+          // 3秒後に自動で削除
+          setTimeout(() => {
+            if (alertDiv.parentNode) {
+              alertDiv.parentNode.removeChild(alertDiv);
+            }
+          }, 3000);
+        } else {
+          alert('組織の切り替えに失敗しました: ' + data.error);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('通信エラーが発生しました。');
+      });
+    };
   });
 </script>
 {% endblock %} 
