@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}納品書一覧 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.delivery-card {
+    transition: all 0.3s ease;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.delivery-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.delivery-status-draft {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+}
+
+.delivery-status-issued {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+}
+
+.delivery-status-delivered {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+}
+
+.delivery-status-cancelled {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+.search-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-truck me-2 text-primary"></i>
+                        納品書管理
+                    </h1>
+                    <p class="text-muted mb-0">
+                        {{ current_organization.name }} - 納品書一覧
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'shift_management:delivery_note_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>
+                        新規納品書
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ナビゲーション -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-clipboard-list me-1"></i>
+                    発注履歴
+                </a>
+                <a href="{% url 'shift_management:invoice_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-file-invoice me-1"></i>
+                    請求書管理
+                </a>
+                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-info">
+                    <i class="fas fa-warehouse me-1"></i>
+                    在庫ダッシュボード
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 検索・フィルター -->
+    <div class="search-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">検索</label>
+                <input type="text" name="search" value="{{ search }}" 
+                       class="form-control" placeholder="納品書番号、納品先名で検索">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">ステータス</label>
+                <select name="status" class="form-control">
+                    <option value="">全て</option>
+                    {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-search me-1"></i>
+                    検索
+                </button>
+                <a href="{% url 'shift_management:delivery_note_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-undo me-1"></i>
+                    リセット
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- 納品書一覧 -->
+    <div class="row">
+        {% if page_obj %}
+            {% for delivery_note in page_obj %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card delivery-card delivery-status-{{ delivery_note.status }}">
+                        <div class="card-header text-white">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-truck me-2"></i>
+                                    {{ delivery_note.delivery_number }}
+                                </h6>
+                                <span class="badge bg-light text-dark">
+                                    {{ delivery_note.get_status_display }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <h6 class="mb-2">{{ delivery_note.deliver_to_name }}</h6>
+                            <div class="row">
+                                <div class="col-6">
+                                    <small class="text-muted">発行日</small>
+                                    <div>{{ delivery_note.issue_date|date:"Y/m/d" }}</div>
+                                </div>
+                                <div class="col-6">
+                                    <small class="text-muted">納品予定日</small>
+                                    <div>
+                                        {% if delivery_note.delivery_date %}
+                                            {{ delivery_note.delivery_date|date:"Y/m/d" }}
+                                        {% else %}
+                                            未定
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% if delivery_note.actual_delivery_date %}
+                                <hr>
+                                <div class="text-success">
+                                    <small>実際の納品日</small>
+                                    <div>{{ delivery_note.actual_delivery_date|date:"Y/m/d" }}</div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">
+                                    作成: {{ delivery_note.created_at|date:"m/d H:i" }}
+                                </small>
+                                <div>
+                                    <a href="{% url 'shift_management:delivery_note_detail' delivery_note.pk %}" 
+                                       class="btn btn-sm btn-outline-primary">詳細</a>
+                                    {% if delivery_note.status != 'delivered' %}
+                                        <a href="#" class="btn btn-sm btn-outline-secondary">編集</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-truck fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">納品書がまだありません</h5>
+                    <p class="text-muted">新規納品書を作成して開始しましょう。</p>
+                    <a href="{% url 'shift_management:delivery_note_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>
+                        新規納品書作成
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- ページネーション -->
+    {% if page_obj.has_other_pages %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <nav aria-label="納品書ページネーション">
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">最初</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">前へ</a>
+                            </li>
+                        {% endif %}
+                        
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_obj.number }}</span>
+                        </li>
+                        
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">次へ</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">最後</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

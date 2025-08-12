@@ -113,4 +113,13 @@ staticfiles/
 media/
 logs/
 cache/
-*.sqlite3-backup 
+*.sqlite3-backup
+
+# SSH keys and security files
+id_rsa*
+*.pem
+*.key
+*_rsa*
+*private*
+.ssh/
+*.ppk 

@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">{{ title }}</h1>
+        <a href="{% url 'cultivation:section_detail' section.id %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i>区画詳細に戻る
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">棚設定</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.shelf_number.id_for_label }}" class="form-label">棚番号</label>
+                                    {{ form.shelf_number }}
+                                    {% if form.shelf_number.help_text %}
+                                        <div class="form-text">{{ form.shelf_number.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.shelf_number.errors %}
+                                        <div class="text-danger">{{ form.shelf_number.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.levels.id_for_label }}" class="form-label">段数</label>
+                                    {{ form.levels }}
+                                    {% if form.levels.help_text %}
+                                        <div class="form-text">{{ form.levels.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.levels.errors %}
+                                        <div class="text-danger">{{ form.levels.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.width.id_for_label }}" class="form-label">幅 (m)</label>
+                                    {{ form.width }}
+                                    {% if form.width.help_text %}
+                                        <div class="form-text">{{ form.width.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.width.errors %}
+                                        <div class="text-danger">{{ form.width.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.depth.id_for_label }}" class="form-label">奥行 (m)</label>
+                                    {{ form.depth }}
+                                    {% if form.depth.help_text %}
+                                        <div class="form-text">{{ form.depth.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.depth.errors %}
+                                        <div class="text-danger">{{ form.depth.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.height_per_level.id_for_label }}" class="form-label">段間隔 (m)</label>
+                                    {{ form.height_per_level }}
+                                    {% if form.height_per_level.help_text %}
+                                        <div class="form-text">{{ form.height_per_level.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.height_per_level.errors %}
+                                        <div class="text-danger">{{ form.height_per_level.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.base_height.id_for_label }}" class="form-label">基底高さ (m)</label>
+                                    {{ form.base_height }}
+                                    {% if form.base_height.help_text %}
+                                        <div class="form-text">{{ form.base_height.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.base_height.errors %}
+                                        <div class="text-danger">{{ form.base_height.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">総高さ (計算値)</label>
+                                    <div class="form-control-plaintext" id="total-height">
+                                        {{ plot.total_height }}m
+                                    </div>
+                                    <div class="form-text">基底高さ + (段間隔 × 段数)</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        {{ form.is_active }}
+                                        <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                            使用中
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if form.maintenance_notes %}
+                        <div class="mb-3">
+                            <label for="{{ form.maintenance_notes.id_for_label }}" class="form-label">メンテナンス備考</label>
+                            {{ form.maintenance_notes }}
+                            {% if form.maintenance_notes.help_text %}
+                                <div class="form-text">{{ form.maintenance_notes.help_text }}</div>
+                            {% endif %}
+                            {% if form.maintenance_notes.errors %}
+                                <div class="text-danger">{{ form.maintenance_notes.errors }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-flex justify-content-end">
+                            <a href="{% url 'cultivation:section_detail' section.id %}" class="btn btn-secondary me-2">キャンセル</a>
+                            <button type="submit" class="btn btn-success">保存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">プレビュー</h6>
+                </div>
+                <div class="card-body">
+                    <div class="shelf-preview">
+                        <div class="shelf-container" id="shelf-preview">
+                            <!-- JavaScript で動的に更新 -->
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            棚の設定値を変更すると、プレビューが更新されます。
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.shelf-preview {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 200px;
+    position: relative;
+}
+
+.shelf-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.shelf-level {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border: 2px solid #2196f3;
+    border-radius: 4px;
+    padding: 8px 16px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #1976d2;
+    min-width: 120px;
+}
+
+.shelf-base {
+    background: #8d6e63;
+    height: 8px;
+    width: 140px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // フォーム要素
+    const levelsInput = document.getElementById('{{ form.levels.id_for_label }}');
+    const heightPerLevelInput = document.getElementById('{{ form.height_per_level.id_for_label }}');
+    const baseHeightInput = document.getElementById('{{ form.base_height.id_for_label }}');
+    const totalHeightDisplay = document.getElementById('total-height');
+    const shelfPreview = document.getElementById('shelf-preview');
+    
+    // 棚プレビューを更新する関数
+    function updateShelfPreview() {
+        const levels = parseInt(levelsInput.value) || 1;
+        const heightPerLevel = parseFloat(heightPerLevelInput.value) || 0.5;
+        const baseHeight = parseFloat(baseHeightInput.value) || 0.8;
+        const totalHeight = baseHeight + (heightPerLevel * levels);
+        
+        // 総高さを更新
+        totalHeightDisplay.textContent = totalHeight.toFixed(2) + 'm';
+        
+        // プレビューを更新
+        let previewHtml = '';
+        
+        // 各段を描画（上から順に）
+        for (let i = levels; i >= 1; i--) {
+            const height = baseHeight + (heightPerLevel * (i - 1));
+            previewHtml += `<div class="shelf-level">レベル ${i} (${height.toFixed(1)}m)</div>`;
+        }
+        
+        // 基底部分
+        previewHtml += '<div class="shelf-base"></div>';
+        
+        shelfPreview.innerHTML = previewHtml;
+    }
+    
+    // 初期プレビューを設定
+    updateShelfPreview();
+    
+    // 入力値が変更されたときプレビューを更新
+    levelsInput.addEventListener('input', updateShelfPreview);
+    heightPerLevelInput.addEventListener('input', updateShelfPreview);
+    baseHeightInput.addEventListener('input', updateShelfPreview);
+});
+</script>
+{% endblock %}

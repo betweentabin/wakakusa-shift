@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block title %}シフト打診作成{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-handshake"></i> 
+                        {% if is_create %}新規{% else %}編集{% endif %}シフト打診
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row mb-3">
+                            <label for="{{ form.proposed_to.id_for_label }}" class="col-sm-3 col-form-label">{{ form.proposed_to.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.proposed_to }}
+                                {% if form.proposed_to.errors %}
+                                    <div class="text-danger">{{ form.proposed_to.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.shift_date.id_for_label }}" class="col-sm-3 col-form-label">{{ form.shift_date.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.shift_date }}
+                                {% if form.shift_date.errors %}
+                                    <div class="text-danger">{{ form.shift_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.start_time.id_for_label }}" class="col-sm-3 col-form-label">{{ form.start_time.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.start_time }}
+                                {% if form.start_time.errors %}
+                                    <div class="text-danger">{{ form.start_time.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.end_time.id_for_label }}" class="col-sm-3 col-form-label">{{ form.end_time.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.end_time }}
+                                {% if form.end_time.errors %}
+                                    <div class="text-danger">{{ form.end_time.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.shift_type.id_for_label }}" class="col-sm-3 col-form-label">{{ form.shift_type.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.shift_type }}
+                                {% if form.shift_type.errors %}
+                                    <div class="text-danger">{{ form.shift_type.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">任意項目です</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.position.id_for_label }}" class="col-sm-3 col-form-label">{{ form.position.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.position }}
+                                {% if form.position.errors %}
+                                    <div class="text-danger">{{ form.position.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">担当ポジションがあれば入力してください</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.response_deadline.id_for_label }}" class="col-sm-3 col-form-label">{{ form.response_deadline.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.response_deadline }}
+                                {% if form.response_deadline.errors %}
+                                    <div class="text-danger">{{ form.response_deadline.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">回答期限を設定する場合は入力してください</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.message.id_for_label }}" class="col-sm-3 col-form-label">{{ form.message.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.message }}
+                                {% if form.message.errors %}
+                                    <div class="text-danger">{{ form.message.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">打診に関するメッセージがあれば入力してください</small>
+                            </div>
+                        </div>
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-sm-9 offset-sm-3">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> 打診を送信
+                                </button>
+                                <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> キャンセル
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 注意事項 -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-info-circle"></i> 打診時の注意事項</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li>打診は相手方の承諾が必要です</li>
+                        <li>回答期限を設定すると相手により適切に対応してもらえます</li>
+                        <li>メッセージで詳細な情報を伝えることをお勧めします</li>
+                        <li>回答結果は打診一覧で確認できます</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

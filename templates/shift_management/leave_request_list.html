@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+
+{% block title %}休み・通院申請一覧{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>休み・通院申請一覧</h2>
+                <div>
+                    <a href="{% url 'shift_management:leave_request_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> 新規申請
+                    </a>
+                    <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-calendar"></i> カレンダーに戻る
+                    </a>
+                </div>
+            </div>
+
+            {% if page_obj %}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>申請日</th>
+                                        <th>申請者</th>
+                                        <th>種別</th>
+                                        <th>期間</th>
+                                        <th>緊急度</th>
+                                        <th>状態</th>
+                                        <th>理由</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for request in page_obj %}
+                                    <tr>
+                                        <td>{{ request.created_at|date:"Y/m/d H:i" }}</td>
+                                        <td>{{ request.staff.name }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ request.get_request_type_display }}</span>
+                                        </td>
+                                        <td>
+                                            {{ request.start_date|date:"Y/m/d" }}
+                                            {% if request.start_date != request.end_date %}
+                                                〜 {{ request.end_date|date:"Y/m/d" }}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.priority == 'high' %}
+                                                <span class="badge bg-danger">🚨 {{ request.get_priority_display }}</span>
+                                            {% elif request.priority == 'medium' %}
+                                                <span class="badge bg-warning">⚠️ {{ request.get_priority_display }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">📝 {{ request.get_priority_display }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if request.approval_status == 'pending' %}
+                                                <span class="badge bg-warning">🕐 承認待ち</span>
+                                            {% elif request.approval_status == 'approved' %}
+                                                <span class="badge bg-success">✅ 承認済み</span>
+                                            {% elif request.approval_status == 'rejected' %}
+                                                <span class="badge bg-danger">❌ 却下</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <small>{{ request.reason|truncatechars:50 }}</small>
+                                        </td>
+                                        <td>
+                                            {% if user_role == 'manager' and request.approval_status == 'pending' %}
+                                                <button class="btn btn-sm btn-success me-1" onclick="approveRequest({{ request.id }})">
+                                                    承認
+                                                </button>
+                                                <button class="btn btn-sm btn-danger" onclick="rejectRequest({{ request.id }})">
+                                                    却下
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- ページネーション -->
+                        {% if page_obj.has_other_pages %}
+                        <nav aria-label="申請一覧ページネーション">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+                                    </li>
+                                {% endif %}
+                                
+                                {% for num in page_obj.paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ num }}</span>
+                                        </li>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">次へ</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 申請がありません。
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 承認・却下用モーダル -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">申請を却下</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="rejectionReason">却下理由</label>
+                    <textarea class="form-control" id="rejectionReason" rows="3" placeholder="却下理由を入力してください"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-danger" onclick="confirmReject()">却下する</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRequestId = null;
+
+function approveRequest(requestId) {
+    if (confirm('この申請を承認しますか？')) {
+        fetch("{% url 'shift_management:api_approve_leave_request' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                id: requestId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('申請を承認しました。');
+                location.reload();
+            } else {
+                alert('エラー: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('通信エラーが発生しました。');
+        });
+    }
+}
+
+function rejectRequest(requestId) {
+    currentRequestId = requestId;
+    document.getElementById('rejectionReason').value = '';
+    new bootstrap.Modal(document.getElementById('rejectModal')).show();
+}
+
+function confirmReject() {
+    const reason = document.getElementById('rejectionReason').value;
+    
+    fetch("{% url 'shift_management:api_reject_leave_request' %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            id: currentRequestId,
+            reason: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('申請を却下しました。');
+            bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
+            location.reload();
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('通信エラーが発生しました。');
+    });
+}
+</script>
+
+{% csrf_token %}
+{% endblock %}

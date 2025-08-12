@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}入出庫履歴 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.transaction-card {
+    border-left: 4px solid;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.transaction-card:hover {
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.transaction-in {
+    border-left-color: #28a745;
+}
+
+.transaction-out {
+    border-left-color: #ffc107;
+}
+
+.transaction-adjustment {
+    border-left-color: #17a2b8;
+}
+
+.transaction-type {
+    font-weight: bold;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    display: inline-block;
+}
+
+.type-in {
+    background: #d4edda;
+    color: #155724;
+}
+
+.type-out {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.type-adjustment {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.quantity-display {
+    font-size: 1.25rem;
+    font-weight: bold;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-history me-2 text-info"></i>
+                        入出庫履歴
+                    </h1>
+                    <p class="text-muted mb-0">
+                        {{ current_organization.name }} - 在庫変動履歴
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>
+                        新規入出庫
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ナビゲーション -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-warehouse me-1"></i>
+                    在庫ダッシュボード
+                </a>
+                <a href="{% url 'shift_management:item_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-box me-1"></i>
+                    品目一覧
+                </a>
+                <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-warning">
+                    <i class="fas fa-clipboard-list me-1"></i>
+                    発注履歴
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 入出庫履歴一覧 -->
+    <div class="row">
+        <div class="col-12">
+            {% for transaction in page_obj %}
+            <div class="card transaction-card transaction-{{ transaction.transaction_type }}">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <div class="text-muted small">{{ transaction.transaction_date|date:"m/d" }}</div>
+                                <div class="text-muted small">{{ transaction.transaction_date|time:"H:i" }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <span class="transaction-type type-{{ transaction.transaction_type }}">
+                                {{ transaction.get_transaction_type_display }}
+                            </span>
+                        </div>
+                        <div class="col-md-3">
+                            <div>
+                                <strong>{{ transaction.item.item_name }}</strong>
+                                <div class="text-muted small">{{ transaction.item.item_code }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="quantity-display 
+                                {% if transaction.transaction_type == 'in' %}text-success
+                                {% elif transaction.transaction_type == 'out' %}text-warning
+                                {% else %}text-info{% endif %}">
+                                {% if transaction.transaction_type == 'out' %}−{% endif %}{{ transaction.quantity }}{{ transaction.item.unit }}
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            {% if transaction.user %}
+                            <div class="text-muted small">
+                                <i class="fas fa-user me-1"></i>
+                                {{ transaction.user.username }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-1">
+                            {% if transaction.notes %}
+                            <i class="fas fa-sticky-note text-muted" 
+                               title="{{ transaction.notes }}" 
+                               data-bs-toggle="tooltip"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if transaction.notes %}
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <div class="alert alert-light mb-0 py-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-sticky-note me-1"></i>
+                                    {{ transaction.notes }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">入出庫履歴がありません</h4>
+                    <p class="text-muted">
+                        まだ入出庫処理が行われていません。<br>
+                        <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-success mt-2">
+                            <i class="fas fa-plus me-1"></i>
+                            最初の入出庫を登録
+                        </a>
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ページネーション -->
+    {% if page_obj.has_other_pages %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <nav aria-label="入出庫履歴ページネーション">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Bootstrap tooltips を有効化
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}シフト打診一覧{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>シフト打診一覧</h2>
+                <div>
+                    {% if user_role == 'manager' %}
+                    <a href="{% url 'shift_management:shift_proposal_create' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> 新規打診
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-calendar"></i> カレンダーに戻る
+                    </a>
+                </div>
+            </div>
+
+            <!-- タブ -->
+            <ul class="nav nav-tabs" id="proposalTabs" role="tablist">
+                {% if user_role == 'manager' %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="sent-tab" data-bs-toggle="tab" data-bs-target="#sent" type="button" role="tab">
+                        送信した打診 ({{ sent_proposals|length }})
+                    </button>
+                </li>
+                {% endif %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if user_role != 'manager' %}active{% endif %}" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab">
+                        受信した打診 ({{ received_proposals|length }})
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="proposalTabsContent">
+                <!-- 送信した打診 -->
+                {% if user_role == 'manager' %}
+                <div class="tab-pane fade show active" id="sent" role="tabpanel">
+                    <div class="card">
+                        <div class="card-body">
+                            {% if sent_proposals %}
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>打診日</th>
+                                                <th>打診先</th>
+                                                <th>シフト日</th>
+                                                <th>時間</th>
+                                                <th>シフト種別</th>
+                                                <th>回答期限</th>
+                                                <th>状態</th>
+                                                <th>メッセージ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for proposal in sent_proposals %}
+                                            <tr>
+                                                <td>{{ proposal.created_at|date:"Y/m/d H:i" }}</td>
+                                                <td>{{ proposal.proposed_to.name }}</td>
+                                                <td>{{ proposal.shift_date|date:"Y/m/d" }}</td>
+                                                <td>{{ proposal.start_time|time:"H:i" }} - {{ proposal.end_time|time:"H:i" }}</td>
+                                                <td>
+                                                    {% if proposal.shift_type %}
+                                                        <span class="badge" style="background-color: {{ proposal.shift_type.color }}">
+                                                            {{ proposal.shift_type.name }}
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">未設定</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if proposal.response_deadline %}
+                                                        {{ proposal.response_deadline|date:"Y/m/d H:i" }}
+                                                    {% else %}
+                                                        <span class="text-muted">期限なし</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if proposal.status == 'pending' %}
+                                                        <span class="badge bg-warning">🕐 回答待ち</span>
+                                                    {% elif proposal.status == 'accepted' %}
+                                                        <span class="badge bg-success">✅ 承諾</span>
+                                                    {% elif proposal.status == 'declined' %}
+                                                        <span class="badge bg-danger">❌ 拒否</span>
+                                                    {% elif proposal.status == 'expired' %}
+                                                        <span class="badge bg-secondary">⏰ 期限切れ</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <small>{{ proposal.message|truncatechars:30 }}</small>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i> 送信した打診がありません。
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 受信した打診 -->
+                <div class="tab-pane fade {% if user_role != 'manager' %}show active{% endif %}" id="received" role="tabpanel">
+                    <div class="card">
+                        <div class="card-body">
+                            {% if received_proposals %}
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>打診日</th>
+                                                <th>打診者</th>
+                                                <th>シフト日</th>
+                                                <th>時間</th>
+                                                <th>シフト種別</th>
+                                                <th>回答期限</th>
+                                                <th>状態</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for proposal in received_proposals %}
+                                            <tr>
+                                                <td>{{ proposal.created_at|date:"Y/m/d H:i" }}</td>
+                                                <td>{{ proposal.proposed_by.username }}</td>
+                                                <td>{{ proposal.shift_date|date:"Y/m/d" }}</td>
+                                                <td>{{ proposal.start_time|time:"H:i" }} - {{ proposal.end_time|time:"H:i" }}</td>
+                                                <td>
+                                                    {% if proposal.shift_type %}
+                                                        <span class="badge" style="background-color: {{ proposal.shift_type.color }}">
+                                                            {{ proposal.shift_type.name }}
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">未設定</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if proposal.response_deadline %}
+                                                        {{ proposal.response_deadline|date:"Y/m/d H:i" }}
+                                                    {% else %}
+                                                        <span class="text-muted">期限なし</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if proposal.status == 'pending' %}
+                                                        <span class="badge bg-warning">🕐 回答待ち</span>
+                                                    {% elif proposal.status == 'accepted' %}
+                                                        <span class="badge bg-success">✅ 承諾</span>
+                                                    {% elif proposal.status == 'declined' %}
+                                                        <span class="badge bg-danger">❌ 拒否</span>
+                                                    {% elif proposal.status == 'expired' %}
+                                                        <span class="badge bg-secondary">⏰ 期限切れ</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if proposal.status == 'pending' %}
+                                                        <a href="{% url 'shift_management:shift_proposal_respond' proposal.pk %}" class="btn btn-sm btn-primary">
+                                                            回答
+                                                        </a>
+                                                    {% else %}
+                                                        <span class="text-muted">回答済み</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i> 受信した打診がありません。
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

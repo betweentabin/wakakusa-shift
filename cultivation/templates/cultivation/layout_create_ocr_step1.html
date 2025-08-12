@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}OCRレイアウト作成 - ステップ1: 画像アップロード{% endblock %}
+
+{% block extra_css %}
+<style>
+.upload-area {
+    border: 3px dashed #007bff;
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin: 20px 0;
+}
+
+.upload-area:hover {
+    border-color: #0056b3;
+    background: #e3f2fd;
+    transform: translateY(-2px);
+}
+
+.upload-area.dragover {
+    border-color: #28a745;
+    background: #d4edda;
+}
+
+.upload-icon {
+    font-size: 4rem;
+    color: #007bff;
+    margin-bottom: 1rem;
+}
+
+.file-input {
+    display: none;
+}
+
+.preview-container {
+    max-width: 100%;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.preview-image {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.step-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    margin: 0 10px;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.step.active {
+    background: #007bff;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+}
+
+.step.inactive {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.step-number {
+    background: white;
+    color: #007bff;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.step.inactive .step-number {
+    background: #dee2e6;
+    color: #6c757d;
+}
+
+.file-info {
+    background: #e3f2fd;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+    display: none;
+}
+
+.progress-bar-custom {
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    margin: 10px 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff, #28a745);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .step {
+        padding: 8px 15px;
+        margin: 0 5px;
+    }
+    
+    .upload-area {
+        padding: 30px 15px;
+    }
+    
+    .upload-icon {
+        font-size: 3rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-camera"></i> OCRレイアウト作成</h2>
+                <a href="{% url 'cultivation:cultivation_top' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 戻る
+                </a>
+            </div>
+
+            <!-- ステップインジケーター -->
+            <div class="step-indicator">
+                <div class="step active">
+                    <div class="step-number">1</div>
+                    <span>画像アップロード</span>
+                </div>
+                <div class="step inactive">
+                    <div class="step-number">2</div>
+                    <span>画像カット</span>
+                </div>
+                <div class="step inactive">
+                    <div class="step-number">3</div>
+                    <span>OCR読み取り</span>
+                </div>
+            </div>
+
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-file-upload"></i> ステップ1: 画像をアップロード
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- アップロードエリア -->
+                            <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageInput').click();">
+                                <div class="upload-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <h4>画像をドラッグ＆ドロップ</h4>
+                                <p class="text-muted">または、クリックしてファイルを選択してください</p>
+                                <small class="text-muted">対応形式: JPG, PNG, PDF (最大サイズ: 10MB)</small>
+                            </div>
+
+                            <!-- ファイル入力 -->
+                            <input type="file" 
+                                   id="imageInput" 
+                                   class="file-input"
+                                   accept="image/*,.pdf"
+                                   onchange="handleFileSelect(this.files[0])">
+
+                            <!-- ファイル情報表示 -->
+                            <div id="fileInfo" class="file-info">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-file-image me-3 text-primary"></i>
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold" id="fileName"></div>
+                                        <small class="text-muted" id="fileSize"></small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearFile()">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="progress-bar-custom">
+                                    <div class="progress-fill" id="progressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- プレビュー画像 -->
+                            <div id="previewContainer" class="preview-container" style="display: none;">
+                                <img id="previewImage" class="preview-image" alt="プレビュー">
+                            </div>
+
+                            <!-- 次へボタン -->
+                            <div class="d-flex justify-content-between mt-4">
+                                <a href="{% url 'cultivation:layout_list' %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left"></i> キャンセル
+                                </a>
+                                <button type="button" id="nextButton" class="btn btn-primary" disabled onclick="proceedToStep2()">
+                                    <i class="fas fa-arrow-right"></i> 次へ：画像カット
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedFile = null;
+
+// ドラッグ&ドロップ機能
+const uploadArea = document.getElementById('uploadArea');
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFileSelect(files[0]);
+    }
+});
+
+function handleFileSelect(file) {
+    if (!file) return;
+    
+    // ファイルサイズチェック (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('ファイルサイズが大きすぎます。10MB以下のファイルを選択してください。');
+        return;
+    }
+    
+    // ファイル形式チェック
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('対応していないファイル形式です。JPG、PNG、PDFファイルを選択してください。');
+        return;
+    }
+    
+    selectedFile = file;
+    
+    // ファイル情報表示
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('fileSize').textContent = formatFileSize(file.size);
+    document.getElementById('fileInfo').style.display = 'block';
+    
+    // プログレスバーアニメーション
+    const progressFill = document.getElementById('progressFill');
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += 5;
+        progressFill.style.width = progress + '%';
+        if (progress >= 100) {
+            clearInterval(progressInterval);
+            showPreview(file);
+        }
+    }, 50);
+}
+
+function showPreview(file) {
+    if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('previewImage').src = e.target.result;
+            document.getElementById('previewContainer').style.display = 'block';
+            document.getElementById('nextButton').disabled = false;
+        };
+        reader.readAsDataURL(file);
+    } else if (file.type === 'application/pdf') {
+        // PDF の場合はアイコン表示
+        document.getElementById('previewImage').src = '/static/images/pdf-icon.png';
+        document.getElementById('previewContainer').style.display = 'block';
+        document.getElementById('nextButton').disabled = false;
+    }
+}
+
+function clearFile() {
+    selectedFile = null;
+    document.getElementById('fileInfo').style.display = 'none';
+    document.getElementById('previewContainer').style.display = 'none';
+    document.getElementById('nextButton').disabled = true;
+    document.getElementById('imageInput').value = '';
+    document.getElementById('progressFill').style.width = '0%';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function proceedToStep2() {
+    if (!selectedFile) {
+        alert('まず画像を選択してください。');
+        return;
+    }
+    
+    // FormDataを作成してセッションに保存するか、次のページに渡す
+    const formData = new FormData();
+    formData.append('uploaded_file', selectedFile);
+    
+    // 次のステップに進む（画像カット画面）
+    // セッションストレージに一時保存
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        sessionStorage.setItem('ocrUploadedFile', e.target.result);
+        sessionStorage.setItem('ocrFileName', selectedFile.name);
+        sessionStorage.setItem('ocrFileType', selectedFile.type);
+        
+        // 次のステップに移動
+        window.location.href = '{% url "cultivation:layout_create_ocr_step2" %}';
+    };
+    reader.readAsDataURL(selectedFile);
+}
+</script>
+{% endblock %}

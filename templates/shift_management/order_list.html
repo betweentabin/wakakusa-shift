@@ -1,0 +1,281 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}発注履歴 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.order-card {
+    transition: all 0.3s ease;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.order-status-ordered {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+}
+
+.order-status-delivered {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+}
+
+.order-status-cancelled {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+.order-header {
+    color: white;
+    padding: 1rem 1.5rem;
+}
+
+.order-body {
+    padding: 1.5rem;
+}
+
+.order-info {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.btn-status {
+    border-radius: 20px;
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-clipboard-list me-2 text-primary"></i>
+                        発注履歴
+                    </h1>
+                    <p class="text-muted mb-0">
+                        {{ current_organization.name }} - 発注管理履歴
+                    </p>
+                </div>
+                <div>
+                    <div class="btn-group">
+                        <a href="{% url 'shift_management:order_create' %}" class="btn btn-success">
+                            <i class="fas fa-plus me-2"></i>
+                            新規発注
+                        </a>
+                        <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                            <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'shift_management:invoice_list' %}">
+                                <i class="fas fa-file-invoice me-2"></i>請求書管理
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'shift_management:delivery_note_list' %}">
+                                <i class="fas fa-truck me-2"></i>納品書管理
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ナビゲーション -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-warehouse me-1"></i>
+                    在庫ダッシュボード
+                </a>
+                <a href="{% url 'shift_management:item_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-box me-1"></i>
+                    品目一覧
+                </a>
+                <a href="{% url 'shift_management:transaction_history' %}" class="btn btn-outline-info">
+                    <i class="fas fa-history me-1"></i>
+                    入出庫履歴
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 発注履歴一覧 -->
+    <div class="row">
+        {% for order in orders %}
+        <div class="col-lg-6 col-xl-4 mb-3">
+            <div class="card order-card">
+                <div class="order-header order-status-{{ order.status }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">{{ order.item.item_code }}</h6>
+                            <h5 class="mb-0">{{ order.item.item_name }}</h5>
+                        </div>
+                        <div class="text-end">
+                            <div class="badge bg-white text-dark">
+                                {{ order.get_status_display }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="order-body">
+                    <!-- 発注情報 -->
+                    <div class="order-info">
+                        <div class="row">
+                            <div class="col-6">
+                                <strong>発注数量:</strong><br>
+                                <span class="text-primary h5">{{ order.ordered_quantity }}{{ order.item.unit }}</span>
+                            </div>
+                            <div class="col-6">
+                                <strong>発注日時:</strong><br>
+                                <small>{{ order.order_date|date:"Y/m/d H:i" }}</small>
+                            </div>
+                        </div>
+                        
+                        {% if order.delivery_date %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <strong>納品日時:</strong><br>
+                                <small class="text-success">{{ order.delivery_date|date:"Y/m/d H:i" }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if order.user %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <strong>担当者:</strong> {{ order.user.username }}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 発注先URL -->
+                    {% if order.supplier_url %}
+                    <div class="mb-3">
+                        <a href="{{ order.supplier_url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="fas fa-external-link-alt me-1"></i>
+                            発注先サイト
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 備考 -->
+                    {% if order.notes %}
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <strong>備考:</strong> {{ order.notes|truncatechars:50 }}
+                        </small>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- アクション -->
+                    <div class="d-flex gap-1">
+                        {% if order.status == 'ordered' %}
+                        <a href="{% url 'shift_management:order_update_status' order.pk %}" 
+                           class="btn btn-sm btn-success flex-fill btn-status">
+                            <i class="fas fa-check me-1"></i>
+                            納品処理
+                        </a>
+                        {% elif order.status == 'delivered' %}
+                        <span class="btn btn-sm btn-outline-success flex-fill btn-status disabled">
+                            <i class="fas fa-check-circle me-1"></i>
+                            納品済み
+                        </span>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-danger flex-fill btn-status disabled">
+                            <i class="fas fa-times-circle me-1"></i>
+                            キャンセル
+                        </span>
+                        {% endif %}
+                        
+                        {% if order.status != 'cancelled' %}
+                        <a href="{% url 'shift_management:order_update_status' order.pk %}" 
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-edit me-1"></i>
+                            編集
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">発注履歴がありません</h4>
+                <p class="text-muted">
+                    まだ発注が登録されていません。<br>
+                    <a href="{% url 'shift_management:order_create' %}" class="btn btn-success mt-2">
+                        <i class="fas fa-plus me-1"></i>
+                        最初の発注を登録
+                    </a>
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 統計情報 -->
+    {% if orders %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>
+                        発注状況サマリー
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="h3 text-primary">{{ orders|length }}</div>
+                            <div class="text-muted">総発注件数</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-info">
+                                {% with ordered_count=orders|dictsort:"status"|slice:":1"|length %}{{ ordered_count }}{% endwith %}
+                            </div>
+                            <div class="text-muted">発注済み</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-success">
+                                {% with delivered_count=0 %}
+                                {% for order in orders %}
+                                    {% if order.status == 'delivered' %}
+                                        {% with delivered_count=delivered_count|add:1 %}{% endwith %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ delivered_count }}
+                                {% endwith %}
+                            </div>
+                            <div class="text-muted">納品済み</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-warning">
+                                今月の発注
+                            </div>
+                            <div class="text-muted">件数</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

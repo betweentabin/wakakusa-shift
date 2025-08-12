@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}組織選択 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.organization-select-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.organization-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.current-org-badge {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    font-size: 0.9rem;
+    display: inline-block;
+    margin-top: 1rem;
+}
+
+.form-select-lg {
+    font-size: 1.1rem;
+    padding: 1rem;
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.form-select-lg:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.btn-primary-custom {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-primary-custom:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.feature-list {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.feature-item:last-child {
+    margin-bottom: 0;
+}
+
+.feature-icon {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0.75rem;
+    color: white;
+    font-size: 0.8rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="organization-select-container">
+        <!-- ヘッダーカード -->
+        <div class="organization-card">
+            <div class="text-center">
+                <h1 class="mb-3">
+                    <i class="fas fa-building me-2"></i>
+                    組織選択
+                </h1>
+                <p class="mb-0">
+                    シフト管理を行う組織を選択してください
+                </p>
+                {% if current_organization_name %}
+                <div class="current-org-badge">
+                    <i class="fas fa-check-circle me-1"></i>
+                    現在選択中: {{ current_organization_name }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 組織選択フォーム -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.organization.id_for_label }}" class="form-label fw-bold">
+                            <i class="fas fa-building me-2 text-primary"></i>
+                            組織を選択
+                        </label>
+                        {{ form.organization }}
+                        {% if form.organization.help_text %}
+                        <div class="form-text">{{ form.organization.help_text }}</div>
+                        {% endif %}
+                        {% if form.organization.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.organization.errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary-custom">
+                            <i class="fas fa-arrow-right me-2"></i>
+                            選択した組織でシフト管理を開始
+                        </button>
+                        {% if request.GET.next %}
+                        <input type="hidden" name="next" value="{{ request.GET.next }}">
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 機能説明 -->
+        <div class="feature-list">
+            <h5 class="mb-3">
+                <i class="fas fa-info-circle me-2 text-info"></i>
+                組織ごとのシフト管理について
+            </h5>
+            
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <strong>組織別データ管理</strong><br>
+                    <small class="text-muted">各組織のスタッフとシフトは完全に分離されて管理されます</small>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div>
+                    <strong>セキュアなアクセス制御</strong><br>
+                    <small class="text-muted">他の組織のデータにはアクセスできません</small>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <i class="fas fa-cog"></i>
+                </div>
+                <div>
+                    <strong>組織別設定</strong><br>
+                    <small class="text-muted">タイムゾーンや通貨など、組織固有の設定が適用されます</small>
+                </div>
+            </div>
+            
+            <div class="feature-item">
+                <div class="feature-icon">
+                    <i class="fas fa-exchange-alt"></i>
+                </div>
+                <div>
+                    <strong>組織切り替え</strong><br>
+                    <small class="text-muted">必要に応じて他の組織に切り替えることができます</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- 管理者向けリンク -->
+        {% if user.is_superuser or user.is_staff %}
+        <div class="text-center mt-4">
+            <a href="{% url 'shift_management:organization_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-cog me-2"></i>
+                組織管理画面
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// 組織選択時の自動送信を無効化（手動での送信に変更）
+document.addEventListener('DOMContentLoaded', function() {
+    const organizationSelect = document.querySelector('select[name="organization"]');
+    if (organizationSelect) {
+        // onchangeを削除して手動送信に
+        organizationSelect.removeAttribute('onchange');
+    }
+});
+</script>
+{% endblock %} 

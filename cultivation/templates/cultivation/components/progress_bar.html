@@ -1,0 +1,11 @@
+{% comment %}
+栽培進捗バーコンポーネント
+使用例: {% include 'cultivation/components/progress_bar.html' with progress=plan.growth_progress_percentage %}
+{% endcomment %}
+
+<div class="cultivation-progress mb-2">
+    <div class="cultivation-progress-bar" style="width: {{ progress|default:0 }}%"></div>
+</div>
+<div class="text-center">
+    <small class="text-muted">進捗: {{ progress|default:0|floatformat:1 }}%</small>
+</div>

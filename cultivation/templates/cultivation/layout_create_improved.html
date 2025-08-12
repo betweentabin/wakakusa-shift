@@ -1,0 +1,687 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}新規レイアウト作成 - 栽培管理システム{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+<style>
+.creation-method-card {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 2px solid #e9ecef;
+}
+
+.creation-method-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    border-color: #007bff;
+}
+
+.creation-method-card.selected {
+    border-color: #007bff;
+    background: #f8f9ff;
+}
+
+.method-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    color: #007bff;
+}
+
+.method-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.method-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.step-indicator {
+    display: flex;
+    justify-content: center;
+    margin: 30px 0;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    margin: 0 10px;
+}
+
+.step-number {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.step.active .step-number {
+    background: #007bff;
+    color: white;
+}
+
+.step.completed .step-number {
+    background: #28a745;
+    color: white;
+}
+
+.step-line {
+    width: 50px;
+    height: 2px;
+    background: #e9ecef;
+    margin: 0 15px;
+}
+
+.step.completed + .step .step-line {
+    background: #28a745;
+}
+
+.form-section {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: none;
+}
+
+.form-section.active {
+    display: block;
+}
+
+.quick-templates {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.template-card {
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.template-card:hover {
+    border-color: #007bff;
+    background: #f8f9ff;
+}
+
+.template-card.selected {
+    border-color: #007bff;
+    background: #e3f2fd;
+}
+
+.preview-grid {
+    display: grid;
+    gap: 2px;
+    background: #dee2e6;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    justify-content: center;
+}
+
+.preview-cell {
+    width: 30px;
+    height: 30px;
+    background: #28a745;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.ocr-upload-area {
+    border: 2px dashed #007bff;
+    border-radius: 15px;
+    padding: 40px;
+    text-align: center;
+    background: #f8f9ff;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.ocr-upload-area:hover {
+    border-color: #0056b3;
+    background: #e3f2fd;
+}
+
+.ocr-upload-area.drag-over {
+    border-color: #28a745;
+    background: #f8fff9;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="header-section">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <div class="mb-3 mb-md-0">
+                        <h1 class="casual-title">
+                            ✨ 新規レイアウト作成
+                        </h1>
+                        <p class="casual-subtitle">栽培レイアウトを簡単に作成しましょう</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'cultivation:layout_list' %}" class="btn-casual btn-casual-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            <span class="d-none d-sm-inline">一覧に戻る</span>
+                            <span class="d-inline d-sm-none">戻る</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ステップインジケーター -->
+    <div class="step-indicator" id="step-indicator">
+        <div class="step active" data-step="1">
+            <div class="step-number">1</div>
+            <span>方法選択</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-step="2">
+            <div class="step-number">2</div>
+            <span>基本情報</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-step="3">
+            <div class="step-number">3</div>
+            <span>レイアウト設定</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-step="4">
+            <div class="step-number">4</div>
+            <span>確認・作成</span>
+        </div>
+    </div>
+
+    <form id="layout-creation-form" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <!-- ステップ1: 作成方法選択 -->
+        <div class="form-section active" id="step-1">
+            <h3 class="mb-4">どの方法でレイアウトを作成しますか？</h3>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="creation-method-card" data-method="manual">
+                        <div class="text-center">
+                            <div class="method-icon">📝</div>
+                            <div class="method-title">手動作成</div>
+                            <div class="method-description">
+                                シンプルなフォームで基本情報を入力し、後から区画を追加できます
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="creation-method-card" data-method="template">
+                        <div class="text-center">
+                            <div class="method-icon">📋</div>
+                            <div class="method-title">テンプレート使用</div>
+                            <div class="method-description">
+                                よく使われるレイアウトパターンから選択して素早く作成
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="creation-method-card" data-method="ocr">
+                        <div class="text-center">
+                            <div class="method-icon">📷</div>
+                            <div class="method-title">画像から自動作成</div>
+                            <div class="method-description">
+                                レイアウト図をアップロードして自動的に区画を認識・作成
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ステップ2: 基本情報 -->
+        <div class="form-section" id="step-2">
+            <h3 class="mb-4">基本情報を入力してください</h3>
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">レイアウト名 *</label>
+                        <input type="text" class="form-control form-control-lg" name="name" id="layout-name" 
+                               placeholder="例: 温室A-2024年春" required>
+                        <div class="form-text">わかりやすい名前を付けてください</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">説明・メモ</label>
+                        <textarea class="form-control" name="description" rows="3" 
+                                  placeholder="このレイアウトの特徴や用途を記録しておきましょう"></textarea>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">💡 ヒント</h6>
+                            <ul class="small mb-0">
+                                <li>場所や期間を含めた名前がおすすめ</li>
+                                <li>後から編集できます</li>
+                                <li>作物の種類や栽培方法をメモに記録</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ステップ3: レイアウト設定 -->
+        <div class="form-section" id="step-3">
+            <!-- 手動作成用 -->
+            <div class="method-content" id="manual-content">
+                <h3 class="mb-4">レイアウトの詳細設定</h3>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    まずはレイアウトを作成し、後から区画を追加していきます
+                </div>
+            </div>
+
+            <!-- テンプレート選択用 -->
+            <div class="method-content" id="template-content" style="display:none;">
+                <h3 class="mb-4">テンプレートを選択</h3>
+                <div class="quick-templates">
+                    <div class="template-card" data-template="small-grid">
+                        <div class="fw-bold mb-2">小規模グリッド</div>
+                        <div class="preview-grid" style="grid-template-columns: repeat(3, 1fr);">
+                            <div class="preview-cell">1</div>
+                            <div class="preview-cell">2</div>
+                            <div class="preview-cell">3</div>
+                            <div class="preview-cell">4</div>
+                            <div class="preview-cell">5</div>
+                            <div class="preview-cell">6</div>
+                        </div>
+                        <div class="small text-muted">3×2 (6区画)</div>
+                    </div>
+                    <div class="template-card" data-template="medium-grid">
+                        <div class="fw-bold mb-2">中規模グリッド</div>
+                        <div class="preview-grid" style="grid-template-columns: repeat(4, 1fr);">
+                            <div class="preview-cell">1</div>
+                            <div class="preview-cell">2</div>
+                            <div class="preview-cell">3</div>
+                            <div class="preview-cell">4</div>
+                            <div class="preview-cell">5</div>
+                            <div class="preview-cell">6</div>
+                            <div class="preview-cell">7</div>
+                            <div class="preview-cell">8</div>
+                            <div class="preview-cell">9</div>
+                            <div class="preview-cell">10</div>
+                            <div class="preview-cell">11</div>
+                            <div class="preview-cell">12</div>
+                        </div>
+                        <div class="small text-muted">4×3 (12区画)</div>
+                    </div>
+                    <div class="template-card" data-template="large-grid">
+                        <div class="fw-bold mb-2">大規模グリッド</div>
+                        <div class="preview-grid" style="grid-template-columns: repeat(5, 1fr);">
+                            <div class="preview-cell">1</div>
+                            <div class="preview-cell">2</div>
+                            <div class="preview-cell">3</div>
+                            <div class="preview-cell">4</div>
+                            <div class="preview-cell">5</div>
+                            <div class="preview-cell">6</div>
+                            <div class="preview-cell">7</div>
+                            <div class="preview-cell">8</div>
+                            <div class="preview-cell">9</div>
+                            <div class="preview-cell">10</div>
+                            <div class="preview-cell">11</div>
+                            <div class="preview-cell">12</div>
+                            <div class="preview-cell">13</div>
+                            <div class="preview-cell">14</div>
+                            <div class="preview-cell">15</div>
+                            <div class="preview-cell">16</div>
+                            <div class="preview-cell">17</div>
+                            <div class="preview-cell">18</div>
+                            <div class="preview-cell">19</div>
+                            <div class="preview-cell">20</div>
+                        </div>
+                        <div class="small text-muted">5×4 (20区画)</div>
+                    </div>
+                    <div class="template-card" data-template="greenhouse">
+                        <div class="fw-bold mb-2">温室レイアウト</div>
+                        <div class="preview-grid" style="grid-template-columns: repeat(6, 1fr);">
+                            <div class="preview-cell">A1</div>
+                            <div class="preview-cell">A2</div>
+                            <div class="preview-cell" style="background:#6c757d;"></div>
+                            <div class="preview-cell" style="background:#6c757d;"></div>
+                            <div class="preview-cell">A3</div>
+                            <div class="preview-cell">A4</div>
+                            <div class="preview-cell">B1</div>
+                            <div class="preview-cell">B2</div>
+                            <div class="preview-cell" style="background:#6c757d;"></div>
+                            <div class="preview-cell" style="background:#6c757d;"></div>
+                            <div class="preview-cell">B3</div>
+                            <div class="preview-cell">B4</div>
+                        </div>
+                        <div class="small text-muted">通路あり (8区画)</div>
+                    </div>
+                </div>
+                <input type="hidden" name="template_type" id="template-type">
+            </div>
+
+            <!-- OCR用 -->
+            <div class="method-content" id="ocr-content" style="display:none;">
+                <h3 class="mb-4">レイアウト図をアップロード</h3>
+                <div class="ocr-upload-area" id="ocr-upload-area">
+                    <div class="mb-3">
+                        <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: #007bff;"></i>
+                    </div>
+                    <h5>画像をドラッグ&ドロップ または クリックして選択</h5>
+                    <p class="text-muted mb-3">PDF、JPG、PNG形式をサポート</p>
+                    <input type="file" class="d-none" id="ocr-file-input" name="import_file" 
+                           accept=".pdf,.jpg,.jpeg,.png">
+                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('ocr-file-input').click()">
+                        <i class="fas fa-folder-open me-1"></i>ファイルを選択
+                    </button>
+                </div>
+                <div id="ocr-preview" class="mt-3" style="display:none;">
+                    <h6>プレビュー:</h6>
+                    <img id="ocr-preview-img" class="img-fluid rounded" style="max-height: 300px;">
+                </div>
+            </div>
+        </div>
+
+        <!-- ステップ4: 確認・作成 -->
+        <div class="form-section" id="step-4">
+            <h3 class="mb-4">作成内容の確認</h3>
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">レイアウト情報</h5>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td class="fw-bold">名前:</td>
+                                    <td id="confirm-name">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">作成方法:</td>
+                                    <td id="confirm-method">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold">説明:</td>
+                                    <td id="confirm-description">-</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 15px;"></i>
+                            <h5>準備完了!</h5>
+                            <p class="small mb-0">レイアウトを作成します</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ナビゲーションボタン -->
+        <div class="d-flex justify-content-between mt-4">
+            <button type="button" class="btn btn-outline-secondary" id="prev-btn" style="display:none;">
+                <i class="fas fa-arrow-left me-1"></i>前へ
+            </button>
+            <div class="ms-auto">
+                <button type="button" class="btn btn-primary" id="next-btn">
+                    次へ<i class="fas fa-arrow-right ms-1"></i>
+                </button>
+                <button type="submit" class="btn btn-success" id="create-btn" style="display:none;">
+                    <i class="fas fa-plus me-1"></i>レイアウトを作成
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentStep = 1;
+let selectedMethod = null;
+let selectedTemplate = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeFormWizard();
+    setupEventListeners();
+});
+
+function initializeFormWizard() {
+    updateStepIndicator();
+    updateNavigationButtons();
+}
+
+function setupEventListeners() {
+    // 作成方法選択
+    document.querySelectorAll('.creation-method-card').forEach(card => {
+        card.addEventListener('click', function() {
+            document.querySelectorAll('.creation-method-card').forEach(c => c.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedMethod = this.dataset.method;
+        });
+    });
+
+    // テンプレート選択
+    document.querySelectorAll('.template-card').forEach(card => {
+        card.addEventListener('click', function() {
+            document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+            this.classList.add('selected');
+            selectedTemplate = this.dataset.template;
+            document.getElementById('template-type').value = selectedTemplate;
+        });
+    });
+
+    // ナビゲーション
+    document.getElementById('next-btn').addEventListener('click', nextStep);
+    document.getElementById('prev-btn').addEventListener('click', prevStep);
+
+    // OCRファイルアップロード
+    setupOCRUpload();
+
+    // フォーム入力の監視
+    document.getElementById('layout-name').addEventListener('input', updateConfirmation);
+}
+
+function nextStep() {
+    if (validateCurrentStep()) {
+        if (currentStep < 4) {
+            currentStep++;
+            showStep(currentStep);
+            updateStepIndicator();
+            updateNavigationButtons();
+            
+            if (currentStep === 3) {
+                showMethodContent();
+            }
+            
+            if (currentStep === 4) {
+                updateConfirmation();
+            }
+        }
+    }
+}
+
+function prevStep() {
+    if (currentStep > 1) {
+        currentStep--;
+        showStep(currentStep);
+        updateStepIndicator();
+        updateNavigationButtons();
+    }
+}
+
+function validateCurrentStep() {
+    switch(currentStep) {
+        case 1:
+            if (!selectedMethod) {
+                alert('作成方法を選択してください。');
+                return false;
+            }
+            return true;
+        case 2:
+            const name = document.getElementById('layout-name').value.trim();
+            if (!name) {
+                alert('レイアウト名を入力してください。');
+                return false;
+            }
+            return true;
+        case 3:
+            if (selectedMethod === 'template' && !selectedTemplate) {
+                alert('テンプレートを選択してください。');
+                return false;
+            }
+            if (selectedMethod === 'ocr') {
+                const file = document.getElementById('ocr-file-input').files[0];
+                if (!file) {
+                    alert('画像ファイルを選択してください。');
+                    return false;
+                }
+            }
+            return true;
+        default:
+            return true;
+    }
+}
+
+function showStep(step) {
+    document.querySelectorAll('.form-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    document.getElementById(`step-${step}`).classList.add('active');
+}
+
+function showMethodContent() {
+    document.querySelectorAll('.method-content').forEach(content => {
+        content.style.display = 'none';
+    });
+    
+    if (selectedMethod) {
+        document.getElementById(`${selectedMethod}-content`).style.display = 'block';
+    }
+}
+
+function updateStepIndicator() {
+    document.querySelectorAll('.step').forEach((step, index) => {
+        const stepNum = index + 1;
+        step.classList.remove('active', 'completed');
+        
+        if (stepNum === currentStep) {
+            step.classList.add('active');
+        } else if (stepNum < currentStep) {
+            step.classList.add('completed');
+        }
+    });
+}
+
+function updateNavigationButtons() {
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const createBtn = document.getElementById('create-btn');
+    
+    prevBtn.style.display = currentStep > 1 ? 'block' : 'none';
+    
+    if (currentStep < 4) {
+        nextBtn.style.display = 'block';
+        createBtn.style.display = 'none';
+    } else {
+        nextBtn.style.display = 'none';
+        createBtn.style.display = 'block';
+    }
+}
+
+function updateConfirmation() {
+    const name = document.getElementById('layout-name').value || '-';
+    const description = document.querySelector('[name="description"]').value || '説明なし';
+    
+    const methodNames = {
+        'manual': '手動作成',
+        'template': 'テンプレート使用',
+        'ocr': '画像から自動作成'
+    };
+    
+    document.getElementById('confirm-name').textContent = name;
+    document.getElementById('confirm-method').textContent = methodNames[selectedMethod] || '-';
+    document.getElementById('confirm-description').textContent = description;
+}
+
+function setupOCRUpload() {
+    const uploadArea = document.getElementById('ocr-upload-area');
+    const fileInput = document.getElementById('ocr-file-input');
+    const preview = document.getElementById('ocr-preview');
+    const previewImg = document.getElementById('ocr-preview-img');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('drag-over');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelect(files[0]);
+        }
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+    
+    function handleFileSelect(file) {
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+}
+</script>
+{% endblock %}

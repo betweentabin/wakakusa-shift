@@ -1,0 +1,378 @@
+/* 2D/3D平面図の共通スタイル */
+
+/* 統計カードのスタイル */
+.stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+}
+
+.stat-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.stat-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+/* 統計カードのカラー分け */
+.stat-card-total { border-left: 4px solid #6c757d; }
+.stat-card-growing { border-left: 4px solid #28a745; }
+.stat-card-harvest { border-left: 4px solid #ffc107; }
+.stat-card-empty { border-left: 4px solid #17a2b8; }
+.stat-card-overdue { border-left: 4px solid #dc3545; }
+
+/* 状態別カラークラス */
+.growing { color: #28a745; }
+.harvest-ready { color: #ffc107; }
+.empty { color: #6c757d; }
+.overdue { color: #dc3545; }
+
+/* ビュー切り替えボタン */
+.view-toggle {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+.view-toggle .btn {
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.view-toggle .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* 平面図コンテナ */
+.floor-plan-container {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.floor-plan-wrapper {
+    position: relative;
+    background: #f8f9fa;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 600px;
+}
+
+.floor-plan-svg {
+    width: 100%;
+    height: 600px;
+    cursor: grab;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.floor-plan-svg:active {
+    cursor: grabbing;
+}
+
+/* 2D視点切り替えボタングループ */
+.view-2d-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.view-2d-controls .btn {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.view-2d-controls .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+}
+
+/* コントロールボタン */
+.floor-plan-controls {
+    position: absolute;
+    top: 60px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 10;
+}
+
+.zoom-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    font-size: 14px;
+    color: #495057;
+}
+
+.zoom-btn:hover {
+    background: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+.zoom-btn:active {
+    transform: translateY(0);
+}
+
+/* 保存ボタン */
+.save-positions-btn {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    border: none;
+    background: #28a745;
+    color: white;
+    box-shadow: 0 3px 10px rgba(40, 167, 69, 0.3);
+}
+
+.save-positions-btn:hover {
+    background: #218838;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+}
+
+.save-positions-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* 栽培区画・棚区画の共通スタイル */
+.section-rect, .plot-rect {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    stroke-width: 2;
+    stroke: #dee2e6;
+}
+
+.section-rect:hover, .plot-rect:hover {
+    stroke: #0d6efd;
+    stroke-width: 3;
+    filter: brightness(1.1);
+}
+
+.section-text, .plot-text {
+    font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+    font-weight: 600;
+    fill: #2c3e50;
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.crop-text {
+    font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+    font-size: 10px;
+    fill: #6c757d;
+    pointer-events: none;
+    text-anchor: middle;
+}
+
+/* 段数レベル表示 */
+.level-rect {
+    stroke: #dee2e6;
+    stroke-width: 1;
+    transition: all 0.2s ease;
+}
+
+.level-rect:hover {
+    stroke: #0d6efd;
+    stroke-width: 2;
+}
+
+/* 3D表示コンテナ */
+.three-d-wrapper {
+    position: relative;
+    height: 600px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f8f9fa;
+}
+
+.three-d-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #6c757d;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.three-d-info-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    max-width: 300px;
+    z-index: 100;
+}
+
+.three-d-info-panel h6 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.three-d-info-panel p {
+    margin: 5px 0;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .stat-cards {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    
+    .stat-card {
+        padding: 16px;
+    }
+    
+    .stat-number {
+        font-size: 1.6rem;
+    }
+    
+    .stat-icon {
+        font-size: 1.6rem;
+        margin-bottom: 8px;
+    }
+    
+    .floor-plan-container {
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .floor-plan-svg {
+        height: 500px;
+    }
+    
+    .floor-plan-wrapper {
+        height: 500px;
+    }
+    
+    .three-d-wrapper {
+        height: 500px;
+    }
+    
+    .view-toggle .btn {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .stat-cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .stat-card {
+        padding: 12px;
+    }
+    
+    .stat-number {
+        font-size: 1.4rem;
+    }
+    
+    .stat-icon {
+        font-size: 1.4rem;
+    }
+    
+    .floor-plan-container {
+        padding: 15px;
+    }
+    
+    .floor-plan-svg {
+        height: 400px;
+    }
+    
+    .floor-plan-wrapper {
+        height: 400px;
+    }
+    
+    .three-d-wrapper {
+        height: 400px;
+    }
+    
+    .view-toggle {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .view-toggle .btn {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+    }
+    
+    .floor-plan-controls {
+        top: 50px;
+        right: 15px;
+    }
+    
+    .zoom-btn {
+        width: 35px;
+        height: 35px;
+        font-size: 12px;
+    }
+}

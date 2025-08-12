@@ -1,0 +1,63 @@
+{% comment %}
+検索フォームコンポーネント
+使用例: {% include 'cultivation/components/search_form.html' with form=search_form %}
+{% endcomment %}
+
+<form method="get" class="cultivation-search-form">
+    <div class="cultivation-actions">
+        <div class="cultivation-search">
+            <div class="input-group">
+                <input type="text" 
+                       name="query" 
+                       class="form-control auto-search" 
+                       placeholder="検索キーワード..."
+                       value="{{ request.GET.query }}">
+                <button class="btn btn-outline-secondary" type="submit">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        
+        {% if show_filters %}
+        <div class="cultivation-filters">
+            {% if form.status %}
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">全てのステータス</option>
+                {% for value, text in form.status.field.choices %}
+                    {% if value %}
+                    <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>
+                        {{ text }}
+                    </option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+            {% endif %}
+            
+            {% if form.date_from %}
+            <input type="date" 
+                   name="date_from" 
+                   class="form-control" 
+                   value="{{ request.GET.date_from }}"
+                   placeholder="開始日"
+                   onchange="this.form.submit()">
+            {% endif %}
+            
+            {% if form.date_to %}
+            <input type="date" 
+                   name="date_to" 
+                   class="form-control" 
+                   value="{{ request.GET.date_to }}"
+                   placeholder="終了日"
+                   onchange="this.form.submit()">
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if show_reset %}
+        <a href="{{ request.path }}" class="btn btn-outline-secondary">
+            <i class="fas fa-undo"></i>
+            リセット
+        </a>
+        {% endif %}
+    </div>
+</form>

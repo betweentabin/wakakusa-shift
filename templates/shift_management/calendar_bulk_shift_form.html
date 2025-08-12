@@ -1,0 +1,1197 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}カレンダー一括シフト登録{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css">
+<style>
+    .progress-steps {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 30px;
+        padding: 0 20px;
+    }
+    
+    .step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        position: relative;
+    }
+    
+    .step::after {
+        content: '';
+        position: absolute;
+        top: 20px;
+        left: 60%;
+        width: 80%;
+        height: 2px;
+        background-color: #dee2e6;
+        z-index: 1;
+    }
+    
+    .step:last-child::after {
+        display: none;
+    }
+    
+    .step.active::after {
+        background-color: #007bff;
+    }
+    
+    .step-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        margin-bottom: 8px;
+        z-index: 2;
+        position: relative;
+    }
+    
+    .step.active .step-circle {
+        background-color: #007bff;
+    }
+    
+    .step.completed .step-circle {
+        background-color: #28a745;
+    }
+    
+    .step-label {
+        font-size: 0.9rem;
+        text-align: center;
+        color: #6c757d;
+    }
+    
+    .step.active .step-label {
+        color: #007bff;
+        font-weight: 500;
+    }
+    
+    .step.completed .step-label {
+        color: #28a745;
+    }
+    
+    .step-content {
+        display: none;
+        animation: fadeIn 0.3s;
+    }
+    
+    .step-content.active {
+        display: block;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .date-selection-tools {
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .quick-select-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+    }
+    
+    .selection-summary {
+        background-color: #e3f2fd;
+        border: 1px solid #90caf9;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 15px;
+    }
+    
+    .selection-count {
+        font-weight: bold;
+        color: #1976d2;
+    }
+    
+    .selected-dates-list {
+        max-height: 150px;
+        overflow-y: auto;
+        margin-top: 10px;
+    }
+    
+    .staff-selection {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 15px;
+    }
+    
+    .individual-time-settings {
+        display: none;
+        margin-top: 15px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 6px;
+    }
+    
+    .individual-time-settings.show {
+        display: block;
+    }
+    
+    .date-time-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 8px;
+        background-color: white;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .date-time-row .date-label {
+        flex: 1;
+        font-weight: 500;
+    }
+    
+    .date-time-row .time-inputs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    .existing-shift-badge {
+        background-color: #dc3545;
+        color: white;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 4px;
+    }
+
+    /* モバイル対応 */
+    @media (max-width: 768px) {
+        .progress-steps {
+            padding: 0 10px;
+        }
+        
+        .step-circle {
+            width: 30px;
+            height: 30px;
+            font-size: 0.8rem;
+        }
+        
+        .step-label {
+            font-size: 0.8rem;
+        }
+        
+        .quick-select-buttons {
+            gap: 5px;
+        }
+        
+        .quick-select-buttons .btn {
+            font-size: 0.8rem;
+            padding: 5px 8px;
+        }
+        
+        .date-time-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .date-time-row .time-inputs {
+            margin-top: 8px;
+            justify-content: space-between;
+        }
+    }
+    
+    /* カレンダーのスタイル調整 */
+    .fc-event {
+        font-size: 0.75rem;
+        padding: 1px 2px;
+        pointer-events: none; /* イベントがクリックを阻害しないように */
+    }
+    
+    .fc-daygrid-day-number {
+        position: relative;
+        cursor: pointer; /* クリック可能であることを明示 */
+        z-index: 10;
+    }
+    
+    .fc-daygrid-day {
+        cursor: pointer; /* 日付セル全体をクリック可能に */
+    }
+    
+    .fc-daygrid-day.selected {
+        background-color: rgba(0, 123, 255, 0.1) !important;
+    }
+    
+    .fc-daygrid-day.selected .fc-daygrid-day-number {
+        background-color: #007bff;
+        color: white;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* FullCalendarの要素がクリックイベントを阻害しないように */
+    .fc-daygrid-day-events {
+        pointer-events: none;
+    }
+    
+    .fc-daygrid-event-harness {
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">カレンダー一括シフト登録</h1>
+        <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> カレンダーに戻る
+        </a>
+    </div>
+    
+    <!-- 進行状況ステップ -->
+    <div class="progress-steps">
+        <div class="step active" id="step-1">
+            <div class="step-circle">1</div>
+            <div class="step-label">日付選択</div>
+        </div>
+        <div class="step" id="step-2">
+            <div class="step-circle">2</div>
+            <div class="step-label">スタッフ選択</div>
+        </div>
+        <div class="step" id="step-3">
+            <div class="step-circle">3</div>
+            <div class="step-label">シフト詳細</div>
+        </div>
+        <div class="step" id="step-4">
+            <div class="step-circle">4</div>
+            <div class="step-label">確認</div>
+        </div>
+    </div>
+    
+    <form method="post" id="calendar-bulk-form" onsubmit="return validateFormBeforeSubmit()">
+        {% csrf_token %}
+        
+        <!-- 隠しフィールド -->
+        {{ form.selected_dates }}
+        {{ form.individual_times }}
+        
+        <!-- ステップ1: 日付選択 -->
+        <div class="step-content active" id="content-1">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>
+                        シフトを登録する日付を選択してください
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="date-selection-tools">
+                        <div class="quick-select-buttons">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectWeekdays()">
+                                <i class="fas fa-business-time"></i> 平日のみ
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success" onclick="selectWeekends()">
+                                <i class="fas fa-calendar-weekend"></i> 土日のみ
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="selectCurrentMonth()">
+                                <i class="fas fa-calendar-month"></i> 今月全て
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearSelection()">
+                                <i class="fas fa-eraser"></i> 選択解除
+                            </button>
+                        </div>
+                        
+                        <div class="selection-summary" id="selection-summary" style="display: none;">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <span class="selection-count" id="selection-count">0</span>日選択中
+                            </div>
+                            <div class="selected-dates-list" id="selected-dates-list"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="calendar"></div>
+                </div>
+                <div class="card-footer text-end">
+                    <button type="button" class="btn btn-primary" onclick="nextStep(2)">
+                        次へ <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ステップ2: スタッフ選択 -->
+        <div class="step-content" id="content-2">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-users me-2"></i>
+                        シフトを割り当てるスタッフを選択してください
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="staff-selection">
+                                {% for choice in form.staff %}
+                                    <div class="form-check mb-2">
+                                        {{ choice.tag }}
+                                        <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                            <strong>{{ choice.choice_label }}</strong>
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            {% if form.staff.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.staff.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(1)">
+                        <i class="fas fa-arrow-left"></i> 戻る
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="nextStep(3)">
+                        次へ <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ステップ3: シフト詳細 -->
+        <div class="step-content" id="content-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock me-2"></i>
+                        シフトの詳細を設定してください
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="id_shift_type" class="form-label">{{ form.shift_type.label }}</label>
+                            {{ form.shift_type }}
+                            {% if form.shift_type.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.shift_type.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mt-4">
+                                {{ form.overwrite }}
+                                <label class="form-check-label" for="id_overwrite">
+                                    {{ form.overwrite.label }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 時間入力方法の選択 -->
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.time_input_type.label }}</label>
+                        <div class="time-input-type-selection">
+                            {% for choice in form.time_input_type %}
+                                <div class="form-check form-check-inline">
+                                    {{ choice.tag }}
+                                    <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                        {{ choice.choice_label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if form.time_input_type.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.time_input_type.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 定型選択の時間フィールド -->
+                    <div class="row mb-3" id="preset-time-fields">
+                        <div class="col-md-6">
+                            <label for="id_start_time" class="form-label">{{ form.start_time.label }}</label>
+                            {{ form.start_time }}
+                            {% if form.start_time.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.start_time.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="id_end_time" class="form-label">{{ form.end_time.label }}</label>
+                            {{ form.end_time }}
+                            {% if form.end_time.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.end_time.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- 自由記述の時間フィールド -->
+                    <div class="row mb-3" id="custom-time-fields" style="display: none;">
+                        <div class="col-md-6">
+                            <label for="id_custom_start_time" class="form-label">{{ form.custom_start_time.label }}</label>
+                            {{ form.custom_start_time }}
+                            {% if form.custom_start_time.help_text %}
+                                <div class="form-text">{{ form.custom_start_time.help_text }}</div>
+                            {% endif %}
+                            {% if form.custom_start_time.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.custom_start_time.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="id_custom_end_time" class="form-label">{{ form.custom_end_time.label }}</label>
+                            {{ form.custom_end_time }}
+                            {% if form.custom_end_time.help_text %}
+                                <div class="form-text">{{ form.custom_end_time.help_text }}</div>
+                            {% endif %}
+                            {% if form.custom_end_time.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.custom_end_time.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="enable-individual-times">
+                        <label class="form-check-label" for="enable-individual-times">
+                            日付ごとに異なる時間を設定する
+                        </label>
+                    </div>
+                    
+                    <div class="individual-time-settings" id="individual-time-settings">
+                        <h6 class="mb-3">日付別時間設定</h6>
+                        <div id="individual-time-list">
+                            <!-- 日付別の時間設定がここに表示されます -->
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(2)">
+                        <i class="fas fa-arrow-left"></i> 戻る
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="nextStep(4)">
+                        次へ <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ステップ4: 確認 -->
+        <div class="step-content" id="content-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        登録内容を確認してください
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="confirmation-summary">
+                        <!-- 確認内容がここに表示されます -->
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(3)">
+                        <i class="fas fa-arrow-left"></i> 戻る
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>
+                        シフトを一括登録
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+<script>
+let calendar;
+let selectedDates = [];
+let shiftTypesData = {{ shift_types_data|safe }};
+let existingShifts = JSON.parse('{{ existing_shifts|safe }}');
+let currentStep = 1;
+
+// 時間選択肢をJavaScriptで使えるように準備
+let timeChoices = [
+    {% for choice in form.start_time.field.choices %}
+        {value: '{{ choice.0 }}', label: '{{ choice.1 }}'},
+    {% endfor %}
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    // フォームフィールドのIDを確認
+    console.log('Checking form field IDs...');
+    
+    // デバッグ：ボタンが存在するか確認
+    const nextBtn1 = document.querySelector('button[onclick="nextStep(2)"]');
+    console.log('Next button (step 1->2):', nextBtn1);
+    
+    // FullCalendarライブラリの確認
+    console.log('FullCalendar available:', typeof FullCalendar !== 'undefined');
+    const formFields = document.querySelectorAll('input[type="hidden"]');
+    formFields.forEach(field => {
+        console.log(`Field: name="${field.name}", id="${field.id}", value="${field.value}"`);
+    });
+    
+    initializeCalendar();
+    initializeFormEvents();
+});
+
+function initializeCalendar() {
+    console.log('Initializing calendar...');
+    const calendarEl = document.getElementById('calendar');
+    console.log('Calendar element found:', !!calendarEl);
+    console.log('FullCalendar available:', typeof FullCalendar !== 'undefined');
+    
+    calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ja',
+        selectable: true,
+        selectMirror: true,
+        selectAllow: function(selectInfo) {
+            return true; // 常に選択を許可
+        },
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth'
+        },
+        events: existingShifts,
+        dayMaxEvents: 2,
+        
+        dateClick: function(info) {
+            console.log('dateClick triggered:', info);
+            // タイムゾーンを考慮した日付文字列を生成
+            const year = info.date.getFullYear();
+            const month = String(info.date.getMonth() + 1).padStart(2, '0');
+            const day = String(info.date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            console.log('Selecting date:', dateStr);
+            toggleDateSelection(dateStr);
+        },
+        
+        select: function(info) {
+            const start = new Date(info.start);
+            const end = new Date(info.end);
+            
+            for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+                toggleDateSelection(dateStr);
+            }
+        },
+        
+        eventDidMount: function(info) {
+            // 既存シフトの件数を表示
+            const dateStr = info.event.start.toISOString().split('T')[0];
+            addExistingShiftBadge(dateStr);
+        },
+        
+        dayCellDidMount: function(info) {
+            console.log('dayCellDidMount:', info);
+            // 各日付セルにdata-date属性を設定（タイムゾーンを考慮）
+            const year = info.date.getFullYear();
+            const month = String(info.date.getMonth() + 1).padStart(2, '0');
+            const day = String(info.date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            console.log('Setting data-date:', dateStr, 'on element:', info.el);
+            info.el.setAttribute('data-date', dateStr);
+        },
+        
+        datesSet: function(info) {
+            console.log('datesSet triggered, re-adding click handlers');
+            // 月が変更された時にクリックハンドラーを再追加
+            setTimeout(() => {
+                addDesktopClickHandlers();
+            }, 100);
+        }
+    });
+    
+    console.log('Rendering calendar...');
+    calendar.render();
+    console.log('Calendar rendered');
+    
+    // デスクトップ版でのクリック問題を解決するため、追加のイベントリスナーを設定
+    setTimeout(() => {
+        addDesktopClickHandlers();
+    }, 500);
+    
+    // 初期ステップを表示
+    showStep(1);
+    
+    // 時間入力方法の切り替え
+    document.querySelectorAll('input[name="time_input_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            toggleTimeInputFields(this.value);
+        });
+    });
+    
+    // 初期状態で定型選択を表示
+    toggleTimeInputFields('preset');
+}
+
+function toggleTimeInputFields(inputType) {
+    const presetFields = document.getElementById('preset-time-fields');
+    const customFields = document.getElementById('custom-time-fields');
+    
+    if (inputType === 'preset') {
+        if (presetFields) presetFields.style.display = 'block';
+        if (customFields) customFields.style.display = 'none';
+    } else if (inputType === 'custom') {
+        if (presetFields) presetFields.style.display = 'none';
+        if (customFields) customFields.style.display = 'block';
+    }
+}
+
+function addDesktopClickHandlers() {
+    console.log('Adding desktop click handlers...');
+    
+    // カレンダーの全ての日付セルにクリックイベントを追加
+    const dayCells = calendar.el.querySelectorAll('.fc-daygrid-day');
+    console.log('Found day cells:', dayCells.length);
+    
+    dayCells.forEach(dayCell => {
+        // 既存のイベントリスナーを削除（重複を避けるため）
+        dayCell.removeEventListener('click', handleDayClick);
+        
+        // 新しいイベントリスナーを追加
+        dayCell.addEventListener('click', handleDayClick);
+        
+        // マウスホバー効果も追加
+        dayCell.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(0, 123, 255, 0.05)';
+        });
+        
+        dayCell.addEventListener('mouseleave', function() {
+            if (!this.classList.contains('selected')) {
+                this.style.backgroundColor = '';
+            }
+        });
+    });
+}
+
+function handleDayClick(event) {
+    console.log('handleDayClick triggered', event);
+    
+    const dayCell = event.currentTarget;
+    const dateStr = dayCell.getAttribute('data-date');
+    
+    console.log('Clicked date:', dateStr);
+    
+    if (dateStr) {
+        toggleDateSelection(dateStr);
+    } else {
+        console.error('No data-date attribute found on clicked element');
+    }
+    
+    // イベントの伝播を停止
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function toggleDateSelection(dateStr) {
+    console.log('toggleDateSelection called with:', dateStr);
+    const index = selectedDates.indexOf(dateStr);
+    
+    if (index > -1) {
+        // 既に選択されている場合は削除
+        selectedDates.splice(index, 1);
+        console.log('Date removed from selection');
+    } else {
+        // 選択されていない場合は追加
+        selectedDates.push(dateStr);
+        console.log('Date added to selection');
+    }
+    
+    // ソート
+    selectedDates.sort();
+    console.log('Updated selectedDates:', selectedDates);
+    
+    updateCalendarSelection();
+    updateSelectionSummary();
+    updateSelectedDatesField();
+}
+
+function updateCalendarSelection() {
+    // 全ての日付セルから選択状態をクリア
+    calendar.el.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
+        dayEl.classList.remove('selected');
+    });
+    
+    // 選択された日付にクラスを追加
+    selectedDates.forEach(dateStr => {
+        const dayEl = calendar.el.querySelector(`[data-date="${dateStr}"]`);
+        if (dayEl) {
+            dayEl.classList.add('selected');
+        }
+    });
+}
+
+function selectWeekdays() {
+    clearSelection();
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    for (let day = 1; day <= 31; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        if (date.getMonth() !== currentMonth) break;
+        
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 月曜〜金曜
+            const dateStr = date.toISOString().split('T')[0];
+            toggleDateSelection(dateStr);
+        }
+    }
+}
+
+function selectWeekends() {
+    clearSelection();
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    for (let day = 1; day <= 31; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        if (date.getMonth() !== currentMonth) break;
+        
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) { // 日曜・土曜
+            const dateStr = date.toISOString().split('T')[0];
+            toggleDateSelection(dateStr);
+        }
+    }
+}
+
+function selectCurrentMonth() {
+    clearSelection();
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    for (let day = 1; day <= 31; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        if (date.getMonth() !== currentMonth) break;
+        
+        const dateStr = date.toISOString().split('T')[0];
+        toggleDateSelection(dateStr);
+    }
+}
+
+function clearSelection() {
+    selectedDates = [];
+    updateCalendarSelection();
+    updateSelectionSummary();
+    updateSelectedDatesField();
+}
+
+function updateSelectionSummary() {
+    const summaryEl = document.getElementById('selection-summary');
+    const countEl = document.getElementById('selection-count');
+    const listEl = document.getElementById('selected-dates-list');
+    
+    if (selectedDates.length > 0) {
+        summaryEl.style.display = 'block';
+        countEl.textContent = selectedDates.length;
+        
+        const sortedDates = selectedDates.sort();
+        listEl.innerHTML = sortedDates.map(dateStr => {
+            // タイムゾーン問題を避けるため、日付文字列から直接Dateオブジェクトを作成
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            const formatted = date.toLocaleDateString('ja-JP', {
+                month: 'short',
+                day: 'numeric',
+                weekday: 'short'
+            });
+            
+            // 既存シフトの確認
+            const hasExistingShifts = existingShifts.some(shift => 
+                shift.start === dateStr
+            );
+            
+            return `<span class="badge bg-primary me-1 mb-1">
+                ${formatted}
+                ${hasExistingShifts ? '<span class="existing-shift-badge">既存</span>' : ''}
+            </span>`;
+        }).join('');
+    } else {
+        summaryEl.style.display = 'none';
+    }
+}
+
+function updateSelectedDatesField() {
+    const selectedDatesField = document.getElementById('id_selected_dates');
+    if (selectedDatesField) {
+        selectedDatesField.value = JSON.stringify(selectedDates);
+    }
+}
+
+function addExistingShiftBadge(dateStr) {
+    const dayEl = calendar.el.querySelector(`[data-date="${dateStr}"] .fc-daygrid-day-number`);
+    if (dayEl && !dayEl.querySelector('.existing-shift-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'existing-shift-badge';
+        badge.textContent = '済';
+        dayEl.appendChild(badge);
+    }
+}
+
+function initializeFormEvents() {
+    // シフト種別変更時のデフォルト時間設定
+    const shiftTypeSelect = document.getElementById('id_shift_type');
+    const startTimeSelect = document.getElementById('id_start_time');
+    const endTimeSelect = document.getElementById('id_end_time');
+    
+    if (shiftTypeSelect && startTimeSelect && endTimeSelect) {
+        shiftTypeSelect.addEventListener('change', function() {
+            const shiftTypeId = this.value;
+            if (shiftTypeId && shiftTypesData[shiftTypeId]) {
+                startTimeSelect.value = shiftTypesData[shiftTypeId].start_time;
+                endTimeSelect.value = shiftTypesData[shiftTypeId].end_time;
+            }
+        });
+    }
+    
+    // 個別時間設定の切り替え
+    const enableIndividualTimes = document.getElementById('enable-individual-times');
+    const individualTimeSettings = document.getElementById('individual-time-settings');
+    
+    enableIndividualTimes.addEventListener('change', function() {
+        if (this.checked) {
+            individualTimeSettings.classList.add('show');
+            updateIndividualTimeList();
+        } else {
+            individualTimeSettings.classList.remove('show');
+        }
+    });
+}
+
+function updateIndividualTimeList() {
+    const listEl = document.getElementById('individual-time-list');
+    const startTimeField = document.getElementById('id_start_time');
+    const endTimeField = document.getElementById('id_end_time');
+    
+    if (!listEl || !startTimeField || !endTimeField) return;
+    
+    const defaultStartTime = startTimeField.value;
+    const defaultEndTime = endTimeField.value;
+    
+    listEl.innerHTML = selectedDates.sort().map(dateStr => {
+        // タイムゾーン問題を避けるため、日付文字列から直接Dateオブジェクトを作成
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        const formatted = date.toLocaleDateString('ja-JP', {
+            month: 'short',
+            day: 'numeric',
+            weekday: 'short'
+        });
+        
+        // 時間選択肢をJavaScriptで生成
+        const startTimeOptions = timeChoices.map(choice => 
+            `<option value="${choice.value}"${defaultStartTime === choice.value ? ' selected' : ''}>${choice.label}</option>`
+        ).join('');
+        
+        const endTimeOptions = timeChoices.map(choice => 
+            `<option value="${choice.value}"${defaultEndTime === choice.value ? ' selected' : ''}>${choice.label}</option>`
+        ).join('');
+        
+        return `
+            <div class="date-time-row">
+                <div class="date-label">${formatted}</div>
+                <div class="time-inputs">
+                    <select class="form-select form-select-sm individual-start-time" data-date="${dateStr}">
+                        ${startTimeOptions}
+                    </select>
+                    <span>〜</span>
+                    <select class="form-select form-select-sm individual-end-time" data-date="${dateStr}">
+                        ${endTimeOptions}
+                    </select>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function nextStep(stepNumber) {
+    console.log('nextStep called with:', stepNumber);
+    console.log('selectedDates:', selectedDates);
+    
+    if (stepNumber === 2 && selectedDates.length === 0) {
+        alert('日付を選択してください。');
+        return;
+    }
+    
+    if (stepNumber === 3) {
+        const staffInputs = document.querySelectorAll('input[name="staff"]');
+        console.log('Staff inputs found:', staffInputs.length);
+        const selectedStaff = document.querySelectorAll('input[name="staff"]:checked');
+        console.log('Selected staff:', selectedStaff.length);
+        if (selectedStaff.length === 0) {
+            alert('スタッフを選択してください。');
+            return;
+        }
+    }
+    
+    if (stepNumber === 4) {
+        const shiftTypeField = document.getElementById('id_shift_type');
+        if (!shiftTypeField || !shiftTypeField.value) {
+            alert('シフト種別を選択してください。');
+            return;
+        }
+        
+        // 時間入力タイプの検証
+        const timeInputTypeChecked = document.querySelector('input[name="time_input_type"]:checked');
+        if (!timeInputTypeChecked) {
+            alert('時間入力タイプを選択してください。');
+            return;
+        }
+        
+        // 定型選択の場合の時間検証
+        if (timeInputTypeChecked.value === 'preset') {
+            const startTimeField = document.getElementById('id_start_time');
+            const endTimeField = document.getElementById('id_end_time');
+            if (!startTimeField || !startTimeField.value || !endTimeField || !endTimeField.value) {
+                alert('開始時間と終了時間を選択してください。');
+                return;
+            }
+        }
+        
+        // 自由記述の場合の時間検証
+        if (timeInputTypeChecked.value === 'custom') {
+            const customStartTimeField = document.getElementById('id_custom_start_time');
+            const customEndTimeField = document.getElementById('id_custom_end_time');
+            if (!customStartTimeField || !customStartTimeField.value || !customEndTimeField || !customEndTimeField.value) {
+                alert('開始時間と終了時間を入力してください。');
+                return;
+            }
+        }
+        
+        updateConfirmationSummary();
+        updateIndividualTimesField();
+    }
+    
+    showStep(stepNumber);
+}
+
+function prevStep(stepNumber) {
+    showStep(stepNumber);
+}
+
+function showStep(stepNumber) {
+    console.log('showStep called with:', stepNumber);
+    
+    // 全てのステップとコンテンツを非アクティブにする
+    document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('active', 'completed');
+    });
+    document.querySelectorAll('.step-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // 指定されたステップまでを完了済みにし、現在のステップをアクティブにする
+    for (let i = 1; i < stepNumber; i++) {
+        const stepEl = document.getElementById(`step-${i}`);
+        if (stepEl) {
+            stepEl.classList.add('completed');
+        }
+    }
+    
+    const currentStepEl = document.getElementById(`step-${stepNumber}`);
+    const currentContentEl = document.getElementById(`content-${stepNumber}`);
+    
+    if (currentStepEl) {
+        currentStepEl.classList.add('active');
+    } else {
+        console.error(`Step element not found: step-${stepNumber}`);
+    }
+    
+    if (currentContentEl) {
+        currentContentEl.classList.add('active');
+    } else {
+        console.error(`Content element not found: content-${stepNumber}`);
+    }
+    
+    currentStep = stepNumber;
+}
+
+function updateConfirmationSummary() {
+    const summaryEl = document.getElementById('confirmation-summary');
+    if (!summaryEl) return;
+    
+    const selectedStaff = Array.from(document.querySelectorAll('input[name="{{ form.staff.html_name }}"]:checked'))
+        .map(input => input.nextElementSibling.textContent.trim());
+    
+    const shiftTypeField = document.getElementById('id_shift_type');
+    const startTimeField = document.getElementById('id_start_time');
+    const endTimeField = document.getElementById('id_end_time');
+    const overwriteField = document.getElementById('id_overwrite');
+    
+    if (!shiftTypeField || !startTimeField || !endTimeField || !overwriteField) return;
+    
+    let shiftTypeName = 'シフト種別が選択されていません';
+    if (shiftTypeField && shiftTypeField.selectedIndex >= 0) {
+        const selectedOption = shiftTypeField.options[shiftTypeField.selectedIndex];
+        if (selectedOption && selectedOption.text) {
+            shiftTypeName = selectedOption.text;
+        }
+    }
+    console.log('DEBUG: shiftTypeName =', shiftTypeName);
+    const startTime = startTimeField.value;
+    const endTime = endTimeField.value;
+    const overwrite = overwriteField.checked;
+    
+    const totalShifts = selectedDates.length * selectedStaff.length;
+    
+    summaryEl.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>選択した日付</h6>
+                <p><strong>${selectedDates.length}</strong>日</p>
+                <div class="small text-muted mb-3">
+                    ${selectedDates.sort().map(dateStr => {
+                        // タイムゾーン問題を避けるため、日付文字列から直接Dateオブジェクトを作成
+                        const [year, month, day] = dateStr.split('-').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        return date.toLocaleDateString('ja-JP', {
+                            month: 'short',
+                            day: 'numeric',
+                            weekday: 'short'
+                        });
+                    }).join(', ')}
+                </div>
+                
+                <h6>選択したスタッフ</h6>
+                <p><strong>${selectedStaff.length}</strong>名</p>
+                <div class="small text-muted mb-3">
+                    ${selectedStaff.join(', ')}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6>シフト詳細</h6>
+                <p><strong>種別:</strong> ${shiftTypeName}</p>
+                <p><strong>時間:</strong> ${startTime} 〜 ${endTime}</p>
+                <p><strong>既存シフトの上書き:</strong> ${overwrite ? 'する' : 'しない'}</p>
+                
+                <div class="alert alert-info mt-3">
+                    <h6 class="alert-heading">登録予定</h6>
+                    <p class="mb-0">
+                        合計 <strong>${totalShifts}</strong> 件のシフトが登録されます。
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateIndividualTimesField() {
+    const enableIndividualTimesField = document.getElementById('enable-individual-times');
+    const individualTimesField = document.getElementById('id_individual_times');
+    
+    if (!enableIndividualTimesField || !individualTimesField) return;
+    
+    const enableIndividualTimes = enableIndividualTimesField.checked;
+    let individualTimesData = {};
+    
+    if (enableIndividualTimes) {
+        selectedDates.forEach(dateStr => {
+            const startTimeEl = document.querySelector(`[data-date="${dateStr}"].individual-start-time`);
+            const endTimeEl = document.querySelector(`[data-date="${dateStr}"].individual-end-time`);
+            
+            if (startTimeEl && endTimeEl) {
+                individualTimesData[dateStr] = {
+                    start_time: startTimeEl.value,
+                    end_time: endTimeEl.value
+                };
+            }
+        });
+    }
+    
+    individualTimesField.value = JSON.stringify(individualTimesData);
+}
+
+function validateFormBeforeSubmit() {
+    console.log('DEBUG: Form submission started');
+    console.log('DEBUG: selectedDates =', selectedDates);
+    
+    const selectedDatesField = document.getElementById('id_selected_dates');
+    console.log('DEBUG: selectedDatesField value =', selectedDatesField ? selectedDatesField.value : 'null');
+    
+    const selectedStaff = document.querySelectorAll('input[name="{{ form.staff.html_name }}"]:checked');
+    console.log('DEBUG: selectedStaff count =', selectedStaff.length);
+    
+    const shiftTypeField = document.getElementById('id_shift_type');
+    console.log('DEBUG: shiftType =', shiftTypeField ? shiftTypeField.value : 'null');
+    
+    const startTimeField = document.getElementById('id_start_time');
+    console.log('DEBUG: startTime =', startTimeField ? startTimeField.value : 'null');
+    
+    const endTimeField = document.getElementById('id_end_time');
+    console.log('DEBUG: endTime =', endTimeField ? endTimeField.value : 'null');
+    
+    // 基本的なバリデーション
+    if (selectedDates.length === 0) {
+        alert('日付を選択してください。');
+        return false;
+    }
+    
+    if (selectedStaff.length === 0) {
+        alert('スタッフを選択してください。');
+        return false;
+    }
+    
+    if (!shiftTypeField || !shiftTypeField.value) {
+        alert('シフト種別を選択してください。');
+        return false;
+    }
+    
+    console.log('DEBUG: Form validation passed');
+    return true;
+}
+</script>
+{% endblock %}

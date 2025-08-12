@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}棚区画一覧 - 水耕栽培管理{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー部分 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="header-section">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <div class="mb-3 mb-md-0">
+                        <h1 class="casual-title">
+                            🌱 棚区画一覧
+                        </h1>
+                        {% if selected_layout %}
+                            <p class="casual-subtitle">{{ selected_layout.name }} のレイアウトを表示中</p>
+                        {% else %}
+                            <p class="casual-subtitle">みんなの栽培スペースをチェックしよう！</p>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary">
+                            <i class="fas fa-plus me-1"></i>
+                            <span class="d-none d-sm-inline">新しい棚を追加</span>
+                            <span class="d-inline d-sm-none">棚追加</span>
+                        </a>
+                        {% if selected_layout %}
+                            <a href="{% url 'cultivation:layout_detail' selected_layout.id %}" class="btn-casual btn-casual-info">
+                                <i class="fas fa-info-circle me-1"></i>
+                                <span class="d-none d-sm-inline">レイアウト詳細</span>
+                                <span class="d-inline d-sm-none">詳細</span>
+                            </a>
+                            <a href="{% url 'cultivation:layout_list' %}" class="btn-casual btn-casual-secondary">
+                                <i class="fas fa-list me-1"></i>
+                                <span class="d-none d-sm-inline">一覧へ</span>
+                                <span class="d-inline d-sm-none">一覧</span>
+                            </a>
+                        {% else %}
+                            <a href="{% url 'cultivation:plot_grid' %}?mode=floor_plan" class="btn-casual btn-casual-warning">
+                                <i class="fas fa-map me-1"></i>
+                                <span class="d-none d-sm-inline">2D平面図</span>
+                                <span class="d-inline d-sm-none">2D表示</span>
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            <span class="d-none d-sm-inline">栽培管理へ</span>
+                            <span class="d-inline d-sm-none">戻る</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 統計情報 -->
+    <div class="row mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-total">
+                <div class="stat-icon">🏠</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.total_plots }}</div>
+                    <div class="stat-label">総棚数</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-growing">
+                <div class="stat-icon">🌿</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.growing_count }}</div>
+                    <div class="stat-label">栽培中</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 mt-3 mt-md-0">
+            <div class="stat-card stat-card-harvest">
+                <div class="stat-icon">🥬</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.harvest_ready_count }}</div>
+                    <div class="stat-label">収穫可能</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 mt-3 mt-md-0">
+            <div class="stat-card stat-card-empty">
+                <div class="stat-icon">✨</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.empty_count }}</div>
+                    <div class="stat-label">空きスペース</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 棚グリッド -->
+    <div class="row">
+        <div class="col-12">
+            <div class="grid-container">
+                <div class="grid-header">
+                    <h3 class="grid-title">
+                        <i class="fas fa-seedling me-2"></i>栽培マップ
+                    </h3>
+                    <p class="grid-subtitle">クリックして詳細を見てみよう！</p>
+                </div>
+                
+                <div class="plot-grid-wrapper">
+                    <div class="plot-grid">
+                        {% for row in grid %}
+                            <div class="grid-row">
+                                {% for cell in row %}
+                                    {% if cell %}
+                                        <div class="grid-cell {% if cell.crop %}has-crop{% endif %}" 
+                                             data-plot-url="{% url 'cultivation:plot_detail' cell.plot.id %}"
+                                             style="cursor: pointer; background-color: {{ cell.status_color }}; border: 2px solid {{ cell.status_color|add:'cc' }};"
+                                             title="{% if cell.crop %}{{ cell.crop.variety }} を栽培中{% else %}空きスペース{% endif %} ({{ cell.level_count }}段)"
+                                            <div class="cell-header">
+                                                <span class="shelf-number">{{ cell.plot.shelf_number }}</span>
+                                                <span class="level-info" style="font-size: 0.8em; color: #666;">{{ cell.level_count }}段</span>
+                                                {% if cell.crop %}
+                                                    <span class="crop-status">🌱</span>
+                                                {% else %}
+                                                    <span class="crop-status">💤</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if cell.crop %}
+                                                <div class="crop-info">
+                                                    <div class="crop-name">{{ cell.crop.variety }}</div>
+                                                    {% if cell.crop.days_until_harvest %}
+                                                        <div class="days-info">
+                                                            {% if cell.crop.days_until_harvest > 0 %}
+                                                                あと{{ cell.crop.days_until_harvest }}日
+                                                            {% elif cell.crop.days_until_harvest == 0 %}
+                                                                収穫時期！
+                                                            {% else %}
+                                                                期限超過
+                                                            {% endif %}
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            {% else %}
+                                                <div class="empty-info">
+                                                    <div class="empty-text">空きスペース</div>
+                                                    <div class="empty-subtext">何を植えようかな？</div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    {% else %}
+                                        <div class="grid-cell empty-space">
+                                            <div class="empty-space-content">
+                                                <span class="empty-icon">⬜</span>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- 凡例 -->
+                <div class="grid-legend">
+                    <h4 class="legend-title">
+                        <i class="fas fa-info-circle me-2"></i>見方
+                    </h4>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <div class="legend-box has-crop-sample">
+                                <span class="crop-status">🌱</span>
+                            </div>
+                            <span>栽培中</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box empty-sample">
+                                <span class="crop-status">💤</span>
+                            </div>
+                            <span>空きスペース</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box harvest-sample">
+                                <span class="crop-status">🥬</span>
+                            </div>
+                            <span>収穫可能</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box overdue-sample">
+                                <span class="crop-status">⚠️</span>
+                            </div>
+                            <span>期限超過</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 空の状態 -->
+    {% if not grid or not grid.0 %}
+    <div class="row">
+        <div class="col-12">
+            <div class="empty-state">
+                <div class="empty-state-icon">🌱</div>
+                <h3 class="empty-state-title">まだ棚がありません</h3>
+                <p class="empty-state-text">
+                    最初の栽培棚を作って、水耕栽培を始めましょう！
+                </p>
+                <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary btn-lg">
+                    <i class="fas fa-plus me-2"></i>最初の棚を作る
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 棚グリッドのクリックイベント
+    const gridCells = document.querySelectorAll('.grid-cell[data-plot-url]');
+    gridCells.forEach(function(cell) {
+        cell.addEventListener('click', function() {
+            const url = this.getAttribute('data-plot-url');
+            if (url) {
+                window.location.href = url;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

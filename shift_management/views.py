@@ -4,6 +4,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Q
+from django.db import models
 from django.urls import reverse
 from django.template.loader import render_to_string
 from django import forms
@@ -15,6 +16,16 @@ import csv
 from io import StringIO
 import tempfile
 import os
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 try:
     from weasyprint import HTML, CSS
     WEASYPRINT_AVAILABLE = True
@@ -951,12 +962,21 @@ def template_list(request):
     """シフトテンプレート一覧表示（管理者権限のみ）"""
     # 管理者権限チェック
     current_staff = get_staff_for_user(request.user)
+    current_organization = get_current_organization(request)
+    
     if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
         messages.error(request, 'テンプレート管理画面へのアクセス権限がありません。')
         return redirect('shift_management:staff_view')
     
-    templates = ShiftTemplate.objects.all()
-    return render(request, 'shift_management/template_list.html', {'templates': templates})
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    templates = ShiftTemplate.objects.filter(organization=current_organization)
+    return render(request, 'shift_management/template_list.html', {
+        'templates': templates,
+        'current_organization': current_organization
+    })
 
 @login_required
 def template_create(request):
@@ -1112,16 +1132,24 @@ def shift_export(request):
     """シフト表の印刷・エクスポート（新規追加）（管理者権限のみ）"""
     # 管理者権限チェック
     current_staff = get_staff_for_user(request.user)
+    current_organization = get_current_organization(request)
+    
+    
     if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
         messages.error(request, 'シフトエクスポート権限がありません。')
         return redirect('shift_management:staff_view')
+        
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+        
     if request.method == 'POST':
-        form = ShiftExportForm(request.POST)
+        form = ShiftExportForm(request.POST, organization=current_organization)
         if form.is_valid():
             start_date = form.cleaned_data['start_date']
             end_date = form.cleaned_data['end_date']
             selected_staff = form.cleaned_data['staff']
-            format_type = form.cleaned_data['format_type']
+            format_type = form.cleaned_data['format']
             
             # スタッフフィルター
             if selected_staff:
@@ -1145,66 +1173,196 @@ def shift_export(request):
             
             # 出力形式に応じた処理
             if format_type == 'pdf':
-                # PDF出力機能の利用可否をチェック
-                if not WEASYPRINT_AVAILABLE:
-                    messages.error(request, 'PDF出力機能は現在利用できません。CSVでの出力をお試しください。')
-                    return redirect('shift_management:shift_export')
-                
+                # ReportLabを使用してPDF出力
                 try:
-                    # PDF出力
-                    context = {
-                        'start_date': start_date,
-                        'end_date': end_date,
-                        'staff_list': staff_list,
-                        'date_list': date_list,
-                        'shifts': shifts,
-                    }
+                    from reportlab.pdfgen import canvas
+                    from reportlab.lib.pagesizes import A4, landscape
+                    from reportlab.lib import colors
+                    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+                    from reportlab.lib.units import inch
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    from reportlab.pdfbase import pdfmetrics
+                    from reportlab.pdfbase.ttfonts import TTFont
+                    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+                    import os
                     
-                    # HTMLテンプレートをレンダリング
-                    html_string = render_to_string('shift_management/shift_pdf_template.html', context)
+                    # 日本語フォントの登録
+                    japanese_font = 'Helvetica'
+                    japanese_font_bold = 'Helvetica-Bold'
                     
-                    # WeasyPrintでPDF生成
-                    html = HTML(string=html_string)
-                    css = CSS(string='''
-                        @page {
-                            size: A4 landscape;
-                            margin: 1cm;
-                        }
-                        body {
-                            font-family: sans-serif;
-                        }
-                        table {
-                            width: 100%;
-                            border-collapse: collapse;
-                        }
-                        th, td {
-                            border: 1px solid #ddd;
-                            padding: 4px;
-                            text-align: center;
-                            font-size: 12px;
-                        }
-                        th {
-                            background-color: #f2f2f2;
-                        }
-                        .shift-entry {
-                            margin-bottom: 2px;
-                            padding: 2px;
-                            border-radius: 3px;
-                        }
-                    ''')
+                    # 様々な日本語フォントを試行
+                    font_paths = [
+                        # macOS
+                        '/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',
+                        '/Library/Fonts/ヒラギノ角ゴ ProN W3.otf',
+                        '/System/Library/Fonts/Arial Unicode MS.ttf',
+                        # Windows
+                        'C:/Windows/Fonts/msgothic.ttc',
+                        'C:/Windows/Fonts/msgothic.ttf',
+                        'C:/Windows/Fonts/ArialUni.ttf',
+                        # Linux
+                        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+                        # プロジェクトローカル
+                        'static/fonts/NotoSansJP-Regular.ttf',
+                    ]
                     
-                    # PDFファイル生成
-                    pdf_file = html.write_pdf(stylesheets=[css])
+                    # TTFフォントを試行
+                    for font_path in font_paths:
+                        try:
+                            if os.path.exists(font_path):
+                                pdfmetrics.registerFont(TTFont('Japanese', font_path))
+                                japanese_font = 'Japanese'
+                                japanese_font_bold = 'Japanese'
+                                break
+                        except Exception as e:
+                            continue
+                    
+                    # TTFフォントが見つからない場合はCIDフォントを試行
+                    if japanese_font == 'Helvetica':
+                        try:
+                            # HeiseiMin-W3 (明朝体)
+                            pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
+                            japanese_font = 'HeiseiMin-W3'
+                            japanese_font_bold = 'HeiseiMin-W3'
+                        except:
+                            try:
+                                # HeiseiKakuGo-W5 (ゴシック体)
+                                pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+                                japanese_font = 'HeiseiKakuGo-W5'
+                                japanese_font_bold = 'HeiseiKakuGo-W5'
+                            except:
+                                pass
+                    
+                    # PDFファイル作成（マージンを最小化して最大限の幅を活用）
+                    buffer = BytesIO()
+                    doc = SimpleDocTemplate(
+                        buffer, 
+                        pagesize=landscape(A4),
+                        topMargin=30,
+                        bottomMargin=30,
+                        leftMargin=20,
+                        rightMargin=20
+                    )
+                    
+                    # Paragraphスタイルを作成
+                    styles = getSampleStyleSheet()
+                    cell_style = ParagraphStyle(
+                        'CellText',
+                        parent=styles['Normal'],
+                        fontName=japanese_font,
+                        fontSize=7,
+                        leading=8,  # 行間
+                        alignment=1,  # 中央寄せ
+                        wordWrap='CJK',
+                        splitLongWords=True,
+                    )
+                    
+                    # テーブルデータを作成
+                    data = []
+                    
+                    # ヘッダー行（横長に適した表示）
+                    header = ['スタッフ名']
+                    for date in date_list:
+                        # 日付表示を横長レイアウトに最適化
+                        day_name = date.strftime('%a')
+                        if day_name == 'Monday': day_name = '月'
+                        elif day_name == 'Tuesday': day_name = '火' 
+                        elif day_name == 'Wednesday': day_name = '水'
+                        elif day_name == 'Thursday': day_name = '木'
+                        elif day_name == 'Friday': day_name = '金'
+                        elif day_name == 'Saturday': day_name = '土'
+                        elif day_name == 'Sunday': day_name = '日'
+                        header.append(f"{date.strftime('%m/%d')}\n({day_name})")
+                    data.append(header)
+                    
+                    # データ行
+                    for staff in staff_list:
+                        # 横長レイアウトではスタッフ名をより長く表示可能
+                        staff_name = staff.name[:12] if len(staff.name) > 12 else staff.name
+                        row = [Paragraph(staff_name, cell_style)]
+                        for date in date_list:
+                            day_shifts = [s for s in shifts if s.staff_id == staff.id and s.date == date]
+                            if day_shifts:
+                                shift_texts = []
+                                for shift in day_shifts:
+                                    shift_type_name = shift.shift_type.name if shift.shift_type else "未設定"
+                                    # 横長レイアウトでは制限を緩和
+                                    if len(shift_type_name) > 6:
+                                        shift_type_name = shift_type_name[:6] + ".."
+                                    # 時間表示
+                                    time_text = f"{shift.start_time.strftime('%H:%M')}-{shift.end_time.strftime('%H:%M')}"
+                                    shift_texts.append(f"{shift_type_name}<br/>{time_text}")
+                                # 複数シフトがある場合は区切り線
+                                if len(day_shifts) > 1:
+                                    cell_content = '<br/>---<br/>'.join(shift_texts)
+                                else:
+                                    cell_content = '<br/>'.join(shift_texts)
+                                row.append(Paragraph(cell_content, cell_style))
+                            else:
+                                row.append(Paragraph("-", cell_style))
+                        data.append(row)
+                    
+                    # 列数に応じてテーブル幅を動的に調整
+                    num_cols = len(data[0]) if data else 1
+                    
+                    # 横長レイアウトの利点を最大限活用
+                    page_width = landscape(A4)[0]  # 約842pt
+                    page_height = landscape(A4)[1]  # 約595pt
+                    margin = 40  # マージンを狭く（20pt * 2）
+                    available_width = page_width - margin
+                    
+                    # より多くの列に対応するため列幅を最適化
+                    staff_col_width = 70  # スタッフ名を少し広く
+                    if num_cols > 1:
+                        remaining_width = available_width - staff_col_width
+                        date_col_width = remaining_width / (num_cols - 1)
+                        
+                        # 多数の列がある場合は自動調整
+                        if date_col_width < 25:
+                            # 列が多すぎる場合はスタッフ名を短縮
+                            staff_col_width = 50
+                            remaining_width = available_width - staff_col_width
+                            date_col_width = remaining_width / (num_cols - 1)
+                            # それでも狭い場合の最小値
+                            date_col_width = max(date_col_width, 20)
+                    else:
+                        date_col_width = 50
+                    
+                    col_widths = [staff_col_width] + [date_col_width] * (num_cols - 1)
+                    
+                    # テーブル作成（行の高さを自動調整）
+                    table = Table(data, colWidths=col_widths, repeatRows=1)
+                    table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('FONTNAME', (0, 0), (-1, 0), japanese_font_bold),
+                        ('FONTSIZE', (0, 0), (-1, 0), 9),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        # 行の背景色を交互に設定
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                    ]))
+                    
+                    # PDFを構築
+                    elements = [table]
+                    doc.build(elements)
+                    buffer.seek(0)
                     
                     # レスポンス作成
-                    response = HttpResponse(pdf_file, content_type='application/pdf')
+                    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
                     filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.pdf'
                     response['Content-Disposition'] = f'attachment; filename="{filename}"'
                     
                     return response
-                    
-                except Exception as e:
-                    messages.error(request, f'PDF生成中にエラーが発生しました: {str(e)}。CSVでの出力をお試しください。')
+                except ImportError:
+                    messages.error(request, 'PDF出力機能は現在利用できません。CSVでの出力をお試しください。')
                     return redirect('shift_management:shift_export')
                 
             elif format_type == 'csv':
@@ -1253,8 +1411,8 @@ def shift_export(request):
         form = ShiftExportForm(initial={
             'start_date': start_date,
             'end_date': end_date,
-            'format_type': 'pdf'
-        })
+            'format': 'pdf'
+        }, organization=current_organization)
     
     return render(request, 'shift_management/shift_export.html', {'form': form})
 
@@ -2386,6 +2544,12 @@ def organization_select(request):
             request.session['current_organization_id'] = organization.id
             request.session['current_organization_name'] = organization.name
             messages.success(request, f'組織「{organization.name}」を選択しました。')
+            
+            # 次のページが指定されている場合はそこにリダイレクト
+            next_page = request.POST.get('next') or request.GET.get('next')
+            if next_page:
+                return redirect(next_page)
+            
             return redirect('shift_management:calendar')
     else:
         form = OrganizationSelectForm()
@@ -2677,6 +2841,7 @@ def shift_proposal_list(request):
 def shift_proposal_create(request):
     """シフト打診作成（管理者権限のみ）"""
     current_staff = get_staff_for_user(request.user)
+    current_organization = get_current_organization(request)
     
     # 管理者権限チェック（スーパーユーザーまたはmanager権限）
     if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
@@ -2684,7 +2849,7 @@ def shift_proposal_create(request):
         return redirect('shift_management:shift_proposal_list')
     
     if request.method == 'POST':
-        form = ShiftProposalForm(request.POST)
+        form = ShiftProposalForm(request.POST, organization=current_organization)
         if form.is_valid():
             proposal = form.save(commit=False)
             proposal.proposed_by = request.user
@@ -2703,15 +2868,7 @@ def shift_proposal_create(request):
             messages.success(request, f'{proposal.proposed_to.name}さんにシフト打診を送信しました。')
             return redirect('shift_management:shift_proposal_list')
     else:
-        form = ShiftProposalForm()
-        # 組織フィルタリング（実際にシフト勤務をするスタッフのみ対象）
-        if current_staff and current_staff.organization:
-            form.fields['proposed_to'].queryset = Staff.objects.filter(
-                is_active=True,
-                approval_status='approved',
-                organization=current_staff.organization,
-                role_type__in=['staff', 'part_time']  # 職員・アルバイトのみ
-            )
+        form = ShiftProposalForm(organization=current_organization)
     
     return render(request, 'shift_management/shift_proposal_form.html', {
         'form': form, 'is_create': True
@@ -3019,3 +3176,1280 @@ def organization_switch(request):
             'success': False,
             'error': str(e)
         })
+
+
+# ===== 発注管理機能ビュー =====
+
+from django.db import transaction as db_transaction
+from .forms import (
+    ItemForm, TransactionForm, OrderForm, OrderStatusForm,
+    InvoiceForm, InvoiceItemForm, InvoiceStatusForm,
+    DeliveryNoteForm, DeliveryNoteItemForm, DeliveryNoteStatusForm
+)
+from .models import Item, Inventory, Transaction, Order, Invoice, InvoiceItem, DeliveryNote, DeliveryNoteItem
+from .utils import (
+    has_inventory_permission, create_audit_log, get_current_organization,
+    log_model_change, InventoryPermissionMixin
+)
+
+@login_required
+def inventory_dashboard(request):
+    """在庫管理ダッシュボード"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    # 在庫閲覧権限をチェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '在庫管理機能を利用する権限がありません。')
+        return redirect('shift_management:calendar')
+    
+    # 組織に基づいて品目と在庫をフィルタリング
+    items = Item.objects.filter(organization=current_organization, is_active=True)
+    
+    # 在庫データを取得（品目と在庫情報を結合）
+    inventory_data = []
+    low_stock_items = []
+    
+    for item in items:
+        inventory, created = Inventory.objects.get_or_create(
+            item=item,
+            defaults={'current_stock': 0}
+        )
+        
+        inventory_info = {
+            'item': item,
+            'inventory': inventory,
+            'is_low_stock': item.is_low_stock,
+        }
+        inventory_data.append(inventory_info)
+        
+        if item.is_low_stock:
+            low_stock_items.append(item)
+    
+    context = {
+        'inventory_data': inventory_data,
+        'low_stock_items': low_stock_items,
+        'current_organization': current_organization,
+    }
+    
+    return render(request, 'shift_management/inventory_dashboard.html', context)
+
+
+@login_required
+def item_list(request):
+    """品目一覧"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    items = Item.objects.filter(organization=current_organization, is_active=True)
+    
+    return render(request, 'shift_management/item_list.html', {
+        'items': items,
+        'current_organization': current_organization,
+    })
+
+
+@login_required
+def item_create(request):
+    """品目作成"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    # 編集権限をチェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '品目を作成する権限がありません。')
+        return redirect('shift_management:inventory_dashboard')
+    
+    if request.method == 'POST':
+        form = ItemForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.organization = current_organization
+            item.save()
+            
+            # 在庫レコードを作成
+            Inventory.objects.create(item=item, current_stock=0)
+            
+            # 監査ログを記録
+            log_model_change(
+                user=request.user,
+                organization=current_organization,
+                action='item_create',
+                instance=item,
+                request=request
+            )
+            
+            messages.success(request, f'品目「{item.item_name}」を登録しました。')
+            return redirect('shift_management:item_list')
+    else:
+        form = ItemForm(organization=current_organization)
+    
+    return render(request, 'shift_management/item_form.html', {
+        'form': form,
+        'title': '品目登録',
+        'is_create': True,
+    })
+
+
+@login_required
+def item_edit(request, pk):
+    """品目編集"""
+    current_organization = get_current_organization(request)
+    item = get_object_or_404(Item, pk=pk, organization=current_organization)
+    
+    # 編集権限をチェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '品目を編集する権限がありません。')
+        return redirect('shift_management:inventory_dashboard')
+    
+    if request.method == 'POST':
+        form = ItemForm(request.POST, instance=item, organization=current_organization)
+        if form.is_valid():
+            # 変更前のデータを保存
+            old_values = {
+                'item_name': item.item_name,
+                'item_code': item.item_code,
+                'unit': item.unit,
+                'threshold': item.threshold,
+                'order_url': item.order_url,
+                'is_active': item.is_active
+            }
+            
+            form.save()
+            
+            # 監査ログを記録
+            log_model_change(
+                user=request.user,
+                organization=current_organization,
+                action='item_update',
+                instance=item,
+                old_values=old_values,
+                request=request
+            )
+            
+            messages.success(request, f'品目「{item.item_name}」を更新しました。')
+            return redirect('shift_management:item_list')
+    else:
+        form = ItemForm(instance=item, organization=current_organization)
+    
+    return render(request, 'shift_management/item_form.html', {
+        'form': form,
+        'item': item,
+        'title': '品目編集',
+        'is_create': False,
+    })
+
+
+@login_required
+def transaction_create(request):
+    """入出庫処理"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    # 編集権限をチェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '入出庫処理を実行する権限がありません。')
+        return redirect('shift_management:inventory_dashboard')
+    
+    if request.method == 'POST':
+        form = TransactionForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            with db_transaction.atomic():
+                transaction_obj = form.save(commit=False)
+                transaction_obj.user = request.user
+                transaction_obj.save()
+                
+                # 在庫数を更新
+                inventory, created = Inventory.objects.get_or_create(
+                    item=transaction_obj.item,
+                    defaults={'current_stock': 0}
+                )
+                
+                old_stock = inventory.current_stock
+                
+                if transaction_obj.transaction_type == 'in':
+                    inventory.current_stock += transaction_obj.quantity
+                elif transaction_obj.transaction_type == 'out':
+                    inventory.current_stock = max(0, inventory.current_stock - transaction_obj.quantity)
+                elif transaction_obj.transaction_type == 'adjustment':
+                    inventory.current_stock = transaction_obj.quantity
+                
+                inventory.save()
+                
+                # 監査ログを記録
+                action_map = {
+                    'in': 'inventory_in',
+                    'out': 'inventory_out',
+                    'adjustment': 'inventory_adjust'
+                }
+                
+                create_audit_log(
+                    user=request.user,
+                    organization=current_organization,
+                    action=action_map[transaction_obj.transaction_type],
+                    target_obj=transaction_obj.item,
+                    description=f"{transaction_obj.item.item_name}の{transaction_obj.get_transaction_type_display()}: {old_stock}{transaction_obj.item.unit} → {inventory.current_stock}{transaction_obj.item.unit}",
+                    old_values={'stock': old_stock},
+                    new_values={'stock': inventory.current_stock, 'quantity': transaction_obj.quantity},
+                    request=request
+                )
+            
+            messages.success(request, f'{transaction_obj.get_transaction_type_display()}処理が完了しました。')
+            return redirect('shift_management:inventory_dashboard')
+    else:
+        form = TransactionForm(organization=current_organization)
+    
+    return render(request, 'shift_management/transaction_form.html', {
+        'form': form,
+        'title': '入出庫処理',
+    })
+
+
+@login_required
+def order_list(request):
+    """発注履歴一覧"""
+    from django.urls import reverse
+    current_organization = get_current_organization(request)
+    
+    print(f"[DEBUG] order_list - current_organization: {current_organization}")  # デバッグログ
+    print(f"[DEBUG] order_list - session org_id: {request.session.get('current_organization_id')}")  # デバッグログ
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect(f'{reverse("shift_management:organization_select")}?next={reverse("shift_management:order_list")}')
+    
+    orders = Order.objects.filter(
+        item__organization=current_organization
+    ).select_related('item', 'user').order_by('-order_date')
+    
+    return render(request, 'shift_management/order_list.html', {
+        'orders': orders,
+        'current_organization': current_organization,
+    })
+
+
+@login_required
+def order_create(request):
+    """発注登録"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    if request.method == 'POST':
+        form = OrderForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            order = form.save(commit=False)
+            order.user = request.user
+            # 発注先URLが未入力で品目にURLが設定されている場合は自動設定
+            if not order.supplier_url and order.item.order_url:
+                order.supplier_url = order.item.order_url
+            order.save()
+            
+            messages.success(request, f'品目「{order.item.item_name}」の発注を登録しました。')
+            return redirect('shift_management:order_list')
+    else:
+        form = OrderForm(organization=current_organization)
+    
+    return render(request, 'shift_management/order_form.html', {
+        'form': form,
+        'title': '発注登録',
+    })
+
+
+@login_required
+def order_update_status(request, pk):
+    """発注ステータス更新"""
+    current_organization = get_current_organization(request)
+    order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
+    
+    if request.method == 'POST':
+        form = OrderStatusForm(request.POST, instance=order)
+        if form.is_valid():
+            order = form.save()
+            
+            # 納品済みになった場合は自動入庫処理
+            if order.status == 'delivered' and order.delivery_date:
+                with db_transaction.atomic():
+                    # 入庫トランザクション作成
+                    Transaction.objects.create(
+                        item=order.item,
+                        transaction_type='in',
+                        quantity=order.ordered_quantity,
+                        user=request.user,
+                        notes=f'発注納品による自動入庫 (発注ID: {order.id})'
+                    )
+                    
+                    # 在庫数更新
+                    inventory, created = Inventory.objects.get_or_create(
+                        item=order.item,
+                        defaults={'current_stock': 0}
+                    )
+                    inventory.current_stock += order.ordered_quantity
+                    inventory.save()
+                
+                messages.success(request, f'発注ステータスを更新し、自動入庫処理を実行しました。')
+            else:
+                messages.success(request, f'発注ステータスを更新しました。')
+            
+            return redirect('shift_management:order_list')
+    else:
+        form = OrderStatusForm(instance=order)
+    
+    return render(request, 'shift_management/order_status_form.html', {
+        'form': form,
+        'order': order,
+        'title': '発注ステータス更新',
+    })
+
+
+@login_required
+def transaction_history(request):
+    """入出庫履歴"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    transactions = Transaction.objects.filter(
+        item__organization=current_organization
+    ).select_related('item', 'user').order_by('-transaction_date')
+    
+    # ページネーション
+    from django.core.paginator import Paginator
+    paginator = Paginator(transactions, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'shift_management/transaction_history.html', {
+        'page_obj': page_obj,
+        'current_organization': current_organization,
+    })
+
+
+# ===== 請求書・納品書発行機能ビュー =====
+
+@login_required
+def invoice_list(request):
+    """請求書一覧"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    invoices = Invoice.objects.filter(
+        organization=current_organization
+    ).select_related('created_by').order_by('-issue_date')
+    
+    # 検索・フィルタリング
+    search = request.GET.get('search')
+    status_filter = request.GET.get('status')
+    
+    if search:
+        from django.db import models as django_models
+        invoices = invoices.filter(
+            django_models.Q(invoice_number__icontains=search) |
+            django_models.Q(bill_to_name__icontains=search)
+        )
+    
+    if status_filter:
+        invoices = invoices.filter(status=status_filter)
+    
+    # ページネーション
+    from django.core.paginator import Paginator
+    paginator = Paginator(invoices, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'shift_management/invoice_list.html', {
+        'page_obj': page_obj,
+        'current_organization': current_organization,
+        'search': search,
+        'status_filter': status_filter,
+        'status_choices': Invoice.STATUS_CHOICES,
+    })
+
+
+@login_required
+def invoice_create(request):
+    """請求書作成"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    if request.method == 'POST':
+        form = InvoiceForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            with db_transaction.atomic():
+                invoice = form.save(commit=False)
+                invoice.organization = current_organization
+                invoice.created_by = request.user
+                invoice.save()
+                
+                # 明細データを処理
+                from decimal import Decimal
+                item_count = int(request.POST.get('item_count', 0))
+                subtotal = Decimal('0')
+                
+                for i in range(item_count):
+                    item_name = request.POST.get(f'items-{i}-item_name')
+                    item_description = request.POST.get(f'items-{i}-item_description')
+                    quantity = request.POST.get(f'items-{i}-quantity')
+                    unit = request.POST.get(f'items-{i}-unit')
+                    unit_price = request.POST.get(f'items-{i}-unit_price')
+                    
+                    if item_name and quantity and unit_price:
+                        try:
+                            quantity_decimal = Decimal(str(quantity))
+                            unit_price_decimal = Decimal(str(unit_price))
+                            amount = quantity_decimal * unit_price_decimal
+                            
+                            InvoiceItem.objects.create(
+                                invoice=invoice,
+                                item_name=item_name,
+                                item_description=item_description or '',
+                                quantity=quantity_decimal,
+                                unit=unit or '個',
+                                unit_price=unit_price_decimal,
+                                amount=amount
+                            )
+                            subtotal += amount
+                        except (ValueError, TypeError):
+                            continue
+                
+                # 請求書の金額を更新
+                invoice.subtotal = subtotal
+                invoice.tax_amount = subtotal * (Decimal(str(invoice.tax_rate)) / Decimal('100'))
+                invoice.total_amount = invoice.subtotal + invoice.tax_amount
+                invoice.save()
+                
+                messages.success(request, f'請求書「{invoice.invoice_number}」を作成しました。')
+                return redirect('shift_management:invoice_detail', pk=invoice.pk)
+    else:
+        form = InvoiceForm(organization=current_organization)
+    
+    return render(request, 'shift_management/invoice_form.html', {
+        'form': form,
+        'current_organization': current_organization,
+        'title': '請求書作成',
+    })
+
+
+@login_required
+def invoice_detail(request, pk):
+    """請求書詳細"""
+    current_organization = get_current_organization(request)
+    invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    
+    return render(request, 'shift_management/invoice_detail.html', {
+        'invoice': invoice,
+        'current_organization': current_organization,
+    })
+
+
+@login_required
+def invoice_edit(request, pk):
+    """請求書編集"""
+    current_organization = get_current_organization(request)
+    invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    
+    # 請求済み・入金済みの請求書は編集不可
+    if invoice.status in ['paid']:
+        messages.error(request, '入金済みの請求書は編集できません。')
+        return redirect('shift_management:invoice_detail', pk=invoice.pk)
+    
+    if request.method == 'POST':
+        form = InvoiceForm(request.POST, instance=invoice, organization=current_organization)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'請求書「{invoice.invoice_number}」を更新しました。')
+            return redirect('shift_management:invoice_detail', pk=invoice.pk)
+    else:
+        form = InvoiceForm(instance=invoice, organization=current_organization)
+    
+    return render(request, 'shift_management/invoice_form.html', {
+        'form': form,
+        'invoice': invoice,
+        'current_organization': current_organization,
+        'title': '請求書編集',
+    })
+
+
+@login_required
+def delivery_note_list(request):
+    """納品書一覧"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    delivery_notes = DeliveryNote.objects.filter(
+        organization=current_organization
+    ).select_related('created_by').order_by('-issue_date')
+    
+    # 検索・フィルタリング
+    search = request.GET.get('search')
+    status_filter = request.GET.get('status')
+    
+    if search:
+        from django.db import models as django_models
+        delivery_notes = delivery_notes.filter(
+            django_models.Q(delivery_number__icontains=search) |
+            django_models.Q(deliver_to_name__icontains=search)
+        )
+    
+    if status_filter:
+        delivery_notes = delivery_notes.filter(status=status_filter)
+    
+    # ページネーション
+    from django.core.paginator import Paginator
+    paginator = Paginator(delivery_notes, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'shift_management/delivery_note_list.html', {
+        'page_obj': page_obj,
+        'current_organization': current_organization,
+        'search': search,
+        'status_filter': status_filter,
+        'status_choices': DeliveryNote.STATUS_CHOICES,
+    })
+
+
+@login_required
+def delivery_note_create(request):
+    """納品書作成"""
+    current_organization = get_current_organization(request)
+    
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+    
+    if request.method == 'POST':
+        form = DeliveryNoteForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            with db_transaction.atomic():
+                delivery_note = form.save(commit=False)
+                delivery_note.organization = current_organization
+                delivery_note.created_by = request.user
+                delivery_note.save()
+                
+                # 明細データを処理
+                item_count = int(request.POST.get('item_count', 0))
+                
+                for i in range(item_count):
+                    item_name = request.POST.get(f'items-{i}-item_name')
+                    item_description = request.POST.get(f'items-{i}-item_description')
+                    quantity = request.POST.get(f'items-{i}-quantity')
+                    unit = request.POST.get(f'items-{i}-unit')
+                    delivered_quantity = request.POST.get(f'items-{i}-delivered_quantity')
+                    
+                    if item_name and quantity:
+                        try:
+                            quantity_decimal = float(quantity)
+                            delivered_quantity_decimal = float(delivered_quantity) if delivered_quantity else 0
+                            
+                            DeliveryNoteItem.objects.create(
+                                delivery_note=delivery_note,
+                                item_name=item_name,
+                                item_description=item_description or '',
+                                quantity=quantity_decimal,
+                                unit=unit or '個',
+                                delivered_quantity=delivered_quantity_decimal
+                            )
+                        except (ValueError, TypeError):
+                            continue
+                
+                messages.success(request, f'納品書「{delivery_note.delivery_number}」を作成しました。')
+                return redirect('shift_management:delivery_note_detail', pk=delivery_note.pk)
+    else:
+        form = DeliveryNoteForm(organization=current_organization)
+    
+    return render(request, 'shift_management/delivery_note_form.html', {
+        'form': form,
+        'current_organization': current_organization,
+        'title': '納品書作成',
+    })
+
+
+@login_required
+def delivery_note_detail(request, pk):
+    """納品書詳細"""
+    current_organization = get_current_organization(request)
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    
+    return render(request, 'shift_management/delivery_note_detail.html', {
+        'delivery_note': delivery_note,
+        'current_organization': current_organization,
+    })
+
+
+@login_required
+def invoice_pdf(request, pk):
+    """請求書PDF出力"""
+    try:
+        current_organization = get_current_organization(request)
+        invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+        
+        # WeasyPrintが利用可能な場合はHTML/CSSを使用
+        if WEASYPRINT_AVAILABLE:
+            return invoice_pdf_weasyprint(request, invoice)
+        
+        # PDFファイルを作成
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        
+        # 日本語フォント設定を改良
+        try:
+            font_registered = False
+            
+            # TTCファイル（Hiragino Sans）を試行
+            hiragino_path = '/System/Library/Fonts/Hiragino Sans GB.ttc'
+            if os.path.exists(hiragino_path):
+                try:
+                    # TTCファイルの場合、subfontIndex を指定
+                    pdfmetrics.registerFont(TTFont('JapaneseFont', hiragino_path, subfontIndex=0))
+                    font_registered = True
+                except Exception as e:
+                    print(f"Hiragino font registration failed: {e}")
+            
+            # 他のフォントを試行
+            if not font_registered:
+                font_paths = [
+                    '/System/Library/Fonts/Arial Unicode.ttf',
+                    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                    'C:/Windows/Fonts/msgothic.ttc',
+                    'C:/Windows/Fonts/meiryo.ttc',
+                ]
+                
+                for font_path in font_paths:
+                    if os.path.exists(font_path):
+                        try:
+                            if font_path.endswith('.ttc'):
+                                pdfmetrics.registerFont(TTFont('JapaneseFont', font_path, subfontIndex=0))
+                            else:
+                                pdfmetrics.registerFont(TTFont('JapaneseFont', font_path))
+                            font_registered = True
+                            break
+                        except Exception as e:
+                            print(f"Font registration failed for {font_path}: {e}")
+                            continue
+            
+            # フォント名を設定
+            font_name = 'JapaneseFont' if font_registered else 'Helvetica'
+            if font_registered:
+                print(f"Japanese font registered successfully: {font_name}")
+            else:
+                print("No Japanese font registered, using Helvetica")
+            
+        except Exception as e:
+            print(f"Font setup error: {e}")
+            font_name = 'Helvetica'
+        
+        # スタイルシートを取得
+        styles = getSampleStyleSheet()
+        
+        # 日本語対応スタイル設定
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName=font_name,
+        )
+        
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName=font_name,
+        )
+        
+        # PDFコンテンツを構築
+        story = []
+        
+        # タイトル
+        story.append(Paragraph("請求書", title_style))
+        story.append(Spacer(1, 20))
+        
+        # 請求書情報
+        invoice_info = [
+            ['請求書番号:', invoice.invoice_number],
+            ['発行日:', invoice.issue_date.strftime('%Y年%m月%d日')],
+            ['支払期限:', invoice.due_date.strftime('%Y年%m月%d日')],
+            ['', ''],
+        ]
+        
+        invoice_table = Table(invoice_info, colWidths=[100, 200])
+        invoice_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ]))
+        story.append(invoice_table)
+        story.append(Spacer(1, 20))
+        
+        # 請求先情報
+        heading3_style = ParagraphStyle(
+            'CustomHeading3',
+            parent=styles['Heading3'],
+            fontName=font_name,
+        )
+        story.append(Paragraph("請求先:", heading3_style))
+        bill_to_info = f"""
+        {invoice.bill_to_name}<br/>
+        {invoice.bill_to_address}<br/>
+        """
+        if invoice.bill_to_contact:
+            bill_to_info += f"担当者: {invoice.bill_to_contact}<br/>"
+        if invoice.bill_to_phone:
+            bill_to_info += f"TEL: {invoice.bill_to_phone}<br/>"
+        if invoice.bill_to_email:
+            bill_to_info += f"Email: {invoice.bill_to_email}<br/>"
+        
+        story.append(Paragraph(bill_to_info, normal_style))
+        story.append(Spacer(1, 20))
+        
+        # 請求明細
+        story.append(Paragraph("請求明細:", heading3_style))
+        
+        # 明細テーブルデータを作成
+        data = [['品目名', '説明', '数量', '単位', '単価', '金額']]
+        
+        for item in invoice.items.all():
+            data.append([
+                item.item_name,
+                item.item_description or '-',
+                f"{item.quantity:,.0f}",
+                item.unit,
+                f"¥{item.unit_price:,.0f}",
+                f"¥{item.amount:,.0f}"
+            ])
+        
+        # 合計行を追加
+        data.extend([
+            ['', '', '', '', '小計', f"¥{invoice.subtotal:,.0f}"],
+            ['', '', '', '', f'消費税({invoice.tax_rate}%)', f"¥{invoice.tax_amount:,.0f}"],
+            ['', '', '', '', '合計', f"¥{invoice.total_amount:,.0f}"]
+        ])
+        
+        # テーブルを作成
+        table = Table(data, colWidths=[80, 100, 40, 30, 60, 60])
+        table.setStyle(TableStyle([
+            # ヘッダー
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), font_name),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            
+            # データ行
+            ('ALIGN', (2, 1), (2, -4), 'RIGHT'),  # 数量列
+            ('ALIGN', (4, 1), (-1, -1), 'RIGHT'),  # 単価・金額列
+            ('FONTNAME', (0, 1), (-1, -4), font_name),
+            
+            # 合計行
+            ('FONTNAME', (0, -3), (-1, -1), font_name),
+            ('BACKGROUND', (0, -3), (-1, -1), colors.lightgrey),
+            
+            # ボーダー
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        
+        story.append(table)
+        story.append(Spacer(1, 20))
+        
+        # 備考
+        if invoice.notes:
+            story.append(Paragraph("備考:", styles['Heading3']))
+            story.append(Paragraph(invoice.notes, normal_style))
+        
+        # PDFを生成
+        doc.build(story)
+        buffer.seek(0)
+        
+        # HTTPレスポンスを作成
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.invoice_number}.pdf"'
+        
+        return response
+        
+    except Exception as e:
+        messages.error(request, f'PDF生成エラー: {str(e)}')
+        return redirect('shift_management:invoice_detail', pk=pk)
+
+
+def invoice_pdf_weasyprint(request, invoice):
+    """WeasyPrint版請求書PDF出力"""
+    from django.template.loader import render_to_string
+    
+    # HTMLテンプレートをレンダリング
+    html_content = render_to_string('shift_management/invoice_pdf_template.html', {
+        'invoice': invoice,
+        'items': invoice.items.all(),
+    })
+    
+    # CSSスタイル
+    css_content = """
+    @page {
+        size: A4;
+        margin: 2cm;
+    }
+    
+    body {
+        font-family: "Hiragino Sans GB", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #333;
+    }
+    
+    .invoice-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .invoice-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
+    
+    .invoice-info {
+        margin-bottom: 20px;
+    }
+    
+    .invoice-info table {
+        margin-left: auto;
+        margin-right: 0;
+    }
+    
+    .invoice-info td {
+        padding: 5px 10px;
+        border: none;
+    }
+    
+    .bill-to {
+        margin-bottom: 30px;
+    }
+    
+    .bill-to h3 {
+        border-bottom: 2px solid #333;
+        padding-bottom: 5px;
+        margin-bottom: 15px;
+    }
+    
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        border: 1px solid #333;
+        padding: 8px;
+        text-align: center;
+    }
+    
+    .items-table th {
+        background-color: #f0f0f0;
+        font-weight: bold;
+    }
+    
+    .items-table .amount {
+        text-align: right;
+    }
+    
+    .total-section {
+        margin-top: 20px;
+        text-align: right;
+    }
+    
+    .total-section table {
+        margin-left: auto;
+        border-collapse: collapse;
+    }
+    
+    .total-section td {
+        padding: 5px 10px;
+        border: 1px solid #333;
+    }
+    
+    .total-section .total-row {
+        background-color: #f0f0f0;
+        font-weight: bold;
+    }
+    """
+    
+    # PDFを生成
+    html_doc = HTML(string=html_content)
+    css_doc = CSS(string=css_content)
+    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc])
+    
+    # レスポンスを作成
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.invoice_number}.pdf"'
+    
+    return response
+
+
+@login_required
+def delivery_note_pdf(request, pk):
+    """納品書PDF出力"""
+    try:
+        current_organization = get_current_organization(request)
+        delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+        
+        # WeasyPrintが利用可能な場合はHTML/CSSを使用
+        if WEASYPRINT_AVAILABLE:
+            return delivery_note_pdf_weasyprint(request, delivery_note)
+        
+        # PDFファイルを作成
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        
+        # 日本語フォント設定
+        try:
+            # システムの日本語フォントを試行
+            font_paths = [
+                '/System/Library/Fonts/Hiragino Sans GB.ttc',  # macOS
+                '/System/Library/Fonts/Arial Unicode.ttf',     # macOS
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Linux
+                'C:/Windows/Fonts/msgothic.ttc',  # Windows
+            ]
+            
+            font_registered = False
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont('JapaneseFont', font_path))
+                        font_registered = True
+                        break
+                    except:
+                        continue
+            
+            # フォント名を設定
+            font_name = 'JapaneseFont' if font_registered else 'Helvetica'
+            
+        except Exception:
+            font_name = 'Helvetica'
+        
+        # スタイルシートを取得
+        styles = getSampleStyleSheet()
+        
+        # 日本語対応スタイル設定
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName=font_name,
+        )
+        
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName=font_name,
+        )
+        
+        heading3_style = ParagraphStyle(
+            'CustomHeading3',
+            parent=styles['Heading3'],
+            fontName=font_name,
+        )
+        
+        # PDFコンテンツを構築
+        story = []
+        
+        # タイトル
+        story.append(Paragraph("納品書", title_style))
+        story.append(Spacer(1, 20))
+        
+        # 納品書情報
+        delivery_info = [
+            ['納品書番号:', delivery_note.delivery_number],
+            ['発行日:', delivery_note.issue_date.strftime('%Y年%m月%d日')],
+        ]
+        if delivery_note.delivery_date:
+            delivery_info.append(['納品予定日:', delivery_note.delivery_date.strftime('%Y年%m月%d日')])
+        if delivery_note.actual_delivery_date:
+            delivery_info.append(['実際の納品日:', delivery_note.actual_delivery_date.strftime('%Y年%m月%d日')])
+        
+        delivery_info.append(['', ''])
+        
+        delivery_table = Table(delivery_info, colWidths=[100, 200])
+        delivery_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ]))
+        story.append(delivery_table)
+        story.append(Spacer(1, 20))
+        
+        # 納品先情報
+        story.append(Paragraph("納品先:", heading3_style))
+        deliver_to_info = f"""
+        {delivery_note.deliver_to_name}<br/>
+        {delivery_note.deliver_to_address}<br/>
+        """
+        if delivery_note.deliver_to_contact:
+            deliver_to_info += f"担当者: {delivery_note.deliver_to_contact}<br/>"
+        if delivery_note.deliver_to_phone:
+            deliver_to_info += f"TEL: {delivery_note.deliver_to_phone}<br/>"
+        
+        story.append(Paragraph(deliver_to_info, normal_style))
+        story.append(Spacer(1, 20))
+        
+        # 納品明細
+        story.append(Paragraph("納品明細:", heading3_style))
+        
+        # 明細テーブルデータを作成
+        data = [['品目名', '説明', '予定数量', '単位', '実際の納品数量', '差異']]
+        
+        for item in delivery_note.items.all():
+            difference = item.delivered_quantity - item.quantity if item.delivered_quantity else -item.quantity
+            difference_str = f"{difference:+.1f}" if difference != 0 else "0"
+            
+            data.append([
+                item.item_name,
+                item.item_description or '-',
+                f"{item.quantity:,.1f}",
+                item.unit,
+                f"{item.delivered_quantity or 0:,.1f}",
+                difference_str
+            ])
+        
+        # テーブルを作成
+        table = Table(data, colWidths=[80, 100, 50, 30, 50, 40])
+        table.setStyle(TableStyle([
+            # ヘッダー
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), font_name),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            
+            # データ行
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # 数値列
+            ('FONTNAME', (0, 1), (-1, -1), font_name),
+            
+            # ボーダー
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        
+        story.append(table)
+        story.append(Spacer(1, 20))
+        
+        # 備考
+        if delivery_note.notes:
+            story.append(Paragraph("備考:", heading3_style))
+            story.append(Paragraph(delivery_note.notes, normal_style))
+        
+        # PDFを生成
+        doc.build(story)
+        buffer.seek(0)
+        
+        # HTTPレスポンスを作成
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="delivery_note_{delivery_note.delivery_number}.pdf"'
+        
+        return response
+        
+    except Exception as e:
+        messages.error(request, f'PDF生成エラー: {str(e)}')
+        return redirect('shift_management:delivery_note_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def invoice_change_status(request, pk):
+    """請求書ステータス変更"""
+    current_organization = get_current_organization(request)
+    invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    
+    new_status = request.POST.get('status')
+    if new_status not in dict(Invoice.STATUS_CHOICES):
+        messages.error(request, '無効なステータスです。')
+        return redirect('shift_management:invoice_detail', pk=pk)
+    
+    old_status = invoice.status
+    invoice.status = new_status
+    
+    # ステータス固有の処理
+    if new_status == 'issued' and old_status == 'draft':
+        # 発行時の処理
+        messages.success(request, f'請求書「{invoice.invoice_number}」を発行しました。')
+    elif new_status == 'paid' and old_status in ['issued', 'overdue']:
+        # 入金確認時の処理
+        if not invoice.payment_date:
+            invoice.payment_date = timezone.now().date()
+        messages.success(request, f'請求書「{invoice.invoice_number}」の入金を確認しました。')
+    elif new_status == 'cancelled':
+        messages.warning(request, f'請求書「{invoice.invoice_number}」をキャンセルしました。')
+    else:
+        messages.success(request, f'請求書「{invoice.invoice_number}」のステータスを更新しました。')
+    
+    invoice.save()
+    return redirect('shift_management:invoice_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def delivery_note_change_status(request, pk):
+    """納品書ステータス変更"""
+    current_organization = get_current_organization(request)
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    
+    new_status = request.POST.get('status')
+    if new_status not in dict(DeliveryNote.STATUS_CHOICES):
+        messages.error(request, '無効なステータスです。')
+        return redirect('shift_management:delivery_note_detail', pk=pk)
+    
+    old_status = delivery_note.status
+    delivery_note.status = new_status
+    
+    # ステータス固有の処理
+    if new_status == 'issued' and old_status == 'draft':
+        # 発行時の処理
+        messages.success(request, f'納品書「{delivery_note.delivery_number}」を発行しました。')
+    elif new_status == 'delivered' and old_status == 'issued':
+        # 納品完了時の処理
+        if not delivery_note.actual_delivery_date:
+            delivery_note.actual_delivery_date = timezone.now().date()
+        messages.success(request, f'納品書「{delivery_note.delivery_number}」の納品を完了しました。')
+    elif new_status == 'cancelled':
+        messages.warning(request, f'納品書「{delivery_note.delivery_number}」をキャンセルしました。')
+    else:
+        messages.success(request, f'納品書「{delivery_note.delivery_number}」のステータスを更新しました。')
+    
+    delivery_note.save()
+    return redirect('shift_management:delivery_note_detail', pk=pk)
+
+
+def delivery_note_pdf_weasyprint(request, delivery_note):
+    """WeasyPrint版納品書PDF出力"""
+    from django.template.loader import render_to_string
+    
+    # HTMLテンプレートをレンダリング
+    html_content = render_to_string('shift_management/delivery_note_pdf_template.html', {
+        'delivery_note': delivery_note,
+        'items': delivery_note.items.all(),
+    })
+    
+    # CSSスタイル
+    css_content = """
+    @page {
+        size: A4;
+        margin: 2cm;
+    }
+    
+    body {
+        font-family: "Hiragino Sans GB", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #333;
+    }
+    
+    .delivery-note-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .delivery-note-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
+    
+    .delivery-info {
+        margin-bottom: 20px;
+    }
+    
+    .delivery-info table {
+        margin-left: auto;
+        margin-right: 0;
+    }
+    
+    .delivery-info td {
+        padding: 5px 10px;
+        border: none;
+    }
+    
+    .deliver-to {
+        margin-bottom: 30px;
+    }
+    
+    .deliver-to h3 {
+        border-bottom: 2px solid #333;
+        padding-bottom: 5px;
+        margin-bottom: 15px;
+    }
+    
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+    
+    .items-table th,
+    .items-table td {
+        border: 1px solid #333;
+        padding: 8px;
+        text-align: center;
+    }
+    
+    .items-table th {
+        background-color: #f0f0f0;
+        font-weight: bold;
+    }
+    
+    .items-table .amount {
+        text-align: right;
+    }
+    
+    .notes {
+        margin-top: 30px;
+    }
+    
+    .notes h3 {
+        border-bottom: 2px solid #333;
+        padding-bottom: 5px;
+        margin-bottom: 15px;
+    }
+    """
+    
+    # PDFを生成
+    html_doc = HTML(string=html_content)
+    css_doc = CSS(string=css_content)
+    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc])
+    
+    # レスポンスを作成
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="delivery_note_{delivery_note.delivery_number}.pdf"'
+    
+    return response

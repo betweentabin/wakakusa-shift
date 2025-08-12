@@ -1,0 +1,2363 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}2D平面図 - 棚区画管理{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+<style>
+    .floor-plan-container {
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .floor-plan-svg {
+        width: 100%;
+        height: auto;
+        max-height: 70vh;
+        min-height: 300px;
+        border: 2px solid #dee2e6;
+        border-radius: 15px;
+        background: linear-gradient(145deg, #ffffff, #f8f9fa);
+        cursor: grab;
+        transition: transform 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    @media (max-width: 768px) {
+        .floor-plan-svg {
+            max-height: 50vh;
+            min-height: 250px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .floor-plan-svg {
+            max-height: 40vh;
+            min-height: 200px;
+        }
+    }
+    
+    .floor-plan-svg:active {
+        cursor: grabbing;
+    }
+    
+    .floor-plan-controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .zoom-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: none;
+        background: linear-gradient(145deg, #ffffff, #f1f3f4);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        color: #2c3e50;
+        font-size: 14px;
+        backdrop-filter: blur(8px);
+    }
+    
+    .zoom-btn:hover {
+        background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.9);
+        transform: translateY(-1px);
+        color: #3498db;
+    }
+    
+    .zoom-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .floor-plan-wrapper {
+        position: relative;
+        overflow: hidden;
+        border-radius: 10px;
+    }
+    
+    .shelf-level {
+        stroke: #2c3e50;
+        stroke-width: 1.5;
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    
+    .shelf-level:hover {
+        stroke-width: 2.5;
+        stroke: #3498db;
+        transform: scale(1.02);
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+        z-index: 10;
+    }
+    
+    .shelf-level.empty {
+        fill: url(#emptyGradient);
+        stroke: #27ae60;
+    }
+    
+    .shelf-level.growing {
+        fill: url(#growingGradient);
+        stroke: #3498db;
+    }
+    
+    .shelf-level.harvest-ready {
+        fill: url(#harvestGradient);
+        stroke: #f39c12;
+    }
+    
+    .shelf-level.overdue {
+        fill: url(#overdueGradient);
+        stroke: #e74c3c;
+    }
+    
+    /* 栽培区画用のスタイル */
+    .section-rect {
+        stroke-width: 2;
+        stroke-opacity: 0.8;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .section-rect.empty {
+        fill: url(#emptyGradient);
+        stroke: #27ae60;
+    }
+    
+    .section-rect.growing {
+        fill: url(#growingGradient);
+        stroke: #3498db;
+    }
+    
+    .section-rect.harvest-ready {
+        fill: url(#harvestGradient);
+        stroke: #f39c12;
+    }
+    
+    .section-rect.overdue {
+        fill: url(#overdueGradient);
+        stroke: #e74c3c;
+    }
+    
+    .section-text {
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+        fill: #2c3e50;
+        text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+    }
+    
+    .shelf-text {
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+        fill: #2c3e50;
+        text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+    }
+    
+    .crop-name {
+        font-size: 9px;
+        font-weight: 500;
+        fill: #34495e;
+        opacity: 0.8;
+    }
+    
+    .view-toggle {
+        margin-bottom: 20px;
+        display: flex;
+        gap: 12px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .view-toggle .btn {
+        border-radius: 8px;
+        border: none;
+        padding: 10px 20px;
+        font-weight: 500;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .view-toggle .btn:not(.btn-primary) {
+        background: transparent;
+        color: #6c757d;
+    }
+    
+    .view-toggle .btn.btn-primary {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+    }
+    
+    .view-toggle .btn:hover {
+        transform: translateY(-1px);
+    }
+    
+    .legend-section {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+    
+    .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 1px solid #333;
+    }
+    
+    .floor-plan-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-item {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid #dee2e6;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #495057;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .level-filter {
+        margin-bottom: 15px;
+    }
+    
+    .level-filter .btn {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .metric-card {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #dee2e6;
+        transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .metric-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .metric-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #495057;
+        margin-bottom: 4px;
+    }
+    
+    .metric-trend {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+    
+    .chart-container {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        margin-bottom: 15px;
+    }
+    
+    @media (max-width: 768px) {
+        .floor-plan-container {
+            padding: 10px;
+        }
+        
+        .floor-plan-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .legend-items {
+            justify-content: center;
+        }
+        
+        .metric-card {
+            padding: 10px;
+        }
+        
+        .metric-value {
+            font-size: 1.4rem;
+        }
+        
+        /* モバイル用の調整 */
+        .header-section h1 {
+            font-size: 1.5rem;
+        }
+        
+        .view-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .view-toggle .btn {
+            flex: 1;
+            font-size: 0.9rem;
+            padding: 8px 12px;
+        }
+        
+        .floor-plan-svg {
+            max-height: 50vh;
+        }
+        
+        .zoom-btn {
+            width: 35px;
+            height: 35px;
+            font-size: 0.9rem;
+        }
+        
+        .floor-plan-controls {
+            top: 5px;
+            right: 5px;
+        }
+        
+        #detail-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-height: 70vh;
+            border-radius: 15px 15px 0 0;
+            overflow-y: auto;
+            z-index: 1000;
+            margin: 0;
+        }
+        
+        .level-filter .btn {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+        }
+        
+        .table-responsive {
+            font-size: 0.85rem;
+        }
+        
+        .chart-container {
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+    }
+    
+    /* タブレット用の調整 */
+    @media (min-width: 769px) and (max-width: 1024px) {
+        .metric-card {
+            padding: 12px;
+        }
+        
+        .metric-value {
+            font-size: 1.6rem;
+        }
+        
+        .floor-plan-svg {
+            max-height: 60vh;
+        }
+    }
+    
+    /* 3D表示用スタイル */
+    .three-d-wrapper {
+        position: relative;
+        background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+        border-radius: 15px;
+        overflow: hidden;
+    }
+    
+    .three-d-canvas {
+        width: 100%;
+        height: 600px;
+        min-height: 300px;
+        border-radius: 15px;
+        cursor: grab;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    @media (max-width: 768px) {
+        .three-d-canvas {
+            height: 400px;
+            min-height: 250px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .three-d-canvas {
+            height: 300px;
+            min-height: 200px;
+        }
+    }
+    
+    .three-d-canvas:active {
+        cursor: grabbing;
+    }
+    
+    .three-d-controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .view-mode-info {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: #495057;
+        backdrop-filter: blur(5px);
+    }
+    
+    /* 3D描画用のヘルパースタイル */
+    .shelf-3d-info {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        pointer-events: none;
+        z-index: 1000;
+        display: none;
+    }
+
+    /* タッチデバイス用の調整 */
+    @media (pointer: coarse) {
+        .shelf-level {
+            stroke-width: 2;
+        }
+        
+        .shelf-level:hover {
+            stroke-width: 3;
+        }
+        
+        .zoom-btn {
+            width: 45px;
+            height: 45px;
+        }
+        
+        .action-btn {
+            padding: 12px 20px;
+        }
+        
+        .three-d-canvas {
+            height: 400px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー部分 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="header-section">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <div class="mb-3 mb-md-0">
+                        <h1 class="casual-title">
+                            📐 2D平面図レイアウト
+                        </h1>
+                        {% if selected_layout %}
+                            <p class="casual-subtitle">{{ selected_layout.name }} のレイアウトを表示中</p>
+                        {% else %}
+                            <p class="casual-subtitle">全ての棚と段が2次元平面上に表示されています</p>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary">
+                            <i class="fas fa-plus me-1"></i>
+                            <span class="d-none d-sm-inline">新しい棚を追加</span>
+                            <span class="d-inline d-sm-none">棚追加</span>
+                        </a>
+                        {% if selected_layout %}
+                            <a href="{% url 'cultivation:layout_list' %}" class="btn-casual btn-casual-info">
+                                <i class="fas fa-list me-1"></i>
+                                <span class="d-none d-sm-inline">レイアウト一覧へ</span>
+                                <span class="d-inline d-sm-none">一覧へ</span>
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            <span class="d-none d-sm-inline">栽培管理へ</span>
+                            <span class="d-inline d-sm-none">戻る</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 統計情報 -->
+    <div class="floor-plan-stats">
+        <div class="stat-item">
+            <div class="stat-number">{{ statistics.total_items }}</div>
+            <div class="stat-label">{% if display_type == 'sections' %}総区画数{% else %}総棚数{% endif %}</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ statistics.growing_count }}</div>
+            <div class="stat-label">栽培中</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ statistics.harvest_ready_count }}</div>
+            <div class="stat-label">収穫可能</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ statistics.overdue_count }}</div>
+            <div class="stat-label">期限超過</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ statistics.empty_count }}</div>
+            <div class="stat-label">空きスペース</div>
+        </div>
+    </div>
+
+    <!-- 表示モード切り替え -->
+    <div class="view-toggle">
+        <button class="btn btn-primary" id="view-2d" onclick="switchView('2d')">
+            <i class="fas fa-map me-2"></i>2D平面図
+        </button>
+        <button class="btn" id="view-3d" onclick="switchView('3d')">
+            <i class="fas fa-cube me-2"></i>3D立体図
+        </button>
+    </div>
+
+    <!-- レベル別フィルター -->
+    {% if statistics.level_stats %}
+    <div class="level-filter">
+        <h5 class="mb-2">表示レベル:</h5>
+        <button class="btn btn-outline-secondary btn-sm level-filter-btn active" data-level="all">
+            全て表示
+        </button>
+        {% for level, stats in statistics.level_stats.items %}
+        <button class="btn btn-outline-info btn-sm level-filter-btn" data-level="{{ level }}">
+            レベル {{ level }} ({{ stats.total }}個)
+        </button>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- 2D平面図 -->
+    {% if floor_plan_data %}
+    <div id="two-d-container" class="floor-plan-container">
+        <h3 class="mb-3">
+            <i class="fas fa-map me-2"></i>棚配置平面図
+        </h3>
+        
+        <!-- SVG平面図ラッパー -->
+        <div class="floor-plan-wrapper">
+            <!-- ズーム・パンコントロール -->
+            <div class="floor-plan-controls">
+                <button class="zoom-btn" id="zoom-in-btn" title="ズームイン">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="zoom-btn" id="zoom-out-btn" title="ズームアウト">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="zoom-btn" id="reset-zoom-btn" title="リセット">
+                    <i class="fas fa-home"></i>
+                </button>
+            </div>
+            
+            <!-- SVG平面図 -->
+            <svg id="floor-plan-svg" class="floor-plan-svg" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+            <!-- グリッド背景とグラデーション定義 -->
+            <defs>
+                <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e0e0e0" stroke-width="1" opacity="0.5"/>
+                </pattern>
+                
+                <!-- 状態別グラデーション -->
+                <linearGradient id="emptyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#e8f5e9;stop-opacity:0.9" />
+                    <stop offset="100%" style="stop-color:#c8e6c9;stop-opacity:0.9" />
+                </linearGradient>
+                
+                <linearGradient id="growingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#e3f2fd;stop-opacity:0.9" />
+                    <stop offset="100%" style="stop-color:#bbdefb;stop-opacity:0.9" />
+                </linearGradient>
+                
+                <linearGradient id="harvestGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#fff3e0;stop-opacity:0.9" />
+                    <stop offset="100%" style="stop-color:#ffe0b2;stop-opacity:0.9" />
+                </linearGradient>
+                
+                <linearGradient id="overdueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ffcdd2;stop-opacity:0.9" />
+                    <stop offset="100%" style="stop-color:#ef9a9a;stop-opacity:0.9" />
+                </linearGradient>
+                
+                <!-- 影効果 -->
+                <filter id="shelfShadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.2"/>
+                </filter>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            
+            <!-- 各棚レベルを描画 -->
+            {% if floor_plan_data.plots %}
+                {% for plot_info in floor_plan_data.plots %}
+                <!-- 棚の表示 -->
+                <g class="plot-group" data-plot-id="{{ plot_info.plot.id }}">
+                    <!-- 棚全体の背景 -->
+                    <rect class="plot-background"
+                          x="{{ plot_info.svg_x }}"
+                          y="{{ plot_info.svg_y }}" 
+                          width="{{ plot_info.svg_width }}"
+                          height="{{ plot_info.svg_height }}"
+                          fill="#f0f0f0"
+                          stroke="#ccc"
+                          stroke-width="2">
+                    </rect>
+                    
+                    <!-- 棚番号表示 -->
+                    <text class="shelf-text"
+                          x="{{ plot_info.svg_x|add:50 }}"
+                          y="{{ plot_info.svg_y|add:-5 }}"
+                          font-weight="bold"
+                          font-size="12">
+                        棚{{ plot_info.shelf_number }}
+                    </text>
+                    
+                    <!-- 各レベルを描画 -->
+                    {% for level_info in plot_info.level_details %}
+                    <g class="shelf-level"
+                       data-plot-id="{{ plot_info.plot.id }}"
+                       data-level="{{ level_info.level }}"
+                       data-shelf-number="{{ plot_info.shelf_number }}"
+                       data-status="{{ level_info.status }}"
+                       data-crop="{{ level_info.crop_name }}">
+                       
+                        <!-- レベルの色を状態に応じて設定 -->
+                        {% if level_info.status == 'empty' %}
+                            {% with color='#e8f5e9' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:5 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-10 }}"
+                                      height="15"
+                                      fill="{{ color }}"
+                                      stroke="#333"
+                                      stroke-width="1">
+                                </rect>
+                            {% endwith %}
+                        {% elif level_info.status == 'growing' %}
+                            {% with color='#e3f2fd' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:5 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-10 }}"
+                                      height="15"
+                                      fill="{{ color }}"
+                                      stroke="#333"
+                                      stroke-width="1">
+                                </rect>
+                            {% endwith %}
+                        {% elif level_info.status == 'harvest_ready' %}
+                            {% with color='#fff3e0' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:5 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-10 }}"
+                                      height="15"
+                                      fill="{{ color }}"
+                                      stroke="#333"
+                                      stroke-width="1">
+                                </rect>
+                            {% endwith %}
+                        {% elif level_info.status == 'overdue' %}
+                            {% with color='#ffcdd2' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:5 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-10 }}"
+                                      height="15"
+                                      fill="{{ color }}"
+                                      stroke="#333"
+                                      stroke-width="1">
+                                </rect>
+                            {% endwith %}
+                        {% else %}
+                            {% with color='#f5f5f5' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:5 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-10 }}"
+                                      height="15"
+                                      fill="{{ color }}"
+                                      stroke="#333"
+                                      stroke-width="1">
+                                </rect>
+                            {% endwith %}
+                        {% endif %}
+                        
+                        <!-- レベル番号 -->
+                        <text class="level-text"
+                              x="{{ plot_info.svg_x|add:15 }}"
+                              y="{{ level_info.text_y }}"
+                              font-size="10"
+                              fill="#333">
+                            L{{ level_info.level }}
+                        </text>
+                        
+                        <!-- 作物名 -->
+                        {% if level_info.crop_name != '空き' %}
+                        <text class="crop-text"
+                              x="{{ plot_info.svg_x|add:35 }}"
+                              y="{{ level_info.text_y }}"
+                              font-size="9"
+                              fill="#555">
+                            {{ level_info.crop_name }}
+                        </text>
+                        {% endif %}
+                    </g>
+                    {% endfor %}
+                </g>
+                {% endfor %}
+            {% else %}
+                <!-- 従来の区画表示ロジック -->
+                {% for item in floor_plan_data %}
+                {% if item.type == 'section' %}
+                <!-- 栽培区画の表示 -->
+                <g class="section-group" data-section-id="{{ item.section_id }}">
+                    <rect class="section-rect {{ item.status }}"
+                          x="{{ item.svg_x }}"
+                          y="{{ item.svg_y }}"
+                          width="{{ item.svg_width }}"
+                          height="{{ item.svg_height }}"
+                          data-section-id="{{ item.section.id }}"
+                          data-section-name="{{ item.section.name }}"
+                          data-crop="{{ item.crop.name|default:'空き' }}"
+                          title="{{ item.section.name }}: {{ item.crop.name|default:'空きスペース' }}">
+                    </rect>
+                    
+                    <!-- 区画名表示 -->
+                    <text class="section-text"
+                          x="{{ item.svg_text_x }}"
+                          y="{{ item.svg_text_y }}"
+                          font-weight="bold">
+                        {{ item.section.name }}
+                    </text>
+                    
+                    <!-- 作物名表示 -->
+                    {% if item.crop %}
+                    <text class="crop-text"
+                          x="{{ item.svg_text_x }}"
+                          y="{{ item.svg_text_y|add:15 }}"
+                          font-size="10">
+                        {{ item.crop.name }}
+                    </text>
+                    {% endif %}
+                </g>
+            {% else %}
+                <!-- 棚区画の表示 -->
+                <g class="shelf-group" data-shelf-id="{{ item.shelf_id }}" data-level="{{ item.level }}">
+                    <!-- 棚の矩形 -->
+                    <rect class="shelf-level {{ item.status }}"
+                          x="{{ item.svg_x }}"
+                          y="{{ item.svg_y }}"
+                          width="{{ item.svg_width }}"
+                          height="{{ item.svg_height }}"
+                          data-plot-id="{{ item.plot.id }}"
+                          data-level="{{ item.level }}"
+                          data-shelf-number="{{ item.plot.shelf_number }}"
+                          data-crop="{{ item.crop.variety|default:'空き' }}"
+                          data-height="{{ item.level_height }}m"
+                          title="{{ item.shelf_id }}: {{ item.crop.variety|default:'空きスペース' }} (高さ: {{ item.level_height }}m)">
+                    </rect>
+                    
+                    <!-- 棚番号とレベル表示 -->
+                    <text class="shelf-text"
+                          x="{{ item.svg_text_x }}"
+                          y="{{ item.svg_text_y }}"
+                          font-weight="bold">
+                    {{ item.plot.shelf_number }}-L{{ item.level }}
+                </text>
+                
+                <!-- 作物名表示（空きでない場合） -->
+                {% if item.crop %}
+                <text class="shelf-text crop-name"
+                      x="{{ item.svg_text_x }}"
+                      y="{{ item.svg_text_crop_y }}"
+                      font-size="8px"
+                      fill="#666">
+                    {{ item.crop.variety|truncatechars:8 }}
+                </text>
+                {% endif %}
+                </g>
+            {% endif %}
+        {% endfor %}
+        {% endif %}
+        </svg>
+        </div>
+    </div>
+    {% else %}
+    <!-- 空の状態 -->
+    <div class="floor-plan-container">
+        <div class="text-center py-5">
+            <div class="empty-state-icon" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;">
+                📐
+            </div>
+            <h3>まだ棚がありません</h3>
+            <p class="text-muted mb-4">最初の栽培棚を作って、2D平面図を作成しましょう！</p>
+            <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary btn-lg">
+                <i class="fas fa-plus me-2"></i>最初の棚を作る
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 3D立体図 -->
+    <div id="three-d-container" class="floor-plan-container" style="display: none;">
+        <h3 class="mb-3">
+            <i class="fas fa-cube me-2"></i>3D立体図レイアウト
+        </h3>
+        
+        <!-- 3D表示エリア -->
+        <div class="three-d-wrapper">
+            <!-- 3D操作コントロール -->
+            <div class="three-d-controls">
+                <button class="zoom-btn" id="rotate-left-btn" title="左回転">
+                    <i class="fas fa-rotate-left"></i>
+                </button>
+                <button class="zoom-btn" id="rotate-right-btn" title="右回転">
+                    <i class="fas fa-rotate-right"></i>
+                </button>
+                <button class="zoom-btn" id="rotate-up-btn" title="上向き">
+                    <i class="fas fa-arrow-up"></i>
+                </button>
+                <button class="zoom-btn" id="rotate-down-btn" title="下向き">
+                    <i class="fas fa-arrow-down"></i>
+                </button>
+                <button class="zoom-btn" id="reset-3d-btn" title="3Dリセット">
+                    <i class="fas fa-home"></i>
+                </button>
+            </div>
+            
+            <!-- 3D Canvas -->
+            <canvas id="three-d-canvas" class="three-d-canvas"></canvas>
+            
+            <!-- 3D情報表示 -->
+            <div class="view-mode-info">
+                <i class="fas fa-cube me-1"></i>3D立体図モード - マウスドラッグで回転操作
+            </div>
+        </div>
+        
+        <!-- 3D棚情報ツールチップ -->
+        <div class="shelf-3d-info" id="shelf-3d-tooltip">
+            <!-- JavaScript で動的に更新 -->
+        </div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="legend-section">
+        <h4 class="mb-3">
+            <i class="fas fa-info-circle me-2"></i>状態別色分け
+        </h4>
+        <div class="legend-items">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e8f5e9; border-color: #4caf50;"></div>
+                <span>空きスペース</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e3f2fd; border-color: #2196f3;"></div>
+                <span>栽培中</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #fff3e0; border-color: #ff9800;"></div>
+                <span>収穫可能</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffcdd2; border-color: #f44336;"></div>
+                <span>期限超過</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 詳細情報パネル -->
+    <div id="detail-panel" class="card mt-3" style="display: none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-info-circle me-2"></i>棚詳細情報
+            </h5>
+            <button id="close-detail-btn" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="detail-content">
+                <!-- JavaScriptで動的に内容を更新 -->
+            </div>
+            <div class="mt-3 d-flex gap-2">
+                <button id="view-detail-btn" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-eye me-2"></i>棚管理画面へ
+                </button>
+                <button id="add-crop-btn" class="btn btn-success" style="display: none;">
+                    <i class="fas fa-plus me-2"></i>作物を追加
+                </button>
+                <button id="edit-shelf-btn" class="btn btn-warning" style="display: none;">
+                    <i class="fas fa-edit me-2"></i>棚設定編集
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 効率性分析ダッシュボード -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-line me-2"></i>効率性分析ダッシュボード
+                        </h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" 
+                                    data-bs-target="#efficiency-analysis" aria-expanded="true">
+                                <i class="fas fa-chart-bar me-1"></i>分析表示
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="collapse show" id="efficiency-analysis">
+                    <div class="card-body">
+                        <!-- 効率性メトリクス -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-header">
+                                        <i class="fas fa-percentage text-primary"></i>
+                                        <span>平均利用率</span>
+                                    </div>
+                                    <div class="metric-value" id="avg-utilization">計算中...</div>
+                                    <div class="metric-trend">
+                                        <small class="text-muted">過去30日間</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-header">
+                                        <i class="fas fa-clock text-success"></i>
+                                        <span>平均栽培期間</span>
+                                    </div>
+                                    <div class="metric-value" id="avg-growth-period">計算中...</div>
+                                    <div class="metric-trend">
+                                        <small class="text-muted">完了作物</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-header">
+                                        <i class="fas fa-seedling text-warning"></i>
+                                        <span>収穫成功率</span>
+                                    </div>
+                                    <div class="metric-value" id="harvest-success-rate">計算中...</div>
+                                    <div class="metric-trend">
+                                        <small class="text-muted">成功/総数</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-header">
+                                        <i class="fas fa-trophy text-info"></i>
+                                        <span>最高効率棚</span>
+                                    </div>
+                                    <div class="metric-value" id="best-shelf">計算中...</div>
+                                    <div class="metric-trend">
+                                        <small class="text-muted">利用率基準</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 効率性グラフエリア -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="chart-container">
+                                    <h6 class="mb-3">
+                                        <i class="fas fa-chart-pie me-2"></i>棚利用率分布
+                                    </h6>
+                                    <canvas id="utilization-chart" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="chart-container">
+                                    <h6 class="mb-3">
+                                        <i class="fas fa-chart-bar me-2"></i>段別効率性
+                                    </h6>
+                                    <canvas id="level-efficiency-chart" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全棚一覧サマリー -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list me-2"></i>棚一覧サマリー
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>棚番号</th>
+                                    <th>段数</th>
+                                    <th>サイズ</th>
+                                    <th>栽培中</th>
+                                    <th>収穫可能</th>
+                                    <th>空き</th>
+                                    <th>状態</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shelf-summary-table">
+                                {% for item in floor_plan_data %}
+                                    {% if item.level == 1 %}
+                                    <tr data-shelf-id="{{ item.plot.shelf_number }}">
+                                        <td><strong>{{ item.plot.shelf_number }}</strong></td>
+                                        <td>{{ item.plot.levels }}段</td>
+                                        <td>{{ item.plot.width }}m × {{ item.plot.depth }}m</td>
+                                        <td class="growing-count">-</td>
+                                        <td class="harvest-count">-</td>
+                                        <td class="empty-count">-</td>
+                                        <td class="status-indicator">
+                                            <span class="badge bg-secondary">計算中</span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 2D/3D切り替え機能（グローバルスコープ）
+window.switchView = function(viewType) {
+    const view2dBtn = document.getElementById('view-2d');
+    const view3dBtn = document.getElementById('view-3d'); 
+    const twoDContainer = document.getElementById('two-d-container');
+    const threeDContainer = document.getElementById('three-d-container');
+    
+    if (viewType === '2d') {
+        // 2D表示
+        view2dBtn.classList.add('btn-primary');
+        view2dBtn.classList.remove('btn');
+        view3dBtn.classList.add('btn');
+        view3dBtn.classList.remove('btn-primary');
+        
+        if (twoDContainer) twoDContainer.style.display = 'block';
+        if (threeDContainer) threeDContainer.style.display = 'none';
+    } else if (viewType === '3d') {
+        // 3D表示
+        view3dBtn.classList.add('btn-primary');
+        view3dBtn.classList.remove('btn');
+        view2dBtn.classList.add('btn');
+        view2dBtn.classList.remove('btn-primary');
+        
+        if (twoDContainer) twoDContainer.style.display = 'none';
+        if (threeDContainer) threeDContainer.style.display = 'block';
+        
+        // 3D描画を初期化
+        if (typeof init3DView === 'function') {
+            init3DView();
+        }
+    }
+};
+
+// 3D表示の初期化（グローバルスコープ）
+function init3DView() {
+    const canvas = document.getElementById('three-d-canvas');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const plotData = []; // 実際のデータはDOMから取得
+    const rotation = { x: 0, y: 0, z: 0 };
+    const zoom = 1;
+    
+    // 3D描画の初期設定
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    
+    // 3D描画関数を呼び出し
+    draw3DView(ctx, canvas, plotData, rotation, zoom);
+    
+    // 3Dコントロールのイベントリスナー
+    setup3DControls(canvas, ctx, plotData, rotation);
+}
+
+// 3D描画メイン関数
+function draw3DView(ctx, canvas, plotData, rotation, zoom) {
+    // キャンバスをクリア
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 背景
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 3Dグリッドを描画
+    draw3DGrid(ctx, canvas, rotation, zoom);
+    
+    // 棚の3D描画
+    const plots = document.querySelectorAll('.plot-group');
+    plots.forEach(plot => {
+        const plotId = plot.dataset.plotId;
+        if (plotId) {
+            draw3DShelf(ctx, canvas, plot, rotation, zoom);
+        }
+    });
+    
+    // 情報テキスト
+    draw3DInfo(ctx, canvas);
+}
+
+// 3Dグリッド描画
+function draw3DGrid(ctx, canvas, rotation, zoom) {
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const gridSize = 50 * zoom;
+    const gridCount = 10;
+    
+    // グリッド線を描画
+    for (let i = -gridCount; i <= gridCount; i++) {
+        // X方向の線
+        ctx.beginPath();
+        ctx.moveTo(centerX + i * gridSize, centerY - gridCount * gridSize);
+        ctx.lineTo(centerX + i * gridSize, centerY + gridCount * gridSize);
+        ctx.stroke();
+        
+        // Y方向の線
+        ctx.beginPath();
+        ctx.moveTo(centerX - gridCount * gridSize, centerY + i * gridSize);
+        ctx.lineTo(centerX + gridCount * gridSize, centerY + i * gridSize);
+        ctx.stroke();
+    }
+}
+
+// 3D棚描画
+function draw3DShelf(ctx, canvas, plot, rotation, zoom) {
+    // 棚の基本情報を取得
+    const rect = plot.querySelector('.plot-background');
+    if (!rect) return;
+    
+    const x = parseFloat(rect.getAttribute('x'));
+    const y = parseFloat(rect.getAttribute('y'));
+    const width = parseFloat(rect.getAttribute('width'));
+    const height = parseFloat(rect.getAttribute('height'));
+    
+    // 3D変換
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // 簡易的な3D表示（アイソメトリック風）
+    const isoX = centerX + (x - y) * Math.cos(Math.PI / 6) * zoom;
+    const isoY = centerY + (x + y) * Math.sin(Math.PI / 6) * zoom - height * zoom;
+    
+    // 棚の本体
+    ctx.fillStyle = '#e0e0e0';
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    
+    // 前面
+    ctx.beginPath();
+    ctx.moveTo(isoX, isoY);
+    ctx.lineTo(isoX + width * zoom, isoY);
+    ctx.lineTo(isoX + width * zoom, isoY + height * zoom);
+    ctx.lineTo(isoX, isoY + height * zoom);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    // 棚のレベルを3D風に描画
+    const levels = plot.querySelectorAll('.shelf-level');
+    levels.forEach((level, index) => {
+        const levelY = isoY + (index + 1) * (height / (levels.length + 1)) * zoom;
+        
+        // レベルの板
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(isoX + 5, levelY - 2, width * zoom - 10, 4);
+        
+        // 側面（3D効果）
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(isoX + width * zoom, isoY);
+        ctx.lineTo(isoX + width * zoom + 20, isoY - 10);
+        ctx.lineTo(isoX + width * zoom + 20, isoY + height * zoom - 10);
+        ctx.lineTo(isoX + width * zoom, isoY + height * zoom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // 上面
+        ctx.fillStyle = '#f0f0f0';
+        ctx.beginPath();
+        ctx.moveTo(isoX, isoY);
+        ctx.lineTo(isoX + 20, isoY - 10);
+        ctx.lineTo(isoX + width * zoom + 20, isoY - 10);
+        ctx.lineTo(isoX + width * zoom, isoY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    });
+}
+
+// 3D表示情報
+function draw3DInfo(ctx, canvas) {
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('3D立体図レイアウト', canvas.width / 2, 30);
+    
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('3D立体図モード', 15, canvas.height - 40);
+    ctx.fillText('マウス: 回転 | ボタン: 操作', 15, canvas.height - 25);
+}
+
+// 3Dコントロールセットアップ
+function setup3DControls(canvas, ctx, plotData, rotation) {
+    // マウスドラッグで回転
+    let isDragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    
+    canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaX = e.clientX - lastX;
+        const deltaY = e.clientY - lastY;
+        
+        rotation.y += deltaX * 0.01;
+        rotation.x += deltaY * 0.01;
+        
+        lastX = e.clientX;
+        lastY = e.clientY;
+        
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+    
+    canvas.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+    
+    // ボタンコントロール
+    document.getElementById('rotate-left-btn')?.addEventListener('click', () => {
+        rotation.y -= 0.2;
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+    
+    document.getElementById('rotate-right-btn')?.addEventListener('click', () => {
+        rotation.y += 0.2;
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+    
+    document.getElementById('rotate-up-btn')?.addEventListener('click', () => {
+        rotation.x -= 0.2;
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+    
+    document.getElementById('rotate-down-btn')?.addEventListener('click', () => {
+        rotation.x += 0.2;
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+    
+    document.getElementById('reset-3d-btn')?.addEventListener('click', () => {
+        rotation.x = 0;
+        rotation.y = 0;
+        rotation.z = 0;
+        draw3DView(ctx, canvas, plotData, rotation, 1);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const shelfLevels = document.querySelectorAll('.shelf-level');
+    const detailPanel = document.getElementById('detail-panel');
+    const detailContent = document.getElementById('detail-content');
+    const viewDetailBtn = document.getElementById('view-detail-btn');
+    const closeDetailBtn = document.getElementById('close-detail-btn');
+    const levelFilterBtns = document.querySelectorAll('.level-filter-btn');
+    
+    // ズーム・パン機能の変数
+    const svg = document.getElementById('floor-plan-svg');
+    const zoomInBtn = document.getElementById('zoom-in-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-btn');
+    const resetZoomBtn = document.getElementById('reset-zoom-btn');
+    
+    let zoomLevel = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragStartPanX = 0;
+    let dragStartPanY = 0;
+    
+    const minZoom = 0.3;
+    const maxZoom = 3;
+    const zoomStep = 0.1;
+    const panSensitivity = 0.5;  // パン感度を下げる（0.5倍）
+    const wheelSensitivity = 0.8;  // ホイール感度を下げる
+    
+    // ズーム・パン関数（スムーズなアニメーション付き）
+    function updateTransform(animate = false) {
+        if (svg) {
+            const baseViewBox = '0 0 800 600';
+            const baseValues = baseViewBox.split(' ').map(Number);
+            
+            const width = baseValues[2] / zoomLevel;
+            const height = baseValues[3] / zoomLevel;
+            const x = panX / zoomLevel;
+            const y = panY / zoomLevel;
+            
+            if (animate) {
+                svg.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                setTimeout(() => {
+                    svg.style.transition = '';
+                }, 300);
+            }
+            
+            svg.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
+        }
+    }
+    
+    function zoomIn() {
+        if (zoomLevel < maxZoom) {
+            zoomLevel = Math.min(maxZoom, zoomLevel + zoomStep);
+            updateTransform(true);
+        }
+    }
+    
+    function zoomOut() {
+        if (zoomLevel > minZoom) {
+            zoomLevel = Math.max(minZoom, zoomLevel - zoomStep);
+            updateTransform(true);
+        }
+    }
+    
+    function resetZoom() {
+        zoomLevel = 1;
+        panX = 0;
+        panY = 0;
+        updateTransform(true);
+    }
+    
+    // ズームボタンイベント
+    if (zoomInBtn) zoomInBtn.addEventListener('click', zoomIn);
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', zoomOut);
+    if (resetZoomBtn) resetZoomBtn.addEventListener('click', resetZoom);
+    
+    // マウスホイールでズーム
+    if (svg) {
+        svg.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            
+            const rect = svg.getBoundingClientRect();
+            const centerX = (e.clientX - rect.left) / rect.width * 800;
+            const centerY = (e.clientY - rect.top) / rect.height * 600;
+            
+            const oldZoom = zoomLevel;
+            
+            if (e.deltaY < 0) {
+                if (zoomLevel < maxZoom) {
+                    zoomLevel = Math.min(maxZoom, zoomLevel + zoomStep * wheelSensitivity);
+                }
+            } else {
+                if (zoomLevel > minZoom) {
+                    zoomLevel = Math.max(minZoom, zoomLevel - zoomStep * wheelSensitivity);
+                }
+            }
+            
+            // ズーム中心を調整
+            const zoomRatio = zoomLevel / oldZoom;
+            panX = centerX - (centerX - panX) * zoomRatio;
+            panY = centerY - (centerY - panY) * zoomRatio;
+            
+            updateTransform();
+        });
+        
+        // マウスドラッグでパン
+        svg.addEventListener('mousedown', function(e) {
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragStartPanX = panX;
+            dragStartPanY = panY;
+            svg.style.cursor = 'grabbing';
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (isDragging) {
+                const deltaX = (e.clientX - dragStartX) * panSensitivity;
+                const deltaY = (e.clientY - dragStartY) * panSensitivity;
+                
+                panX = dragStartPanX - deltaX / zoomLevel;
+                panY = dragStartPanY - deltaY / zoomLevel;
+                
+                updateTransform();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                svg.style.cursor = 'grab';
+            }
+        });
+        
+        // タッチ操作対応
+        let touchStartDistance = 0;
+        let touchStartZoom = 1;
+        
+        svg.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1) {
+                // シングルタッチ：パン開始
+                isDragging = true;
+                dragStartX = e.touches[0].clientX;
+                dragStartY = e.touches[0].clientY;
+                dragStartPanX = panX;
+                dragStartPanY = panY;
+            } else if (e.touches.length === 2) {
+                // ピンチ操作：ズーム開始
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+                touchStartZoom = zoomLevel;
+            }
+            e.preventDefault();
+        });
+        
+        svg.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 1 && isDragging) {
+                // シングルタッチ：パン（感度調整）
+                const deltaX = (e.touches[0].clientX - dragStartX) * panSensitivity;
+                const deltaY = (e.touches[0].clientY - dragStartY) * panSensitivity;
+                
+                panX = dragStartPanX - deltaX / zoomLevel;
+                panY = dragStartPanY - deltaY / zoomLevel;
+                
+                updateTransform();
+            } else if (e.touches.length === 2) {
+                // ピンチ操作：ズーム
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const scale = distance / touchStartDistance;
+                
+                zoomLevel = Math.max(minZoom, Math.min(maxZoom, touchStartZoom * scale));
+                updateTransform();
+            }
+            e.preventDefault();
+        });
+        
+        svg.addEventListener('touchend', function(e) {
+            isDragging = false;
+            e.preventDefault();
+        });
+    }
+    
+    // 棚レベルクリックイベント
+    shelfLevels.forEach(function(shelfLevel) {
+        shelfLevel.addEventListener('click', function() {
+            const plotId = this.getAttribute('data-plot-id');
+            const level = this.getAttribute('data-level');
+            const shelfNumber = this.getAttribute('data-shelf-number');
+            const crop = this.getAttribute('data-crop');
+            const height = this.getAttribute('data-height');
+            
+            // 同じ棚の全レベル情報を取得
+            const sameShelfLevels = document.querySelectorAll(`[data-shelf-number="${shelfNumber}"]`);
+            let allLevelsInfo = [];
+            
+            sameShelfLevels.forEach(function(levelEl) {
+                const levelNum = levelEl.getAttribute('data-level');
+                const levelCrop = levelEl.getAttribute('data-crop');
+                const levelHeight = levelEl.getAttribute('data-height');
+                const levelStatus = levelEl.classList.contains('growing') ? '栽培中' : 
+                                  levelEl.classList.contains('harvest-ready') ? '収穫可能' : 
+                                  levelEl.classList.contains('overdue') ? '期限超過' : '空き';
+                
+                allLevelsInfo.push({
+                    level: levelNum,
+                    crop: levelCrop,
+                    height: levelHeight,
+                    status: levelStatus,
+                    element: levelEl
+                });
+            });
+            
+            // ソート
+            allLevelsInfo.sort((a, b) => parseInt(a.level) - parseInt(b.level));
+            
+            // 詳細情報を表示
+            let levelsHtml = '';
+            allLevelsInfo.forEach(function(info) {
+                const statusClass = info.status === '栽培中' ? 'bg-primary' : 
+                                  info.status === '収穫可能' ? 'bg-warning' : 
+                                  info.status === '期限超過' ? 'bg-danger' : 'bg-secondary';
+                
+                levelsHtml += `
+                    <div class="level-info mb-2 p-2 border rounded ${info.level === level ? 'bg-light border-primary' : ''}">
+                        <div class="row align-items-center">
+                            <div class="col-3">
+                                <strong>レベル ${info.level}</strong><br>
+                                <small class="text-muted">${info.height}</small>
+                            </div>
+                            <div class="col-5">
+                                <div class="crop-name">${info.crop}</div>
+                            </div>
+                            <div class="col-4 text-end">
+                                <span class="badge ${statusClass}">${info.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            detailContent.innerHTML = `
+                <div class="mb-3">
+                    <h6 class="text-primary mb-2">
+                        <i class="fas fa-warehouse me-2"></i>棚番号: ${shelfNumber}
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">選択レベル:</small><br>
+                            <strong>レベル ${level}</strong> (${height})
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">総段数:</small><br>
+                            <strong>${allLevelsInfo.length}段</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h6 class="mb-2">
+                        <i class="fas fa-layer-group me-2"></i>全レベル状況
+                    </h6>
+                    ${levelsHtml}
+                </div>
+                
+                <div class="alert alert-info">
+                    <small>
+                        <i class="fas fa-lightbulb me-1"></i>
+                        クリックしたレベル（レベル ${level}）がハイライトされています
+                    </small>
+                </div>
+                
+                <!-- 作物履歴・統計情報 -->
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#shelf-history-${shelfNumber}" aria-expanded="false">
+                        <i class="fas fa-history me-1"></i>履歴・統計情報を表示
+                    </button>
+                    <div class="collapse mt-2" id="shelf-history-${shelfNumber}">
+                        <div class="card card-body" id="history-content-${shelfNumber}">
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">読み込み中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // ボタンの設定
+            if (plotId) {
+                viewDetailBtn.style.display = 'inline-block';
+                viewDetailBtn.onclick = function() {
+                    window.location.href = `/cultivation/plots/${plotId}/`;
+                };
+                
+                const addCropBtn = document.getElementById('add-crop-btn');
+                const editShelfBtn = document.getElementById('edit-shelf-btn');
+                
+                addCropBtn.style.display = 'inline-block';
+                addCropBtn.onclick = function() {
+                    window.location.href = `/cultivation/plots/${plotId}/crops/new/`;
+                };
+                
+                editShelfBtn.style.display = 'inline-block';
+                editShelfBtn.onclick = function() {
+                    window.location.href = `/cultivation/plots/${plotId}/edit/`;
+                };
+            } else {
+                viewDetailBtn.style.display = 'none';
+                document.getElementById('add-crop-btn').style.display = 'none';
+                document.getElementById('edit-shelf-btn').style.display = 'none';
+            }
+            
+            detailPanel.style.display = 'block';
+            detailPanel.scrollIntoView({ behavior: 'smooth' });
+            
+            // 履歴情報の遅延読み込み
+            setTimeout(function() {
+                loadShelfHistory(shelfNumber);
+            }, 500);
+        });
+    });
+    
+    // パネルを閉じる
+    closeDetailBtn.addEventListener('click', function() {
+        detailPanel.style.display = 'none';
+    });
+    
+    // レベルフィルター機能
+    levelFilterBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const targetLevel = this.getAttribute('data-level');
+            
+            // アクティブ状態の更新
+            levelFilterBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            // 棚グループの表示/非表示
+            const shelfGroups = document.querySelectorAll('.shelf-group');
+            shelfGroups.forEach(function(group) {
+                const groupLevel = group.getAttribute('data-level');
+                if (targetLevel === 'all' || groupLevel === targetLevel) {
+                    group.style.display = 'block';
+                } else {
+                    group.style.display = 'none';
+                }
+            });
+        });
+    });
+    
+    // SVGのレスポンシブ調整
+    function adjustSVGSize() {
+        const svg = document.getElementById('floor-plan-svg');
+        const container = svg.parentElement;
+        const containerWidth = container.offsetWidth;
+        
+        // 最適なビューボックスサイズを計算
+        const viewBoxWidth = Math.max(800, containerWidth * 0.8);
+        const viewBoxHeight = viewBoxWidth * 0.75;
+        
+        svg.setAttribute('viewBox', `0 0 ${viewBoxWidth} ${viewBoxHeight}`);
+        
+        // モバイルでの初期ズーム調整
+        if (window.innerWidth < 768) {
+            resetZoom();
+        }
+    }
+    
+    // 初期調整とリサイズイベント
+    adjustSVGSize();
+    window.addEventListener('resize', adjustSVGSize);
+    
+    // モバイルでのスクロール制御
+    if (window.innerWidth < 768) {
+        let isInteractingWithSVG = false;
+        
+        svg.addEventListener('touchstart', function() {
+            isInteractingWithSVG = true;
+        });
+        
+        svg.addEventListener('touchend', function() {
+            setTimeout(function() {
+                isInteractingWithSVG = false;
+            }, 100);
+        });
+        
+        // SVG操作中はページスクロールを無効化
+        document.addEventListener('touchmove', function(e) {
+            if (isInteractingWithSVG) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
+    
+    // 棚サマリーテーブルの更新
+    function updateShelfSummaryTable() {
+        const summaryRows = document.querySelectorAll('#shelf-summary-table tr[data-shelf-id]');
+        
+        summaryRows.forEach(function(row) {
+            const shelfId = row.getAttribute('data-shelf-id');
+            const shelfLevels = document.querySelectorAll(`[data-shelf-number="${shelfId}"]`);
+            
+            let growingCount = 0;
+            let harvestCount = 0;
+            let emptyCount = 0;
+            let overdueCount = 0;
+            let totalLevels = shelfLevels.length;
+            
+            shelfLevels.forEach(function(level) {
+                if (level.classList.contains('growing')) {
+                    growingCount++;
+                } else if (level.classList.contains('harvest-ready')) {
+                    harvestCount++;
+                } else if (level.classList.contains('overdue')) {
+                    overdueCount++;
+                } else {
+                    emptyCount++;
+                }
+            });
+            
+            // テーブル更新
+            row.querySelector('.growing-count').textContent = growingCount;
+            row.querySelector('.harvest-count').textContent = harvestCount;
+            row.querySelector('.empty-count').textContent = emptyCount;
+            
+            // 状態インジケーター更新
+            const statusIndicator = row.querySelector('.status-indicator');
+            let statusText = '';
+            let statusClass = '';
+            
+            if (overdueCount > 0) {
+                statusText = `期限超過 (${overdueCount})`;
+                statusClass = 'bg-danger';
+            } else if (harvestCount > 0) {
+                statusText = `収穫可能 (${harvestCount})`;
+                statusClass = 'bg-warning';
+            } else if (growingCount > 0) {
+                statusText = `栽培中 (${growingCount})`;
+                statusClass = 'bg-primary';
+            } else {
+                statusText = '全て空き';
+                statusClass = 'bg-secondary';
+            }
+            
+            statusIndicator.innerHTML = `<span class="badge ${statusClass}">${statusText}</span>`;
+            
+            // 行にホバー効果を追加
+            row.addEventListener('mouseenter', function() {
+                shelfLevels.forEach(function(level) {
+                    level.style.stroke = '#007bff';
+                    level.style.strokeWidth = '3';
+                });
+            });
+            
+            row.addEventListener('mouseleave', function() {
+                shelfLevels.forEach(function(level) {
+                    level.style.stroke = '';
+                    level.style.strokeWidth = '';
+                });
+            });
+            
+            // 行クリックで棚をハイライト
+            row.addEventListener('click', function() {
+                // 全レベルをハイライト
+                document.querySelectorAll('.shelf-level').forEach(function(level) {
+                    level.style.opacity = '0.3';
+                });
+                
+                shelfLevels.forEach(function(level) {
+                    level.style.opacity = '1';
+                    level.style.stroke = '#ffc107';
+                    level.style.strokeWidth = '4';
+                });
+                
+                // SVG にスクロール
+                document.getElementById('floor-plan-svg').scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+                
+                // 3秒後にハイライトを解除
+                setTimeout(function() {
+                    document.querySelectorAll('.shelf-level').forEach(function(level) {
+                        level.style.opacity = '';
+                        level.style.stroke = '';
+                        level.style.strokeWidth = '';
+                    });
+                }, 3000);
+            });
+        });
+    }
+    
+    // 初期実行
+    updateShelfSummaryTable();
+    
+    // 効率性分析の計算と表示
+    function calculateEfficiencyMetrics() {
+        const plotDetails = {{ plot_details_json|safe }};
+        let totalUtilization = 0;
+        let totalGrowthDays = 0;
+        let totalSuccessfulHarvests = 0;
+        let totalCrops = 0;
+        let bestShelfUtilization = 0;
+        let bestShelfName = '';
+        let utilizationDistribution = {
+            '0-25%': 0,
+            '26-50%': 0,
+            '51-75%': 0,
+            '76-100%': 0
+        };
+        
+        // 各棚のデータを処理
+        for (const shelfNumber in plotDetails) {
+            const shelf = plotDetails[shelfNumber];
+            const utilization = shelf.utilization_rate || 0;
+            const stats = shelf.productivity_stats || {};
+            
+            totalUtilization += utilization;
+            
+            // 利用率分布の計算
+            if (utilization <= 25) {
+                utilizationDistribution['0-25%']++;
+            } else if (utilization <= 50) {
+                utilizationDistribution['26-50%']++;
+            } else if (utilization <= 75) {
+                utilizationDistribution['51-75%']++;
+            } else {
+                utilizationDistribution['76-100%']++;
+            }
+            
+            // 最高効率棚の特定
+            if (utilization > bestShelfUtilization) {
+                bestShelfUtilization = utilization;
+                bestShelfName = shelfNumber;
+            }
+            
+            // 統計の集計
+            totalGrowthDays += stats.avg_growth_days || 0;
+            totalSuccessfulHarvests += stats.successful_harvests || 0;
+            totalCrops += stats.total_plantings || 0;
+        }
+        
+        const shelfCount = Object.keys(plotDetails).length;
+        const avgUtilization = shelfCount > 0 ? totalUtilization / shelfCount : 0;
+        const avgGrowthPeriod = shelfCount > 0 ? totalGrowthDays / shelfCount : 0;
+        const harvestSuccessRate = totalCrops > 0 ? (totalSuccessfulHarvests / totalCrops) * 100 : 0;
+        
+        // メトリクスの表示更新
+        document.getElementById('avg-utilization').textContent = `${avgUtilization.toFixed(1)}%`;
+        document.getElementById('avg-growth-period').textContent = `${avgGrowthPeriod.toFixed(0)}日`;
+        document.getElementById('harvest-success-rate').textContent = `${harvestSuccessRate.toFixed(1)}%`;
+        document.getElementById('best-shelf').textContent = bestShelfName || '-';
+        
+        // グラフの描画
+        drawUtilizationChart(utilizationDistribution);
+        drawLevelEfficiencyChart();
+    }
+    
+    // 利用率分布グラフ
+    function drawUtilizationChart(distribution) {
+        const canvas = document.getElementById('utilization-chart');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const data = Object.values(distribution);
+        const labels = Object.keys(distribution);
+        const colors = ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0'];
+        
+        // 簡易的な円グラフ描画
+        const total = data.reduce((a, b) => a + b, 0);
+        let currentAngle = -Math.PI / 2;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 20;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        data.forEach((value, index) => {
+            if (value > 0) {
+                const sliceAngle = (value / total) * 2 * Math.PI;
+                
+                // 扇形を描画
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fillStyle = colors[index];
+                ctx.fill();
+                
+                // ラベルを描画
+                const labelAngle = currentAngle + sliceAngle / 2;
+                const labelX = centerX + Math.cos(labelAngle) * (radius * 0.7);
+                const labelY = centerY + Math.sin(labelAngle) * (radius * 0.7);
+                
+                ctx.fillStyle = '#333';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${labels[index]} (${value})`, labelX, labelY);
+                
+                currentAngle += sliceAngle;
+            }
+        });
+    }
+    
+    // 段別効率性グラフ
+    function drawLevelEfficiencyChart() {
+        const canvas = document.getElementById('level-efficiency-chart');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const levelStats = {{ statistics.level_stats|safe }};
+        
+        if (!levelStats || Object.keys(levelStats).length === 0) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#999';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('データがありません', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+        
+        const levels = Object.keys(levelStats).sort((a, b) => parseInt(a) - parseInt(b));
+        const data = levels.map(level => {
+            const stats = levelStats[level];
+            const total = stats.total || 0;
+            const empty = stats.empty || 0;
+            return total > 0 ? ((total - empty) / total) * 100 : 0;
+        });
+        
+        // 棒グラフを描画
+        const padding = 40;
+        const barWidth = (canvas.width - padding * 2) / levels.length;
+        const maxHeight = canvas.height - padding * 2;
+        const maxValue = Math.max(...data, 100);
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 軸を描画
+        ctx.strokeStyle = '#ddd';
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, canvas.height - padding);
+        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.stroke();
+        
+        // 棒グラフを描画
+        data.forEach((value, index) => {
+            const x = padding + index * barWidth + barWidth * 0.1;
+            const barHeight = (value / maxValue) * maxHeight;
+            const y = canvas.height - padding - barHeight;
+            
+            ctx.fillStyle = '#36a2eb';
+            ctx.fillRect(x, y, barWidth * 0.8, barHeight);
+            
+            // ラベル
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`L${levels[index]}`, x + barWidth * 0.4, canvas.height - padding + 20);
+            ctx.fillText(`${value.toFixed(0)}%`, x + barWidth * 0.4, y - 5);
+        });
+    }
+    
+    // 効率性メトリクスの計算を実行
+    setTimeout(function() {
+        calculateEfficiencyMetrics();
+    }, 1000);
+    
+    // 棚履歴情報の読み込み
+    function loadShelfHistory(shelfNumber) {
+        const historyContent = document.getElementById(`history-content-${shelfNumber}`);
+        if (!historyContent) return;
+        
+        // 棚詳細データを取得（サーバーサイドから埋め込まれたデータを使用）
+        const plotDetails = {{ plot_details_json|safe }};
+        const shelfData = plotDetails[shelfNumber];
+        
+        if (!shelfData) {
+            historyContent.innerHTML = '<p class="text-muted">データが見つかりません</p>';
+            return;
+        }
+        
+        const { crop_history, utilization_rate, productivity_stats } = shelfData;
+        
+        // 履歴HTML を構築
+        let historyHtml = '';
+        if (crop_history && crop_history.length > 0) {
+            historyHtml = `
+                <h6 class="mb-2"><i class="fas fa-history me-1"></i>最近の作物履歴</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>品種</th>
+                                <th>植付日</th>
+                                <th>収穫予定</th>
+                                <th>段</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            crop_history.forEach(function(crop) {
+                const plantingDate = new Date(crop.planting_date).toLocaleDateString('ja-JP');
+                const harvestDate = new Date(crop.expected_harvest_date).toLocaleDateString('ja-JP');
+                
+                historyHtml += `
+                    <tr>
+                        <td>${crop.variety}</td>
+                        <td>${plantingDate}</td>
+                        <td>${harvestDate}</td>
+                        <td>L${crop.level}</td>
+                    </tr>
+                `;
+            });
+            
+            historyHtml += '</tbody></table></div>';
+        } else {
+            historyHtml = '<p class="text-muted">まだ作物履歴がありません</p>';
+        }
+        
+        // 統計情報の追加
+        const statsHtml = `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6 class="mb-2"><i class="fas fa-chart-bar me-1"></i>生産性統計（過去30日）</h6>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-6 col-md-3">
+                    <div class="text-center p-2 bg-light rounded">
+                        <div class="h5 mb-0 text-primary">${Math.round(utilization_rate)}%</div>
+                        <small class="text-muted">利用率</small>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-center p-2 bg-light rounded">
+                        <div class="h5 mb-0 text-success">${productivity_stats.total_plantings}</div>
+                        <small class="text-muted">植付回数</small>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 mt-2 mt-md-0">
+                    <div class="text-center p-2 bg-light rounded">
+                        <div class="h5 mb-0 text-warning">${Math.round(productivity_stats.avg_growth_days)}</div>
+                        <small class="text-muted">平均栽培日数</small>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 mt-2 mt-md-0">
+                    <div class="text-center p-2 bg-light rounded">
+                        <div class="h5 mb-0 text-info">${productivity_stats.successful_harvests}</div>
+                        <small class="text-muted">成功収穫</small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        historyContent.innerHTML = historyHtml + statsHtml;
+    }
+});
+</script>
+{% endblock %}
+        canvas.height = canvas.offsetHeight;
+        
+        // 3D描画の初期設定
+        const rotation = { x: 0, y: 0, z: 0 };
+        const zoom = 1;
+        const plotData = {{ floor_plan_data|safe }};
+        
+        // 3D描画関数を呼び出し
+        draw3DView(ctx, canvas, plotData, rotation, zoom);
+        
+        // 3Dコントロールのイベントリスナー
+        setup3DControls(canvas, ctx, plotData, rotation);
+    }
+    
+    // 3D描画メイン関数
+    function draw3DView(ctx, canvas, plotData, rotation, zoom) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 背景グラデーション
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#667eea');
+        gradient.addColorStop(1, '#764ba2');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // グリッド描画
+        drawGrid(ctx, canvas, rotation);
+        
+        // 棚の3D描画
+        if (plotData && plotData.plots) {
+            plotData.plots.forEach(plot => {
+                draw3DShelf(ctx, canvas, plot, rotation, zoom);
+            });
+        }
+        
+        // 情報表示
+        drawViewInfo(ctx, canvas);
+    }
+    
+    // 3Dグリッド描画
+    function drawGrid(ctx, canvas, rotation) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        
+        const gridSize = 50;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // XY平面のグリッド線
+        for (let i = -10; i <= 10; i++) {
+            const x = centerX + i * gridSize;
+            const y = centerY + i * gridSize;
+            
+            // 縦線
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+            
+            // 横線
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+    }
+    
+    // 3D棚描画
+    function draw3DShelf(ctx, canvas, plot, rotation, zoom) {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // 棚の基本位置
+        const x = centerX + (plot.svg_x - 400) * zoom;
+        const y = centerY + (plot.svg_y - 300) * zoom;
+        const width = plot.svg_width * zoom;
+        const height = plot.svg_height * zoom;
+        
+        // 各レベルを描画
+        for (let level = 1; level <= plot.levels; level++) {
+            const levelY = y - (level - 1) * 20 * zoom; // 奥行き感
+            const levelHeight = levelY - 15 * zoom;
+            
+            // レベルの色を決定
+            const levelData = plot.level_details.find(l => l.level === level);
+            let color = '#e8f5e9'; // デフォルト（空き）
+            
+            if (levelData) {
+                switch (levelData.status) {
+                    case 'growing':
+                        color = '#e3f2fd';
+                        break;
+                    case 'harvest_ready':
+                        color = '#fff3e0';
+                        break;
+                    case 'overdue':
+                        color = '#ffcdd2';
+                        break;
+                }
+            }
+            
+            // 棚のレベルを3D風に描画
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            
+            // メイン面
+            ctx.fillRect(x, levelHeight, width, 12);
+            ctx.strokeRect(x, levelHeight, width, 12);
+            
+            // 側面（3D効果）
+            ctx.fillStyle = shadeColor(color, -20);
+            ctx.beginPath();
+            ctx.moveTo(x + width, levelHeight);
+            ctx.lineTo(x + width + 8, levelHeight - 8);
+            ctx.lineTo(x + width + 8, levelHeight + 4);
+            ctx.lineTo(x + width, levelHeight + 12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // 作物情報表示
+            if (levelData && levelData.crop_name !== '空き') {
+                ctx.fillStyle = '#333';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(levelData.crop_name, x + width/2, levelHeight + 8);
+            }
+        }
+        
+        // 棚番号表示
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`棚${plot.shelf_number}`, x + width/2, y + height + 20);
+    }
+    
+    // 色の明度調整
+    function shadeColor(color, percent) {
+        const f = parseInt(color.slice(1), 16);
+        const t = percent < 0 ? 0 : 255;
+        const p = percent < 0 ? percent * -1 : percent;
+        const R = f >> 16;
+        const G = f >> 8 & 0x00FF;
+        const B = f & 0x0000FF;
+        return "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + 
+                     (Math.round((t - G) * p) + G) * 0x100 + 
+                     (Math.round((t - B) * p) + B)).toString(16).slice(1);
+    }
+    
+    // 3D表示情報
+    function drawViewInfo(ctx, canvas) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(10, canvas.height - 60, 200, 50);
+        
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('3D立体図モード', 15, canvas.height - 40);
+        ctx.fillText('マウス: 回転 | ボタン: 操作', 15, canvas.height - 25);
+    }
+    
+    // 3Dコントロールセットアップ
+    function setup3DControls(canvas, ctx, plotData, rotation) {
+        let isDragging = false;
+        let lastX = 0;
+        let lastY = 0;
+        
+        // マウスドラッグで回転
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaX = e.clientX - lastX;
+            const deltaY = e.clientY - lastY;
+            
+            rotation.y += deltaX * 0.01;
+            rotation.x += deltaY * 0.01;
+            
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+            
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        // 回転ボタン
+        document.getElementById('rotate-left-btn')?.addEventListener('click', () => {
+            rotation.y -= 0.2;
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+        });
+        
+        document.getElementById('rotate-right-btn')?.addEventListener('click', () => {
+            rotation.y += 0.2;
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+        });
+        
+        document.getElementById('rotate-up-btn')?.addEventListener('click', () => {
+            rotation.x -= 0.2;
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+        });
+        
+        document.getElementById('rotate-down-btn')?.addEventListener('click', () => {
+            rotation.x += 0.2;
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+        });
+        
+        document.getElementById('reset-3d-btn')?.addEventListener('click', () => {
+            rotation.x = 0;
+            rotation.y = 0;
+            rotation.z = 0;
+            draw3DView(ctx, canvas, plotData, rotation, 1);
+        });
+    }
+});
+</script>
+{% endblock %}

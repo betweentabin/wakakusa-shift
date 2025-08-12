@@ -1,0 +1,315 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.form-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.form-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.form-card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.form-section {
+    border-left: 4px solid #667eea;
+    padding-left: 1rem;
+    margin-bottom: 2rem;
+}
+
+.form-section h5 {
+    color: #667eea;
+    margin-bottom: 1rem;
+}
+
+.form-control, .form-select {
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.btn-submit {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+    border-radius: 25px;
+    padding: 0.75rem 2rem;
+    color: white;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+.btn-cancel {
+    border: 2px solid #6c757d;
+    border-radius: 25px;
+    padding: 0.75rem 2rem;
+    color: #6c757d;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-cancel:hover {
+    background: #6c757d;
+    color: white;
+}
+
+.required-field::after {
+    content: " *";
+    color: #dc3545;
+}
+
+.help-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.invalid-feedback {
+    display: block;
+    font-size: 0.875rem;
+    color: #dc3545;
+    margin-top: 0.25rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="form-container">
+        <!-- ヘッダー -->
+        <div class="form-header">
+            <h1 class="mb-2">
+                <i class="fas fa-building me-2"></i>
+                {{ title }}
+            </h1>
+            <p class="mb-0 opacity-75">
+                {% if organization %}
+                組織「{{ organization.name }}」の情報を編集
+                {% else %}
+                新しい組織を作成してシフト管理を開始
+                {% endif %}
+            </p>
+        </div>
+
+        <!-- フォーム -->
+        <div class="card form-card">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <!-- 基本情報セクション -->
+                    <div class="form-section">
+                        <h5>
+                            <i class="fas fa-info-circle me-2"></i>
+                            基本情報
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label required-field">
+                                    組織名
+                                </label>
+                                {{ form.name }}
+                                {% if form.name.help_text %}
+                                <div class="help-text">{{ form.name.help_text }}</div>
+                                {% endif %}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.code.id_for_label }}" class="form-label required-field">
+                                    組織コード
+                                </label>
+                                {{ form.code }}
+                                {% if form.code.help_text %}
+                                <div class="help-text">{{ form.code.help_text }}</div>
+                                {% endif %}
+                                {% if form.code.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.code.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                説明
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.help_text %}
+                            <div class="help-text">{{ form.description.help_text }}</div>
+                            {% endif %}
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.description.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 設定セクション -->
+                    <div class="form-section">
+                        <h5>
+                            <i class="fas fa-cog me-2"></i>
+                            設定
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.timezone.id_for_label }}" class="form-label">
+                                    タイムゾーン
+                                </label>
+                                {{ form.timezone }}
+                                {% if form.timezone.help_text %}
+                                <div class="help-text">{{ form.timezone.help_text }}</div>
+                                {% endif %}
+                                {% if form.timezone.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.timezone.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.currency.id_for_label }}" class="form-label">
+                                    通貨
+                                </label>
+                                {{ form.currency }}
+                                {% if form.currency.help_text %}
+                                <div class="help-text">{{ form.currency.help_text }}</div>
+                                {% endif %}
+                                {% if form.currency.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.currency.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 連絡先セクション -->
+                    <div class="form-section">
+                        <h5>
+                            <i class="fas fa-address-book me-2"></i>
+                            連絡先情報
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.contact_email.id_for_label }}" class="form-label">
+                                    連絡先メール
+                                </label>
+                                {{ form.contact_email }}
+                                {% if form.contact_email.help_text %}
+                                <div class="help-text">{{ form.contact_email.help_text }}</div>
+                                {% endif %}
+                                {% if form.contact_email.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.contact_email.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.contact_phone.id_for_label }}" class="form-label">
+                                    連絡先電話
+                                </label>
+                                {{ form.contact_phone }}
+                                {% if form.contact_phone.help_text %}
+                                <div class="help-text">{{ form.contact_phone.help_text }}</div>
+                                {% endif %}
+                                {% if form.contact_phone.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.contact_phone.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.address.id_for_label }}" class="form-label">
+                                住所
+                            </label>
+                            {{ form.address }}
+                            {% if form.address.help_text %}
+                            <div class="help-text">{{ form.address.help_text }}</div>
+                            {% endif %}
+                            {% if form.address.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.address.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- ステータス -->
+                    <div class="form-section">
+                        <h5>
+                            <i class="fas fa-toggle-on me-2"></i>
+                            ステータス
+                        </h5>
+                        
+                        <div class="form-check">
+                            {{ form.is_active }}
+                            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                有効な組織として設定
+                            </label>
+                            {% if form.is_active.help_text %}
+                            <div class="help-text">{{ form.is_active.help_text }}</div>
+                            {% endif %}
+                            {% if form.is_active.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.is_active.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- アクションボタン -->
+                    <div class="d-flex gap-3 justify-content-end mt-4">
+                        <a href="{% url 'shift_management:organization_list' %}" class="btn btn-cancel">
+                            <i class="fas fa-times me-2"></i>
+                            キャンセル
+                        </a>
+                        <button type="submit" class="btn btn-submit">
+                            <i class="fas fa-save me-2"></i>
+                            {{ action }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

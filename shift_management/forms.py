@@ -3,13 +3,14 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.models import User
 from .models import (
     Staff, Shift, ShiftType, Organization, ShiftTemplate, ShiftTemplateDetail,
-    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant,
+    Item, Inventory, Transaction, Order, Invoice, InvoiceItem, DeliveryNote, DeliveryNoteItem
 )
 
-# 時間選択のための選択肢を生成（30分刻み）
+# 時間選択のための選択肢を生成（10分刻み）
 TIME_CHOICES = []
 for hour in range(24):
-    for minute in [0, 30]:
+    for minute in range(0, 60, 10):  # 10分刻み
         time_str = f"{hour:02d}:{minute:02d}"
         TIME_CHOICES.append((time_str, time_str))
 
@@ -575,15 +576,44 @@ class CalendarBulkShiftForm(forms.Form):
         label='シフト種別',
         empty_label='シフト種別を選択'
     )
+    time_input_type = forms.ChoiceField(
+        label='時間入力方法',
+        choices=[
+            ('preset', '定型選択（10分刻み）'),
+            ('custom', '自由記述')
+        ],
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        initial='preset'
+    )
     start_time = forms.ChoiceField(
-        label='開始時間',
+        label='開始時間（定型選択）',
         choices=TIME_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
     )
     end_time = forms.ChoiceField(
-        label='終了時間',
+        label='終了時間（定型選択）',
         choices=TIME_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-select'})
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
+    )
+    custom_start_time = forms.CharField(
+        label='開始時間（自由記述）',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '例: 09:15, 14:45'
+        }),
+        required=False,
+        help_text='HH:MM形式で入力してください'
+    )
+    custom_end_time = forms.CharField(
+        label='終了時間（自由記述）',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '例: 17:30, 22:15'
+        }),
+        required=False,
+        help_text='HH:MM形式で入力してください'
     )
     overwrite = forms.BooleanField(
         label='既存のシフトを上書きする',
@@ -618,6 +648,50 @@ class CalendarBulkShiftForm(forms.Form):
             return dates
         except (json.JSONDecodeError, TypeError):
             raise forms.ValidationError('日付データの形式が正しくありません。')
+    
+    def clean_custom_start_time(self):
+        """カスタム開始時間のバリデーション"""
+        import re
+        time_str = self.cleaned_data.get('custom_start_time', '').strip()
+        if not time_str:
+            return time_str
+        
+        # HH:MM形式のチェック
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', time_str):
+            raise forms.ValidationError('時間はHH:MM形式（例: 09:15）で入力してください。')
+        
+        return time_str
+    
+    def clean_custom_end_time(self):
+        """カスタム終了時間のバリデーション"""
+        import re
+        time_str = self.cleaned_data.get('custom_end_time', '').strip()
+        if not time_str:
+            return time_str
+        
+        # HH:MM形式のチェック
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', time_str):
+            raise forms.ValidationError('時間はHH:MM形式（例: 17:30）で入力してください。')
+        
+        return time_str
+    
+    def clean(self):
+        """フォーム全体のバリデーション"""
+        cleaned_data = super().clean()
+        time_input_type = cleaned_data.get('time_input_type')
+        
+        if time_input_type == 'preset':
+            start_time = cleaned_data.get('start_time')
+            end_time = cleaned_data.get('end_time')
+            if not start_time or not end_time:
+                raise forms.ValidationError('定型選択の場合は開始時間と終了時間を選択してください。')
+        elif time_input_type == 'custom':
+            custom_start_time = cleaned_data.get('custom_start_time')
+            custom_end_time = cleaned_data.get('custom_end_time')
+            if not custom_start_time or not custom_end_time:
+                raise forms.ValidationError('自由記述の場合は開始時間と終了時間を入力してください。')
+        
+        return cleaned_data
 
 class ShiftTypeForm(forms.ModelForm):
     class Meta:
@@ -803,13 +877,17 @@ class ShiftProposalForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         # 実際にシフト勤務をするスタッフのみを対象に（職員・アルバイト）
-        self.fields['proposed_to'].queryset = Staff.objects.filter(
+        queryset = Staff.objects.filter(
             is_active=True, 
             approval_status='approved',
             role_type__in=['staff', 'part_time']  # 職員・アルバイトのみ
         )
+        if organization:
+            queryset = queryset.filter(organization=organization)
+        self.fields['proposed_to'].queryset = queryset
         self.fields['shift_type'].required = False
         self.fields['position'].required = False
         self.fields['message'].required = False
@@ -996,7 +1074,336 @@ class ShiftExportForm(forms.Form):
     )
     staff = forms.ModelMultipleChoiceField(
         label='スタッフ（複数選択可、未選択で全員）',
-        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
-        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        queryset=Staff.objects.none(),  # 初期値は空
+        widget=forms.CheckboxSelectMultiple(),
         required=False
     )
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 組織に所属するスタッフを取得
+        if organization:
+            # 組織に所属するスタッフのみ表示
+            queryset = Staff.objects.filter(organization=organization).order_by('name')
+        else:
+            # 組織が指定されていない場合は全スタッフ
+            queryset = Staff.objects.all().order_by('name')
+        
+        self.fields['staff'].queryset = queryset
+
+
+# ===== 発注管理機能フォーム =====
+
+class ItemForm(forms.ModelForm):
+    """品目登録・編集フォーム"""
+    
+    class Meta:
+        model = Item
+        fields = ['item_code', 'item_name', 'unit', 'order_url', 'threshold', 'organization']
+        widgets = {
+            'item_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: AA001'}),
+            'item_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: レタス種子'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 袋'}),
+            'order_url': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://example.com/order'}),
+            'threshold': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'value': '10'}),
+            'organization': forms.Select(attrs={'class': 'form-control'}),
+        }
+        labels = {
+            'item_code': '品目コード',
+            'item_name': '品目名',
+            'unit': '単位',
+            'order_url': '発注先URL',
+            'threshold': '在庫閾値',
+            'organization': '組織',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        if organization and not self.instance.pk:
+            # 新規作成時は現在の組織を初期値に設定
+            self.fields['organization'].initial = organization
+            self.fields['organization'].widget = forms.HiddenInput()
+
+
+class InventoryForm(forms.ModelForm):
+    """在庫登録・編集フォーム"""
+    
+    class Meta:
+        model = Inventory
+        fields = ['item', 'current_stock']
+        widgets = {
+            'item': forms.Select(attrs={'class': 'form-control'}),
+            'current_stock': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+        }
+        labels = {
+            'item': '品目',
+            'current_stock': '在庫数',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 組織に基づいて品目をフィルタリング
+        if organization:
+            self.fields['item'].queryset = Item.objects.filter(
+                organization=organization,
+                is_active=True
+            ).order_by('item_code')
+
+
+class TransactionForm(forms.ModelForm):
+    """入出庫処理フォーム"""
+    
+    class Meta:
+        model = Transaction
+        fields = ['item', 'transaction_type', 'quantity', 'notes']
+        widgets = {
+            'item': forms.Select(attrs={'class': 'form-control'}),
+            'transaction_type': forms.Select(attrs={'class': 'form-control'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考があれば入力してください'}),
+        }
+        labels = {
+            'item': '品目',
+            'transaction_type': 'トランザクションタイプ',
+            'quantity': '数量',
+            'notes': '備考',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 組織に基づいて品目をフィルタリング
+        if organization:
+            self.fields['item'].queryset = Item.objects.filter(
+                organization=organization,
+                is_active=True
+            ).order_by('item_code')
+
+
+class OrderForm(forms.ModelForm):
+    """発注登録フォーム"""
+    
+    class Meta:
+        model = Order
+        fields = ['item', 'ordered_quantity', 'supplier_url', 'notes']
+        widgets = {
+            'item': forms.Select(attrs={'class': 'form-control'}),
+            'ordered_quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'supplier_url': forms.URLInput(attrs={'class': 'form-control', 'placeholder': '発注先URL（任意）'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考があれば入力してください'}),
+        }
+        labels = {
+            'item': '品目',
+            'ordered_quantity': '発注数量',
+            'supplier_url': '発注先URL',
+            'notes': '備考',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 組織に基づいて品目をフィルタリング
+        if organization:
+            self.fields['item'].queryset = Item.objects.filter(
+                organization=organization,
+                is_active=True
+            ).order_by('item_code')
+        
+        # 品目が選択されている場合、発注先URLを自動設定
+        if self.instance.pk and self.instance.item and self.instance.item.order_url:
+            self.fields['supplier_url'].initial = self.instance.item.order_url
+
+
+class OrderStatusForm(forms.ModelForm):
+    """発注ステータス変更フォーム"""
+    
+    class Meta:
+        model = Order
+        fields = ['status', 'delivery_date', 'notes']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'delivery_date': forms.DateTimeInput(attrs={
+                'class': 'form-control',
+                'type': 'datetime-local'
+            }),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'status': 'ステータス',
+            'delivery_date': '納品日時',
+            'notes': '備考',
+        }
+
+
+# ===== 請求書・納品書発行機能フォーム =====
+
+class InvoiceForm(forms.ModelForm):
+    """請求書作成・編集フォーム"""
+    
+    class Meta:
+        model = Invoice
+        fields = [
+            'bill_to_name', 'bill_to_address', 'bill_to_contact', 
+            'bill_to_phone', 'bill_to_email', 'issue_date', 'due_date',
+            'tax_rate', 'notes'
+        ]
+        widgets = {
+            'bill_to_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '請求先名'}),
+            'bill_to_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '請求先住所'}),
+            'bill_to_contact': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '担当者名'}),
+            'bill_to_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '電話番号'}),
+            'bill_to_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'メールアドレス'}),
+            'issue_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0', 'max': '100'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考'}),
+        }
+        labels = {
+            'bill_to_name': '請求先名',
+            'bill_to_address': '請求先住所',
+            'bill_to_contact': '担当者',
+            'bill_to_phone': '電話番号',
+            'bill_to_email': 'メールアドレス',
+            'issue_date': '発行日',
+            'due_date': '支払期限',
+            'tax_rate': '消費税率(%)',
+            'notes': '備考',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 初期値設定
+        if not self.instance.pk:
+            from datetime import date, timedelta
+            self.fields['issue_date'].initial = date.today()
+            self.fields['due_date'].initial = date.today() + timedelta(days=30)
+            self.fields['tax_rate'].initial = 10.0
+
+
+class InvoiceItemForm(forms.ModelForm):
+    """請求書明細フォーム"""
+    
+    class Meta:
+        model = InvoiceItem
+        fields = ['item_name', 'item_description', 'quantity', 'unit', 'unit_price']
+        widgets = {
+            'item_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '品目名'}),
+            'item_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '品目説明'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '単位'}),
+            'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+        }
+        labels = {
+            'item_name': '品目名',
+            'item_description': '品目説明',
+            'quantity': '数量',
+            'unit': '単位',
+            'unit_price': '単価',
+        }
+
+
+class InvoiceStatusForm(forms.ModelForm):
+    """請求書ステータス変更フォーム"""
+    
+    class Meta:
+        model = Invoice
+        fields = ['status', 'payment_date', 'notes']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'payment_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'status': 'ステータス',
+            'payment_date': '入金日',
+            'notes': '備考',
+        }
+
+
+class DeliveryNoteForm(forms.ModelForm):
+    """納品書作成・編集フォーム"""
+    
+    class Meta:
+        model = DeliveryNote
+        fields = [
+            'deliver_to_name', 'deliver_to_address', 'deliver_to_contact',
+            'deliver_to_phone', 'issue_date', 'delivery_date', 'notes'
+        ]
+        widgets = {
+            'deliver_to_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '納品先名'}),
+            'deliver_to_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '納品先住所'}),
+            'deliver_to_contact': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '担当者名'}),
+            'deliver_to_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '電話番号'}),
+            'issue_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'delivery_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考'}),
+        }
+        labels = {
+            'deliver_to_name': '納品先名',
+            'deliver_to_address': '納品先住所',
+            'deliver_to_contact': '担当者',
+            'deliver_to_phone': '電話番号',
+            'issue_date': '発行日',
+            'delivery_date': '納品予定日',
+            'notes': '備考',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # 初期値設定
+        if not self.instance.pk:
+            from datetime import date, timedelta
+            self.fields['issue_date'].initial = date.today()
+            self.fields['delivery_date'].initial = date.today() + timedelta(days=7)
+
+
+class DeliveryNoteItemForm(forms.ModelForm):
+    """納品書明細フォーム"""
+    
+    class Meta:
+        model = DeliveryNoteItem
+        fields = ['item_name', 'item_description', 'quantity', 'unit', 'delivered_quantity']
+        widgets = {
+            'item_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '品目名'}),
+            'item_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '品目説明'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '単位'}),
+            'delivered_quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+        }
+        labels = {
+            'item_name': '品目名',
+            'item_description': '品目説明',
+            'quantity': '予定数量',
+            'unit': '単位',
+            'delivered_quantity': '実際の納品数量',
+        }
+
+
+class DeliveryNoteStatusForm(forms.ModelForm):
+    """納品書ステータス変更フォーム"""
+    
+    class Meta:
+        model = DeliveryNote
+        fields = ['status', 'actual_delivery_date', 'notes']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'actual_delivery_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'status': 'ステータス',
+            'actual_delivery_date': '実際の納品日',
+            'notes': '備考',
+        }

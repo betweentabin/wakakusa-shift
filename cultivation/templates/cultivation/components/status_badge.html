@@ -1,0 +1,21 @@
+{% comment %}
+栽培ステータスバッジコンポーネント
+使用例: {% include 'cultivation/components/status_badge.html' with status=plan.status text=plan.status_display %}
+{% endcomment %}
+
+<span class="cultivation-badge {{ status|default:'planning'|add:' status-'|add:status }}">
+    {% if status == 'planning' %}
+        <i class="fas fa-clipboard-list me-1"></i>
+    {% elif status == 'seeded' %}
+        <i class="fas fa-seedling me-1"></i>
+    {% elif status == 'growing' %}
+        <i class="fas fa-leaf me-1"></i>
+    {% elif status == 'harvest_ready' %}
+        <i class="fas fa-hand-paper me-1"></i>
+    {% elif status == 'harvested' %}
+        <i class="fas fa-check-circle me-1"></i>
+    {% else %}
+        <i class="fas fa-question-circle me-1"></i>
+    {% endif %}
+    {{ text|default:status }}
+</span>

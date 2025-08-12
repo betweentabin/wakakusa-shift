@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+
+{% block title %}通知一覧{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    通知一覧
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-danger ms-2">{{ unread_count }}</span>
+                    {% endif %}
+                </h2>
+                <div>
+                    {% if unread_count > 0 %}
+                        <button id="markAllReadBtn" class="btn btn-outline-primary">
+                            <i class="fas fa-check-double"></i> 全て既読にする
+                        </button>
+                    {% endif %}
+                    <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-calendar"></i> カレンダーに戻る  
+                    </a>
+                </div>
+            </div>
+
+            {% if page_obj %}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="list-group list-group-flush">
+                            {% for notification in page_obj %}
+                            <div class="list-group-item {% if not notification.is_read %}list-group-item-info{% endif %}">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <div class="d-flex align-items-center">
+                                        {% if not notification.is_read %}
+                                            <span class="badge bg-primary me-2">未読</span>
+                                        {% endif %}
+                                        <div>
+                                            <h6 class="mb-1">{{ notification.title }}</h6>
+                                            <p class="mb-1">{{ notification.message }}</p>
+                                            <small class="text-muted">
+                                                <i class="fas fa-tag"></i> {{ notification.get_notification_type_display }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex flex-column align-items-end">
+                                        <small class="text-muted">{{ notification.created_at|date:"Y/m/d H:i" }}</small>
+                                        {% if not notification.is_read %}
+                                            <button class="btn btn-sm btn-outline-primary mt-1 mark-read-btn" 
+                                                    data-notification-id="{{ notification.id }}">
+                                                既読にする
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- ページネーション -->
+                        {% if page_obj.has_other_pages %}
+                        <nav aria-label="通知一覧ページネーション" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+                                    </li>
+                                {% endif %}
+                                
+                                {% for num in page_obj.paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ num }}</span>
+                                        </li>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">次へ</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 通知がありません。
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+// 個別通知を既読にする
+document.querySelectorAll('.mark-read-btn').forEach(button => {
+    button.addEventListener('click', function() {
+        const notificationId = this.getAttribute('data-notification-id');
+        
+        fetch(`{% url 'shift_management:notification_mark_read' 0 %}`.replace('0', notificationId), {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    });
+});
+
+// 全通知を既読にする
+const markAllReadBtn = document.getElementById('markAllReadBtn');
+if (markAllReadBtn) {
+    markAllReadBtn.addEventListener('click', function() {
+        if (confirm('全ての通知を既読にしますか？')) {
+            fetch("{% url 'shift_management:api_mark_all_notifications_read' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${data.updated_count}件の通知を既読にしました。`);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('通信エラーが発生しました。');
+            });
+        }
+    });
+}
+</script>
+
+{% csrf_token %}
+{% endblock %}

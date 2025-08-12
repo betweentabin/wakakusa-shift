@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drag Test</title>
+    <style>
+        .plot-dragging {
+            opacity: 0.7;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        svg {
+            border: 2px solid #ccc;
+            background: #f0f0f0;
+        }
+        .plot-group {
+            cursor: move;
+        }
+    </style>
+</head>
+<body>
+    <h1>SVG Drag Test</h1>
+    <div id="two-d-container" style="display: block;">
+        <svg id="floor-plan-svg" width="800" height="600">
+            <!-- テスト用の棚 -->
+            <g class="plot-group" data-plot-id="77">
+                <rect class="plot-background" x="100" y="100" width="80" height="60" fill="#e0e0e0" stroke="#999" stroke-width="2" rx="5"></rect>
+                <text x="140" y="135" text-anchor="middle" fill="#333">棚-A1</text>
+            </g>
+            
+            <g class="plot-group" data-plot-id="78">
+                <rect class="plot-background" x="200" y="150" width="80" height="60" fill="#e0e0e0" stroke="#999" stroke-width="2" rx="5"></rect>
+                <text x="240" y="185" text-anchor="middle" fill="#333">棚-B1</text>
+            </g>
+            
+            <g class="plot-group" data-plot-id="79">
+                <rect class="plot-background" x="300" y="200" width="80" height="60" fill="#e0e0e0" stroke="#999" stroke-width="2" rx="5"></rect>
+                <text x="340" y="235" text-anchor="middle" fill="#333">棚-C1</text>
+            </g>
+        </svg>
+    </div>
+    
+    <div id="three-d-container" style="display: none;">3D View</div>
+
+    <script src="/static/js/plot_floor_plan_simple.js"></script>
+    
+    <script>
+        // 簡単なドラッグテスト
+        console.log('Starting drag test...');
+        
+        setTimeout(() => {
+            console.log('Setting up test drag...');
+            const plots = document.querySelectorAll('.plot-group');
+            console.log('Found plots:', plots.length);
+            
+            plots.forEach(plot => {
+                let isDragging = false;
+                let startX, startY;
+                
+                plot.addEventListener('mousedown', (e) => {
+                    console.log('Mousedown on:', plot.dataset.plotId);
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    plot.classList.add('plot-dragging');
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (isDragging) {
+                        const deltaX = e.clientX - startX;
+                        const deltaY = e.clientY - startY;
+                        plot.setAttribute('transform', `translate(${deltaX}, ${deltaY})`);
+                    }
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        console.log('Drag ended');
+                        isDragging = false;
+                        plot.classList.remove('plot-dragging');
+                    }
+                });
+            });
+        }, 1000);
+    </script>
+</body>
+</html>

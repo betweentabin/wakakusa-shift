@@ -8,7 +8,8 @@ from django.utils.safestring import mark_safe
 from .models import (
     Organization, Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
     LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant,
-    Notification
+    Notification, Item, Inventory, Transaction, Order, InventoryAuditLog,
+    Invoice, InvoiceItem, DeliveryNote, DeliveryNoteItem
 )
 
 
@@ -64,7 +65,7 @@ class StaffAdmin(admin.ModelAdmin):
     """スタッフ管理画面（組織対応版）"""
     list_display = [
         'name', 'organization', 'get_role_display_with_icon', 
-        'phone', 'email', 'get_approval_status_display', 'is_active'
+        'phone', 'email', 'get_approval_status_display', 'get_inventory_permission_display', 'is_active'
     ]
     list_filter = [
         'organization', 'role_type', 'approval_status', 
@@ -79,7 +80,7 @@ class StaffAdmin(admin.ModelAdmin):
             'fields': ('organization',)
         }),
         ('基本情報', {
-            'fields': ('name', 'phone', 'email', 'position', 'role_type')
+            'fields': ('name', 'phone', 'email', 'position', 'role_type', 'inventory_permission')
         }),
         ('ユーザーアカウント', {
             'fields': ('user',),
@@ -108,6 +109,22 @@ class StaffAdmin(admin.ModelAdmin):
             obj.get_approval_status_display()
         )
     get_approval_status_display.short_description = '承認状態'
+    
+    def get_inventory_permission_display(self, obj):
+        """在庫権限を色付きで表示"""
+        permission_colors = {
+            'none': '#6c757d',    # グレー
+            'view': '#17a2b8',    # 青色
+            'edit': '#28a745',    # 緑色
+            'admin': '#dc3545',   # 赤色
+        }
+        color = permission_colors.get(obj.inventory_permission, '#6c757d')
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">●</span> {}',
+            color,
+            obj.get_inventory_permission_display()
+        )
+    get_inventory_permission_display.short_description = '在庫権限'
     
     def get_queryset(self, request):
         """組織でプリフェッチしてパフォーマンス向上"""
@@ -573,4 +590,442 @@ class NotificationAdmin(admin.ModelAdmin):
         """選択した通知を未読にする"""
         updated = queryset.update(is_read=False)
         messages.success(request, f'{updated}件の通知を未読にしました。')
-    mark_as_unread.short_description = '選択した通知を未読にする' 
+    mark_as_unread.short_description = '選択した通知を未読にする'
+
+
+# ===== 発注管理機能の管理画面 =====
+
+@admin.register(Item)
+class ItemAdmin(admin.ModelAdmin):
+    """品目管理画面"""
+    list_display = [
+        'item_code', 'item_name', 'organization', 'current_stock_display', 
+        'threshold', 'unit', 'order_url_display', 'is_active', 'created_at'
+    ]
+    list_filter = ['organization', 'is_active', 'created_at']
+    search_fields = ['item_code', 'item_name', 'organization__name']
+    list_editable = ['threshold', 'is_active']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('item_code', 'item_name', 'unit', 'organization', 'is_active')
+        }),
+        ('在庫管理', {
+            'fields': ('threshold',)
+        }),
+        ('発注情報', {
+            'fields': ('order_url',)
+        }),
+        ('システム情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def current_stock_display(self, obj):
+        """現在の在庫数を表示"""
+        stock = obj.current_stock
+        if obj.is_low_stock:
+            return format_html(
+                '<span style="color: #dc3545; font-weight: bold;">⚠ {}{}（不足）</span>',
+                stock, obj.unit
+            )
+        else:
+            return format_html('{}{}', stock, obj.unit)
+    current_stock_display.short_description = '現在在庫'
+    
+    def order_url_display(self, obj):
+        """発注先URLを表示"""
+        if obj.order_url:
+            return format_html(
+                '<a href="{}" target="_blank">🔗 発注サイト</a>',
+                obj.order_url
+            )
+        return '-'
+    order_url_display.short_description = '発注先'
+
+
+@admin.register(Inventory)
+class InventoryAdmin(admin.ModelAdmin):
+    """在庫管理画面"""
+    list_display = [
+        'item_display', 'item_code', 'organization', 'current_stock_display', 
+        'threshold_display', 'status_display', 'last_updated'
+    ]
+    list_filter = ['item__organization', 'last_updated']
+    search_fields = ['item__item_code', 'item__item_name', 'item__organization__name']
+    readonly_fields = ['last_updated']
+    
+    def item_display(self, obj):
+        """品目名を表示"""
+        return obj.item.item_name
+    item_display.short_description = '品目名'
+    
+    def item_code(self, obj):
+        """品目コードを表示"""
+        return obj.item.item_code
+    item_code.short_description = '品目コード'
+    
+    def organization(self, obj):
+        """組織を表示"""
+        return obj.item.organization.name
+    organization.short_description = '組織'
+    
+    def current_stock_display(self, obj):
+        """在庫数を表示"""
+        return format_html('{}{}', obj.current_stock, obj.item.unit)
+    current_stock_display.short_description = '在庫数'
+    
+    def threshold_display(self, obj):
+        """閾値を表示"""
+        return format_html('{}{}', obj.item.threshold, obj.item.unit)
+    threshold_display.short_description = '閾値'
+    
+    def status_display(self, obj):
+        """在庫状況を表示"""
+        if obj.item.is_low_stock:
+            return format_html('<span style="color: #dc3545; font-weight: bold;">⚠ 不足</span>')
+        else:
+            return format_html('<span style="color: #28a745;">✓ 充足</span>')
+    status_display.short_description = '状況'
+
+
+@admin.register(Transaction)
+class TransactionAdmin(admin.ModelAdmin):
+    """入出庫履歴管理画面"""
+    list_display = [
+        'transaction_date', 'item_display', 'item_code', 'transaction_type_display', 
+        'quantity_display', 'user_display', 'notes_short'
+    ]
+    list_filter = ['transaction_type', 'transaction_date', 'item__organization']
+    search_fields = ['item__item_code', 'item__item_name', 'notes', 'user__username']
+    readonly_fields = ['transaction_date']
+    date_hierarchy = 'transaction_date'
+    
+    def item_display(self, obj):
+        """品目名を表示"""
+        return obj.item.item_name
+    item_display.short_description = '品目名'
+    
+    def item_code(self, obj):
+        """品目コードを表示"""
+        return obj.item.item_code
+    item_code.short_description = '品目コード'
+    
+    def transaction_type_display(self, obj):
+        """トランザクションタイプを色付きで表示"""
+        colors = {
+            'in': '#28a745',    # 緑
+            'out': '#ffc107',   # 黄
+            'adjustment': '#17a2b8'  # 青
+        }
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            colors.get(obj.transaction_type, '#6c757d'),
+            obj.get_transaction_type_display()
+        )
+    transaction_type_display.short_description = 'タイプ'
+    
+    def quantity_display(self, obj):
+        """数量を表示"""
+        return format_html('{}{}', obj.quantity, obj.item.unit)
+    quantity_display.short_description = '数量'
+    
+    def user_display(self, obj):
+        """担当者を表示"""
+        return obj.user.username if obj.user else '-'
+    user_display.short_description = '担当者'
+    
+    def notes_short(self, obj):
+        """備考の短縮表示"""
+        if obj.notes:
+            return obj.notes[:30] + '...' if len(obj.notes) > 30 else obj.notes
+        return '-'
+    notes_short.short_description = '備考'
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    """発注履歴管理画面"""
+    list_display = [
+        'order_date', 'item_display', 'item_code', 'ordered_quantity_display',
+        'status_display', 'supplier_url_display', 'user_display', 'delivery_date'
+    ]
+    list_filter = ['status', 'order_date', 'delivery_date', 'item__organization']
+    search_fields = ['item__item_code', 'item__item_name', 'notes', 'user__username']
+    readonly_fields = ['order_date']
+    date_hierarchy = 'order_date'
+    # list_editable = ['status']  # list_displayにstatus_displayがあるため無効化
+    
+    fieldsets = (
+        ('発注情報', {
+            'fields': ('item', 'ordered_quantity', 'supplier_url', 'status')
+        }),
+        ('日時情報', {
+            'fields': ('order_date', 'delivery_date')
+        }),
+        ('担当者・備考', {
+            'fields': ('user', 'notes')
+        }),
+    )
+    
+    def item_display(self, obj):
+        """品目名を表示"""
+        return obj.item.item_name
+    item_display.short_description = '品目名'
+    
+    def item_code(self, obj):
+        """品目コードを表示"""
+        return obj.item.item_code
+    item_code.short_description = '品目コード'
+    
+    def ordered_quantity_display(self, obj):
+        """発注数量を表示"""
+        return format_html('{}{}', obj.ordered_quantity, obj.item.unit)
+    ordered_quantity_display.short_description = '発注数量'
+    
+    def status_display(self, obj):
+        """ステータスを色付きで表示"""
+        colors = {
+            'ordered': '#007bff',     # 青
+            'delivered': '#28a745',   # 緑
+            'cancelled': '#dc3545'    # 赤
+        }
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            colors.get(obj.status, '#6c757d'),
+            obj.get_status_display()
+        )
+    status_display.short_description = 'ステータス'
+    
+    def supplier_url_display(self, obj):
+        """発注先URLを表示"""
+        if obj.supplier_url:
+            return format_html(
+                '<a href="{}" target="_blank">🔗 発注サイト</a>',
+                obj.supplier_url
+            )
+        return '-'
+    supplier_url_display.short_description = '発注先'
+    
+    def user_display(self, obj):
+        """担当者を表示"""
+        return obj.user.username if obj.user else '-'
+    user_display.short_description = '担当者'
+    
+    actions = ['mark_as_delivered', 'mark_as_cancelled']
+    
+    def mark_as_delivered(self, request, queryset):
+        """選択した発注を納品済みにする"""
+        updated = 0
+        for order in queryset:
+            if order.status == 'ordered':
+                order.status = 'delivered'
+                order.delivery_date = timezone.now()
+                order.save()
+                updated += 1
+        
+        if updated:
+            messages.success(request, f'{updated}件の発注を納品済みにしました。')
+        else:
+            messages.warning(request, '発注済みの発注が選択されていません。')
+    mark_as_delivered.short_description = '選択した発注を納品済みにする'
+    
+    def mark_as_cancelled(self, request, queryset):
+        """選択した発注をキャンセルにする"""
+        updated = queryset.exclude(status='delivered').update(status='cancelled')
+        if updated:
+            messages.success(request, f'{updated}件の発注をキャンセルしました。')
+        else:
+            messages.warning(request, 'キャンセル可能な発注が選択されていません。')
+    mark_as_cancelled.short_description = '選択した発注をキャンセルする'
+
+
+@admin.register(InventoryAuditLog)
+class InventoryAuditLogAdmin(admin.ModelAdmin):
+    """監査ログ管理画面"""
+    list_display = [
+        'timestamp', 'organization', 'user', 'get_action_display_with_icon',
+        'target_model', 'description', 'ip_address'
+    ]
+    list_filter = [
+        'organization', 'action', 'target_model', 'timestamp'
+    ]
+    search_fields = [
+        'user__username', 'description', 'ip_address'
+    ]
+    ordering = ['-timestamp']
+    readonly_fields = [
+        'organization', 'user', 'action', 'target_model', 'target_id',
+        'description', 'old_values', 'new_values', 'ip_address',
+        'user_agent', 'timestamp', 'formatted_old_values', 'formatted_new_values'
+    ]
+    
+    fieldsets = (
+        ('基本情報', {
+            'fields': ('timestamp', 'organization', 'user', 'action')
+        }),
+        ('対象情報', {
+            'fields': ('target_model', 'target_id', 'description')
+        }),
+        ('変更内容', {
+            'fields': ('formatted_old_values', 'formatted_new_values'),
+            'classes': ('collapse',)
+        }),
+        ('接続情報', {
+            'fields': ('ip_address', 'user_agent'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """監査ログは手動作成を禁止"""
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        """監査ログは編集を禁止"""
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """監査ログは削除を禁止"""
+        return False
+    
+    def get_action_display_with_icon(self, obj):
+        """操作種別をアイコン付きで表示"""
+        action_icons = {
+            'item_create': '🆕',
+            'item_update': '✏️',
+            'item_delete': '🗑️',
+            'inventory_in': '📥',
+            'inventory_out': '📤',
+            'inventory_adjust': '🔧',
+            'order_create': '🛒',
+            'order_update': '📝',
+            'order_cancel': '❌',
+            'user_login': '🔐',
+            'user_logout': '🔓',
+            'permission_change': '👤',
+        }
+        icon = action_icons.get(obj.action, '📋')
+        return f"{icon} {obj.get_action_display()}"
+    get_action_display_with_icon.short_description = '操作種別'
+    
+    def formatted_old_values(self, obj):
+        """変更前データを整形して表示"""
+        if not obj.old_values:
+            return '-'
+        
+        import json
+        try:
+            formatted = json.dumps(obj.old_values, ensure_ascii=False, indent=2)
+            return format_html('<pre style="font-size: 12px;">{}</pre>', formatted)
+        except:
+            return str(obj.old_values)
+    formatted_old_values.short_description = '変更前データ'
+    
+    def formatted_new_values(self, obj):
+        """変更後データを整形して表示"""
+        if not obj.new_values:
+            return '-'
+        
+        import json
+        try:
+            formatted = json.dumps(obj.new_values, ensure_ascii=False, indent=2)
+            return format_html('<pre style="font-size: 12px;">{}</pre>', formatted)
+        except:
+            return str(obj.new_values)
+    formatted_new_values.short_description = '変更後データ'
+    
+    def get_queryset(self, request):
+        """関連オブジェクトをプリフェッチ"""
+        return super().get_queryset(request).select_related('organization', 'user')
+
+
+# ===== 請求書・納品書発行機能の管理画面 =====
+
+class InvoiceItemInline(admin.TabularInline):
+    """請求書明細のインライン"""
+    model = InvoiceItem
+    extra = 1
+    fields = ['item_name', 'item_description', 'quantity', 'unit', 'unit_price', 'amount']
+    readonly_fields = ['amount']
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    """請求書管理画面"""
+    list_display = [
+        'invoice_number', 'bill_to_name', 'organization', 'issue_date', 
+        'total_amount', 'status', 'created_by', 'created_at'
+    ]
+    list_filter = ['organization', 'status', 'issue_date', 'created_at']
+    search_fields = ['invoice_number', 'bill_to_name', 'bill_to_contact']
+    list_editable = ['status']
+    readonly_fields = ['invoice_number', 'subtotal', 'tax_amount', 'total_amount', 'created_at', 'updated_at']
+    inlines = [InvoiceItemInline]
+    
+    fieldsets = (
+        ('請求書情報', {
+            'fields': ('invoice_number', 'organization', 'order', 'status')
+        }),
+        ('請求先情報', {
+            'fields': ('bill_to_name', 'bill_to_address', 'bill_to_contact', 'bill_to_phone', 'bill_to_email')
+        }),
+        ('請求内容', {
+            'fields': ('issue_date', 'due_date', 'tax_rate', 'subtotal', 'tax_amount', 'total_amount')
+        }),
+        ('その他', {
+            'fields': ('payment_date', 'notes', 'created_by')
+        }),
+        ('システム情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('organization', 'created_by', 'order')
+
+
+class DeliveryNoteItemInline(admin.TabularInline):
+    """納品書明細のインライン"""
+    model = DeliveryNoteItem
+    extra = 1
+    fields = ['item_name', 'item_description', 'quantity', 'unit', 'delivered_quantity']
+
+
+@admin.register(DeliveryNote)
+class DeliveryNoteAdmin(admin.ModelAdmin):
+    """納品書管理画面"""
+    list_display = [
+        'delivery_number', 'deliver_to_name', 'organization', 'issue_date', 
+        'delivery_date', 'status', 'created_by', 'created_at'
+    ]
+    list_filter = ['organization', 'status', 'issue_date', 'delivery_date', 'created_at']
+    search_fields = ['delivery_number', 'deliver_to_name', 'deliver_to_contact']
+    list_editable = ['status']
+    readonly_fields = ['delivery_number', 'created_at', 'updated_at']
+    inlines = [DeliveryNoteItemInline]
+    
+    fieldsets = (
+        ('納品書情報', {
+            'fields': ('delivery_number', 'organization', 'order', 'invoice', 'status')
+        }),
+        ('納品先情報', {
+            'fields': ('deliver_to_name', 'deliver_to_address', 'deliver_to_contact', 'deliver_to_phone')
+        }),
+        ('納品内容', {
+            'fields': ('issue_date', 'delivery_date', 'actual_delivery_date')
+        }),
+        ('その他', {
+            'fields': ('notes', 'created_by')
+        }),
+        ('システム情報', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('organization', 'created_by', 'order', 'invoice') 

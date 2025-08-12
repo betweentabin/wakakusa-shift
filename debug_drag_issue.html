@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drag Debug</title>
+    <style>
+        .plot-dragging {
+            opacity: 0.7;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        svg {
+            border: 2px solid #ccc;
+            background: #f0f0f0;
+        }
+        .plot-group {
+            cursor: move;
+        }
+    </style>
+</head>
+<body>
+    <h1>SVG Drag Debug Test</h1>
+    <div id="two-d-container" style="display: block;">
+        <svg id="floor-plan-svg" width="800" height="600">
+            <!-- 実際のテンプレートと同じ構造 -->
+            <g class="plot-group" data-plot-id="77">
+                <rect class="plot-background" x="100" y="100" width="80" height="60" fill="#e0e0e0" stroke="#999" stroke-width="2" rx="5"></rect>
+                <text x="140" y="135" text-anchor="middle" fill="#333">棚-A1</text>
+            </g>
+            
+            <g class="plot-group" data-plot-id="78">
+                <rect class="plot-background" x="200" y="150" width="80" height="60" fill="#e0e0e0" stroke="#999" stroke-width="2" rx="5"></rect>
+                <text x="240" y="185" text-anchor="middle" fill="#333">棚-B1</text>
+            </g>
+        </svg>
+    </div>
+    
+    <div id="debug-info">
+        <h3>Debug Info:</h3>
+        <div id="debug-output"></div>
+    </div>
+
+    <script>
+        console.log('=== Debug Drag Test ===');
+        
+        function log(message) {
+            console.log(message);
+            const debugOutput = document.getElementById('debug-output');
+            debugOutput.innerHTML += '<div>' + message + '</div>';
+        }
+        
+        function setupDebugDrag() {
+            log('Setting up debug drag...');
+            
+            const svg = document.getElementById('floor-plan-svg');
+            log('SVG found: ' + !!svg);
+            
+            if (!svg) {
+                log('ERROR: SVG not found');
+                return;
+            }
+            
+            const plots = document.querySelectorAll('.plot-group');
+            log('Plot groups found: ' + plots.length);
+            
+            if (plots.length === 0) {
+                log('ERROR: No plot groups found');
+                return;
+            }
+            
+            plots.forEach((plot, index) => {
+                log(`Setting up plot ${index + 1} (ID: ${plot.dataset.plotId})`);
+                
+                let isDragging = false;
+                let startX, startY;
+                
+                // 基本的なクリックテスト
+                plot.addEventListener('click', function(e) {
+                    log(`Plot ${plot.dataset.plotId} clicked!`);
+                    e.stopPropagation();
+                });
+                
+                plot.addEventListener('mousedown', function(e) {
+                    log(`Mousedown on plot ${plot.dataset.plotId}`);
+                    if (e.button === 0) {
+                        isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        plot.classList.add('plot-dragging');
+                        log('Drag started');
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+                
+                document.addEventListener('mousemove', function(e) {
+                    if (isDragging) {
+                        const deltaX = e.clientX - startX;
+                        const deltaY = e.clientY - startY;
+                        plot.setAttribute('transform', `translate(${deltaX}, ${deltaY})`);
+                    }
+                });
+                
+                document.addEventListener('mouseup', function(e) {
+                    if (isDragging) {
+                        log(`Drag ended for plot ${plot.dataset.plotId}`);
+                        isDragging = false;
+                        plot.classList.remove('plot-dragging');
+                    }
+                });
+            });
+            
+            log('Setup complete!');
+        }
+        
+        // DOM読み込み後に実行
+        document.addEventListener('DOMContentLoaded', function() {
+            log('DOM loaded');
+            setupDebugDrag();
+        });
+    </script>
+</body>
+</html>

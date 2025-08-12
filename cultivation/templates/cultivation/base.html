@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+
+{% block title %}栽培管理システム{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 栽培管理共通スタイル */
+    .cultivation-header {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 15px 0;
+        margin-bottom: 20px;
+        border-radius: 10px;
+    }
+    
+    .cultivation-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .cultivation-badge {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .cultivation-badge.status-planning {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .cultivation-badge.status-seeded {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    
+    .cultivation-badge.status-growing {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .cultivation-badge.status-harvest-ready {
+        background-color: #fd7e14;
+        color: white;
+    }
+    
+    .cultivation-badge.status-harvested {
+        background-color: #6f42c1;
+        color: white;
+    }
+    
+    .cultivation-stats {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-stats .stat-item {
+        text-align: center;
+        padding: 10px;
+    }
+    
+    .cultivation-stats .stat-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .cultivation-stats .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .cultivation-progress {
+        height: 8px;
+        background-color: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .cultivation-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745, #20c997);
+        transition: width 0.3s ease;
+    }
+    
+    .cultivation-grid {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-grid-item {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+    
+    .cultivation-grid-item:hover {
+        border-color: #28a745;
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+    }
+    
+    .cultivation-grid-item.occupied {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+    }
+    
+    .cultivation-grid-item.harvest-ready {
+        background-color: #fff3cd;
+        border-color: #ffeaa7;
+    }
+    
+    .cultivation-grid-item.overdue {
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+    }
+    
+    .cultivation-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-search {
+        flex: 1;
+        max-width: 300px;
+    }
+    
+    .cultivation-filters {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .cultivation-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .cultivation-table th {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+    }
+    
+    .cultivation-table td {
+        border-bottom: 1px solid #dee2e6;
+        vertical-align: middle;
+    }
+    
+    .cultivation-form {
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .cultivation-form .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-form .form-label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 8px;
+    }
+    
+    .cultivation-form .form-control:focus {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+    
+    .cultivation-empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    
+    .cultivation-empty-state .icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #dee2e6;
+    }
+    
+    .cultivation-notifications {
+        margin-bottom: 20px;
+    }
+    
+    .cultivation-notification {
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border-left: 4px solid;
+    }
+    
+    .cultivation-notification.success {
+        background-color: #d4edda;
+        border-left-color: #28a745;
+        color: #155724;
+    }
+    
+    .cultivation-notification.info {
+        background-color: #cce7ff;
+        border-left-color: #007bff;
+        color: #004085;
+    }
+    
+    .cultivation-notification.warning {
+        background-color: #fff3cd;
+        border-left-color: #ffc107;
+        color: #856404;
+    }
+    
+    .cultivation-notification.error {
+        background-color: #f8d7da;
+        border-left-color: #dc3545;
+        color: #721c24;
+    }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+        .cultivation-header {
+            padding: 10px 0;
+            margin-bottom: 15px;
+        }
+        
+        .cultivation-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .cultivation-search {
+            max-width: none;
+            margin-bottom: 10px;
+        }
+        
+        .cultivation-filters {
+            flex-wrap: wrap;
+        }
+        
+        .cultivation-form {
+            padding: 20px;
+        }
+        
+        .cultivation-stats .stat-item {
+            padding: 8px;
+        }
+        
+        .cultivation-stats .stat-number {
+            font-size: 1.2rem;
+        }
+        
+        .cultivation-grid {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
+    }
+</style>
+{% block extra_cultivation_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー -->
+    <div class="cultivation-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="h2 mb-0">
+                        <i class="fas fa-seedling me-2"></i>
+                        {% block page_title %}栽培管理システム{% endblock %}
+                    </h1>
+                    {% block page_description %}
+                    <p class="mb-0 opacity-75">効率的な栽培計画と管理</p>
+                    {% endblock %}
+                </div>
+                <div class="col-md-4 text-end">
+                    {% block header_actions %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 通知エリア -->
+    {% block notifications %}
+    {% if notifications %}
+    <div class="cultivation-notifications">
+        {% for notification in notifications %}
+        <div class="cultivation-notification {{ notification.level }}">
+            <i class="fas fa-{{ notification.icon|default:'info-circle' }} me-2"></i>
+            <strong>{{ notification.title }}</strong>
+            {% if notification.message %}
+            <br>{{ notification.message }}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endblock %}
+    
+    <!-- 統計情報 -->
+    {% block statistics %}{% endblock %}
+    
+    <!-- アクションバー -->
+    {% block actions %}{% endblock %}
+    
+    <!-- メインコンテンツ -->
+    <div class="row">
+        <!-- サイドバー -->
+        {% block sidebar %}{% endblock %}
+        
+        <!-- メインエリア -->
+        <div class="{% block main_col_class %}col-12{% endblock %}">
+            {% block main_content %}{% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 栽培管理共通JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    // 自動非表示の通知
+    const notifications = document.querySelectorAll('.cultivation-notification');
+    notifications.forEach(function(notification) {
+        if (notification.classList.contains('success') || notification.classList.contains('info')) {
+            setTimeout(function() {
+                notification.style.opacity = '0';
+                setTimeout(function() {
+                    notification.remove();
+                }, 300);
+            }, 5000);
+        }
+    });
+    
+    // 確認ダイアログ
+    const confirmButtons = document.querySelectorAll('[data-confirm]');
+    confirmButtons.forEach(function(button) {
+        button.addEventListener('click', function(e) {
+            const message = this.getAttribute('data-confirm');
+            if (!confirm(message)) {
+                e.preventDefault();
+            }
+        });
+    });
+    
+    // Ajax フォーム送信
+    const ajaxForms = document.querySelectorAll('.ajax-form');
+    ajaxForms.forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '処理中...';
+            
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.redirect_url) {
+                        window.location.href = data.redirect_url;
+                    } else {
+                        location.reload();
+                    }
+                } else {
+                    alert('エラーが発生しました: ' + (data.error || '不明なエラー'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('通信エラーが発生しました。');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    });
+    
+    // 検索フォームの自動送信
+    const searchInputs = document.querySelectorAll('.auto-search');
+    searchInputs.forEach(function(input) {
+        let timeout;
+        input.addEventListener('input', function() {
+            clearTimeout(timeout);
+            timeout = setTimeout(function() {
+                input.closest('form').submit();
+            }, 500);
+        });
+    });
+    
+    // 栽培期間の自動計算
+    const cultivationPeriodInput = document.getElementById('cultivation_period_days');
+    const sowingDateInput = document.getElementById('sowing_date');
+    const plantingDateInput = document.getElementById('planting_date');
+    const harvestDateInput = document.getElementById('harvest_date_planned');
+    
+    if (cultivationPeriodInput && (sowingDateInput || plantingDateInput) && harvestDateInput) {
+        function calculateHarvestDate() {
+            const period = parseInt(cultivationPeriodInput.value);
+            const startDate = new Date(plantingDateInput.value || sowingDateInput.value);
+            
+            if (period && startDate && !isNaN(startDate.getTime())) {
+                const harvestDate = new Date(startDate);
+                harvestDate.setDate(harvestDate.getDate() + period);
+                harvestDateInput.value = harvestDate.toISOString().split('T')[0];
+            }
+        }
+        
+        cultivationPeriodInput.addEventListener('input', calculateHarvestDate);
+        if (sowingDateInput) sowingDateInput.addEventListener('change', calculateHarvestDate);
+        if (plantingDateInput) plantingDateInput.addEventListener('change', calculateHarvestDate);
+    }
+});
+
+// ユーティリティ関数
+function showNotification(message, type = 'success', duration = 5000) {
+    const notification = document.createElement('div');
+    notification.className = `cultivation-notification ${type}`;
+    notification.innerHTML = `<i class="fas fa-info-circle me-2"></i>${message}`;
+    
+    const container = document.querySelector('.cultivation-notifications') || document.body;
+    container.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, duration);
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
+function getStatusBadgeClass(status) {
+    const statusClasses = {
+        'planning': 'status-planning',
+        'seeded': 'status-seeded',
+        'growing': 'status-growing',
+        'harvest_ready': 'status-harvest-ready',
+        'harvested': 'status-harvested'
+    };
+    return statusClasses[status] || 'status-planning';
+}
+</script>
+{% block extra_cultivation_js %}{% endblock %}
+{% endblock %}

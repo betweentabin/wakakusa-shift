@@ -47,6 +47,14 @@ class Staff(models.Model):
         ('manager', '管理者'),
     ]
     
+    # 在庫管理権限の選択肢
+    INVENTORY_PERMISSION_CHOICES = [
+        ('none', '権限なし'),
+        ('view', '閲覧のみ'),
+        ('edit', '編集可能'),
+        ('admin', '管理者権限'),
+    ]
+    
     # 組織フィールドを追加
     organization = models.ForeignKey(
         Organization, 
@@ -84,6 +92,14 @@ class Staff(models.Model):
         verbose_name="承認者"
     )
     rejection_reason = models.TextField(blank=True, null=True, verbose_name="却下理由")
+    
+    # 在庫管理権限フィールドを追加
+    inventory_permission = models.CharField(
+        max_length=20,
+        choices=INVENTORY_PERMISSION_CHOICES,
+        default='none',
+        verbose_name="在庫管理権限"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
@@ -571,4 +587,380 @@ def create_notification(recipient, notification_type, title, message, **kwargs):
         message=message,
         **kwargs
     )
-    return notification 
+    return notification
+
+
+# ===== 発注管理機能モデル =====
+
+class Item(models.Model):
+    """品目情報モデル"""
+    item_code = models.CharField(max_length=50, verbose_name="品目コード")
+    item_name = models.CharField(max_length=200, verbose_name="品目名")
+    unit = models.CharField(max_length=20, default="個", verbose_name="単位")
+    order_url = models.URLField(blank=True, null=True, verbose_name="発注先URL")
+    threshold = models.IntegerField(default=10, verbose_name="在庫閾値")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="組織")
+    is_active = models.BooleanField(default=True, verbose_name="有効")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "品目"
+        verbose_name_plural = "品目"
+        ordering = ['item_code']
+        unique_together = ['item_code', 'organization']  # 組織内でのみユニーク
+    
+    def __str__(self):
+        return f"{self.item_code} - {self.item_name}"
+    
+    @property
+    def current_stock(self):
+        """現在の在庫数を取得"""
+        try:
+            inventory = self.inventory.first()
+            return inventory.current_stock if inventory else 0
+        except:
+            return 0
+    
+    @property
+    def is_low_stock(self):
+        """在庫閾値を下回っているかチェック"""
+        return self.current_stock <= self.threshold
+
+
+class Inventory(models.Model):
+    """在庫情報モデル"""
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='inventory', verbose_name="品目")
+    current_stock = models.IntegerField(default=0, verbose_name="現在の在庫数")
+    last_updated = models.DateTimeField(auto_now=True, verbose_name="最終更新日時")
+    
+    class Meta:
+        verbose_name = "在庫"
+        verbose_name_plural = "在庫"
+        unique_together = ['item']
+    
+    def __str__(self):
+        return f"{self.item.item_name}: {self.current_stock}{self.item.unit}"
+
+
+class Transaction(models.Model):
+    """入出庫履歴モデル"""
+    TRANSACTION_TYPE_CHOICES = [
+        ('in', '入庫'),
+        ('out', '出庫'),
+        ('adjustment', '在庫修正'),
+    ]
+    
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, verbose_name="品目")
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES, verbose_name="トランザクションタイプ")
+    quantity = models.IntegerField(verbose_name="数量")
+    transaction_date = models.DateTimeField(auto_now_add=True, verbose_name="トランザクション日時")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="担当者")
+    notes = models.TextField(blank=True, null=True, verbose_name="備考")
+    
+    class Meta:
+        verbose_name = "入出庫履歴"
+        verbose_name_plural = "入出庫履歴"
+        ordering = ['-transaction_date']
+    
+    def __str__(self):
+        return f"{self.item.item_name} {self.get_transaction_type_display()} {self.quantity}{self.item.unit}"
+
+
+class Order(models.Model):
+    """発注履歴モデル"""
+    STATUS_CHOICES = [
+        ('ordered', '発注済み'),
+        ('delivered', '納品済み'),
+        ('cancelled', 'キャンセル'),
+    ]
+    
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, verbose_name="品目")
+    ordered_quantity = models.IntegerField(verbose_name="発注数量")
+    order_date = models.DateTimeField(auto_now_add=True, verbose_name="発注日時")
+    supplier_url = models.URLField(blank=True, null=True, verbose_name="発注先URL")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ordered', verbose_name="ステータス")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="発注担当者")
+    delivery_date = models.DateTimeField(null=True, blank=True, verbose_name="納品日時")
+    notes = models.TextField(blank=True, null=True, verbose_name="備考")
+    
+    class Meta:
+        verbose_name = "発注履歴"
+        verbose_name_plural = "発注履歴"
+        ordering = ['-order_date']
+    
+    def __str__(self):
+        return f"{self.item.item_name} {self.ordered_quantity}{self.item.unit} ({self.get_status_display()})"
+
+
+class InventoryAuditLog(models.Model):
+    """在庫管理監査ログモデル"""
+    
+    ACTION_CHOICES = [
+        ('item_create', '品目作成'),
+        ('item_update', '品目更新'),
+        ('item_delete', '品目削除'),
+        ('inventory_in', '入庫処理'),
+        ('inventory_out', '出庫処理'),
+        ('inventory_adjust', '在庫修正'),
+        ('order_create', '発注作成'),
+        ('order_update', '発注更新'),
+        ('order_cancel', '発注キャンセル'),
+        ('user_login', 'ログイン'),
+        ('user_logout', 'ログアウト'),
+        ('permission_change', '権限変更'),
+    ]
+    
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name="実行ユーザー"
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=ACTION_CHOICES,
+        verbose_name="操作種別"
+    )
+    target_model = models.CharField(
+        max_length=50,
+        verbose_name="対象モデル",
+        blank=True,
+        null=True
+    )
+    target_id = models.PositiveIntegerField(
+        verbose_name="対象オブジェクトID",
+        blank=True,
+        null=True
+    )
+    description = models.TextField(
+        verbose_name="操作説明",
+        blank=True,
+        null=True
+    )
+    old_values = models.JSONField(
+        verbose_name="変更前データ",
+        blank=True,
+        null=True
+    )
+    new_values = models.JSONField(
+        verbose_name="変更後データ",
+        blank=True,
+        null=True
+    )
+    ip_address = models.GenericIPAddressField(
+        verbose_name="IPアドレス",
+        blank=True,
+        null=True
+    )
+    user_agent = models.TextField(
+        verbose_name="ユーザーエージェント",
+        blank=True,
+        null=True
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="実行日時"
+    )
+    
+    class Meta:
+        verbose_name = "監査ログ"
+        verbose_name_plural = "監査ログ"
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['organization', '-timestamp']),
+            models.Index(fields=['user', '-timestamp']),
+            models.Index(fields=['action', '-timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.get_action_display()} ({self.timestamp})"
+
+
+# ===== 請求書・納品書発行機能モデル =====
+
+class Invoice(models.Model):
+    """請求書モデル"""
+    
+    STATUS_CHOICES = [
+        ('draft', '下書き'),
+        ('issued', '発行済み'),
+        ('paid', '入金済み'),
+        ('overdue', '支払期限超過'),
+        ('cancelled', 'キャンセル'),
+    ]
+    
+    invoice_number = models.CharField(max_length=50, unique=True, verbose_name="請求書番号")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="組織")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, verbose_name="関連発注")
+    
+    # 請求先情報
+    bill_to_name = models.CharField(max_length=200, verbose_name="請求先名")
+    bill_to_address = models.TextField(verbose_name="請求先住所")
+    bill_to_contact = models.CharField(max_length=100, blank=True, null=True, verbose_name="担当者")
+    bill_to_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="電話番号")
+    bill_to_email = models.EmailField(blank=True, null=True, verbose_name="メールアドレス")
+    
+    # 請求情報
+    issue_date = models.DateField(verbose_name="発行日")
+    due_date = models.DateField(verbose_name="支払期限")
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="小計")
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=10.0, verbose_name="消費税率(%)")
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="消費税額")
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="合計金額")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="ステータス")
+    payment_date = models.DateField(null=True, blank=True, verbose_name="入金日")
+    notes = models.TextField(blank=True, null=True, verbose_name="備考")
+    
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作成者")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "請求書"
+        verbose_name_plural = "請求書"
+        ordering = ['-issue_date']
+    
+    def __str__(self):
+        return f"{self.invoice_number} - {self.bill_to_name} ({self.get_status_display()})"
+    
+    def save(self, *args, **kwargs):
+        # 請求書番号の自動生成
+        if not self.invoice_number:
+            from datetime import datetime
+            now = datetime.now()
+            prefix = f"INV{now.strftime('%Y%m')}"
+            last_invoice = Invoice.objects.filter(
+                invoice_number__startswith=prefix
+            ).order_by('-invoice_number').first()
+            
+            if last_invoice:
+                last_num = int(last_invoice.invoice_number[-4:])
+                new_num = last_num + 1
+            else:
+                new_num = 1
+            
+            self.invoice_number = f"{prefix}{new_num:04d}"
+        
+        # 金額計算
+        self.tax_amount = self.subtotal * (self.tax_rate / 100)
+        self.total_amount = self.subtotal + self.tax_amount
+        
+        super().save(*args, **kwargs)
+
+
+class InvoiceItem(models.Model):
+    """請求書明細モデル"""
+    
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='items', verbose_name="請求書")
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, verbose_name="品目")
+    item_name = models.CharField(max_length=200, verbose_name="品目名")
+    item_description = models.TextField(blank=True, null=True, verbose_name="品目説明")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="数量")
+    unit = models.CharField(max_length=20, default="個", verbose_name="単位")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="単価")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="金額")
+    
+    class Meta:
+        verbose_name = "請求書明細"
+        verbose_name_plural = "請求書明細"
+        ordering = ['id']
+    
+    def save(self, *args, **kwargs):
+        # 金額計算
+        self.amount = self.quantity * self.unit_price
+        super().save(*args, **kwargs)
+        
+        # 請求書の小計を再計算
+        self.invoice.subtotal = sum(item.amount for item in self.invoice.items.all())
+        self.invoice.save()
+    
+    def __str__(self):
+        return f"{self.item_name} x {self.quantity}{self.unit}"
+
+
+class DeliveryNote(models.Model):
+    """納品書モデル"""
+    
+    STATUS_CHOICES = [
+        ('draft', '下書き'),
+        ('issued', '発行済み'),
+        ('delivered', '納品済み'),
+        ('cancelled', 'キャンセル'),
+    ]
+    
+    delivery_number = models.CharField(max_length=50, unique=True, verbose_name="納品書番号")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="組織")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, verbose_name="関連発注")
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, null=True, blank=True, verbose_name="関連請求書")
+    
+    # 納品先情報
+    deliver_to_name = models.CharField(max_length=200, verbose_name="納品先名")
+    deliver_to_address = models.TextField(verbose_name="納品先住所")
+    deliver_to_contact = models.CharField(max_length=100, blank=True, null=True, verbose_name="担当者")
+    deliver_to_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="電話番号")
+    
+    # 納品情報
+    issue_date = models.DateField(verbose_name="発行日")
+    delivery_date = models.DateField(null=True, blank=True, verbose_name="納品予定日")
+    actual_delivery_date = models.DateField(null=True, blank=True, verbose_name="実際の納品日")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="ステータス")
+    notes = models.TextField(blank=True, null=True, verbose_name="備考")
+    
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作成者")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+    
+    class Meta:
+        verbose_name = "納品書"
+        verbose_name_plural = "納品書"
+        ordering = ['-issue_date']
+    
+    def __str__(self):
+        return f"{self.delivery_number} - {self.deliver_to_name} ({self.get_status_display()})"
+    
+    def save(self, *args, **kwargs):
+        # 納品書番号の自動生成
+        if not self.delivery_number:
+            from datetime import datetime
+            now = datetime.now()
+            prefix = f"DEL{now.strftime('%Y%m')}"
+            last_delivery = DeliveryNote.objects.filter(
+                delivery_number__startswith=prefix
+            ).order_by('-delivery_number').first()
+            
+            if last_delivery:
+                last_num = int(last_delivery.delivery_number[-4:])
+                new_num = last_num + 1
+            else:
+                new_num = 1
+            
+            self.delivery_number = f"{prefix}{new_num:04d}"
+        
+        super().save(*args, **kwargs)
+
+
+class DeliveryNoteItem(models.Model):
+    """納品書明細モデル"""
+    
+    delivery_note = models.ForeignKey(DeliveryNote, on_delete=models.CASCADE, related_name='items', verbose_name="納品書")
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, verbose_name="品目")
+    item_name = models.CharField(max_length=200, verbose_name="品目名")
+    item_description = models.TextField(blank=True, null=True, verbose_name="品目説明")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="数量")
+    unit = models.CharField(max_length=20, default="個", verbose_name="単位")
+    delivered_quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="実際の納品数量")
+    
+    class Meta:
+        verbose_name = "納品書明細"
+        verbose_name_plural = "納品書明細"
+        ordering = ['id']
+    
+    def __str__(self):
+        return f"{self.item_name} x {self.quantity}{self.unit}"

@@ -1,0 +1,1127 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}棚区画管理 - 栽培管理システム{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+<style>
+.plots-grid-container {
+    background: #f8f9fa;
+    border-radius: 15px;
+    padding: 20px;
+}
+
+.plots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .plots-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .plots-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+}
+
+.plot-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.plot-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.plot-number {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.plot-dimensions {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+}
+
+.plot-levels-detail {
+    margin-bottom: 15px;
+}
+
+.level-indicator {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    border-radius: 6px;
+    background: #e9ecef;
+    font-size: 0.85rem;
+}
+
+.level-indicator.has-crop {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+}
+
+.level-indicator.harvest-ready {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+}
+
+.level-indicator.overdue {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.level-status-empty {
+    background: #e9ecef;
+}
+
+.level-status-growing {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+}
+
+.level-status-harvest-ready {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+}
+
+.level-status-overdue {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.level-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.level-status {
+    margin-top: 2px;
+    font-size: 0.75rem;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-empty {
+    background-color: #6c757d;
+}
+
+.status-growing {
+    background-color: #28a745;
+}
+
+.status-harvest-ready {
+    background-color: #ffc107;
+}
+
+.status-overdue {
+    background-color: #dc3545;
+}
+
+.plot-status-empty {
+    border-left: 4px solid #6c757d;
+}
+
+.plot-status-growing {
+    border-left: 4px solid #28a745;
+}
+
+.plot-status-harvest-ready {
+    border-left: 4px solid #ffc107;
+}
+
+.plot-status-overdue {
+    border-left: 4px solid #dc3545;
+}
+
+.utilization-rate {
+    padding-top: 8px;
+    border-top: 1px solid #e9ecef;
+}
+
+.level-number {
+    font-weight: 600;
+}
+
+.level-crop {
+    color: #6c757d;
+}
+
+.plot-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.stat-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.stat-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+.stat-card-total { border-left: 4px solid #6c757d; }
+.stat-card-growing { border-left: 4px solid #28a745; }
+.stat-card-harvest { border-left: 4px solid #ffc107; }
+.stat-card-empty { border-left: 4px solid #17a2b8; }
+
+.floor-plan-section {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 30px;
+}
+
+.floor-plan-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.floor-plan-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.btn.btn-xs {
+    padding: 0.1rem 0.3rem;
+    font-size: 0.75rem;
+    line-height: 1;
+    border-radius: 0.2rem;
+}
+
+.level-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.level-indicator {
+    position: relative;
+}
+
+.level-indicator .d-flex {
+    align-items: center;
+}
+
+/* 3D表示用のスタイル */
+.three-d-wrapper {
+    position: relative;
+    background: #f8f9fa;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.three-d-scene {
+    width: 100%;
+    height: 500px;
+    border-radius: 15px;
+}
+
+.three-d-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #6c757d;
+    font-size: 1.1rem;
+    z-index: 10;
+}
+
+.floor-plan-container {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヘッダー部分 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="header-section">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <div class="mb-3 mb-md-0">
+                        <h1 class="casual-title">
+                            🏠 棚区画管理
+                            {% if selected_layout == 'none' %}
+                                <small class="text-muted">- 未分類</small>
+                            {% elif selected_layout %}
+                                <small class="text-muted">- {{ selected_layout.name }}</small>
+                            {% endif %}
+                        </h1>
+                        <p class="casual-subtitle">水耕栽培の棚区画を一元管理</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary">
+                            <i class="fas fa-plus me-1"></i>
+                            <span class="d-none d-sm-inline">新しい棚を追加</span>
+                            <span class="d-inline d-sm-none">棚追加</span>
+                        </a>
+                        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            <span class="d-none d-sm-inline">栽培管理へ</span>
+                            <span class="d-inline d-sm-none">戻る</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- レイアウトフィルタ -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="flex-shrink-0">
+                            <h6 class="mb-0">
+                                <i class="fas fa-filter me-2"></i>レイアウトで絞り込み
+                            </h6>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="btn-group flex-wrap" role="group">
+                                <a href="{% url 'cultivation:plot_management' %}" 
+                                   class="btn {% if not selected_layout %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                                    <i class="fas fa-th me-1"></i>全て 
+                                    <span class="badge bg-light text-dark ms-1">
+                                        {{ statistics.all_plots_count }}
+                                    </span>
+                                </a>
+                                {% for layout in all_layouts %}
+                                    <a href="{% url 'cultivation:plot_management' %}?layout_id={{ layout.id }}" 
+                                       class="btn {% if selected_layout and selected_layout.id == layout.id %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                                        {{ layout.name }} 
+                                        <span class="badge bg-light text-dark ms-1">
+                                            {{ layout.plot_set.count }}
+                                        </span>
+                                    </a>
+                                {% endfor %}
+                                {% if uncategorized_plots_count > 0 %}
+                                    <a href="{% url 'cultivation:plot_management' %}?layout_id=none" 
+                                       class="btn {% if request.GET.layout_id == 'none' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                                        未分類 
+                                        <span class="badge bg-light text-dark ms-1">
+                                            {{ uncategorized_plots_count }}
+                                        </span>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if selected_layout and selected_layout != 'none' %}
+                        <div class="flex-shrink-0">
+                            <a href="{% url 'cultivation:plot_floor_plan_with_layout' selected_layout.id %}" 
+                               class="btn btn-success">
+                                <i class="fas fa-map me-1"></i>2D平面図
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2D/3D平面図セクション -->
+    <div class="floor-plan-section">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h3 class="mb-2">
+                    <i class="fas fa-map me-2"></i>2D/3D平面図で棚管理
+                </h3>
+                <p class="mb-0">
+                    全ての棚を2次元・3次元平面上に可視化して、効率的な管理を実現します。
+                    ズーム・パン操作、詳細情報表示、効率性分析など高度な機能を提供します。
+                </p>
+            </div>
+            <div class="col-md-4 text-center text-md-end mt-3 mt-md-0">
+                <div class="d-flex gap-2 justify-content-center justify-content-md-end">
+                    <a href="{% url 'cultivation:plot_floor_plan' %}" class="floor-plan-btn">
+                        <i class="fas fa-map me-1"></i>2D平面図
+                    </a>
+                    <button class="floor-plan-btn" onclick="toggle3DView()">
+                        <i class="fas fa-cube me-1"></i>3D表示
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D表示エリア -->
+    <div id="three-d-display" class="floor-plan-container mt-4" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">
+                <i class="fas fa-cube me-2"></i>3D棚配置図
+                {% if selected_layout %}
+                    <small class="text-muted">- {{ selected_layout.name }}</small>
+                {% endif %}
+            </h3>
+            <button class="btn btn-outline-secondary btn-sm" onclick="toggle3DView()">
+                <i class="fas fa-times me-1"></i>閉じる
+            </button>
+        </div>
+        
+        <!-- 3D表示エリア -->
+        <div class="three-d-wrapper">
+            <!-- ローディング表示 -->
+            <div class="three-d-loading" id="three-d-loading-plots">
+                <i class="fas fa-spinner fa-spin me-2"></i>3Dシーンを準備中...
+            </div>
+            
+            <!-- Three.js コンテナ -->
+            <div id="three-d-container-plots" class="three-d-scene" style="height: 500px;"></div>
+        </div>
+    </div>
+
+    <!-- 統計情報 -->
+    <div class="row mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-total">
+                <div class="stat-icon">🏠</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.total_plots }}</div>
+                    <div class="stat-label">総棚数</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-growing">
+                <div class="stat-icon">🌱</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.growing_count }}</div>
+                    <div class="stat-label">栽培中</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-harvest">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.harvest_ready_count }}</div>
+                    <div class="stat-label">収穫可能</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-empty">
+                <div class="stat-icon">📦</div>
+                <div class="stat-content">
+                    <div class="stat-number">{{ statistics.empty_count }}</div>
+                    <div class="stat-label">空き</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 棚区画グリッド表示 -->
+    <div class="plots-grid-container">
+        <div class="plots-grid" id="plots-grid">
+            {% for plot_detail in plots_with_details %}
+                <div class="plot-card plot-status-{{ plot_detail.status }}" data-plot-id="{{ plot_detail.plot.id }}">
+                    <div class="plot-header">
+                        <h5 class="plot-number">{{ plot_detail.plot.shelf_number }}</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="plot-levels badge bg-secondary">{{ plot_detail.plot.levels }}段</span>
+                            <span class="status-indicator status-{{ plot_detail.status }}"></span>
+                        </div>
+                    </div>
+                    <div class="plot-body">
+                        <div class="plot-dimensions">
+                            {{ plot_detail.plot.width }}m × {{ plot_detail.plot.depth }}m
+                        </div>
+                        <div class="plot-levels-detail">
+                            {% for level_info in plot_detail.level_details %}
+                                <div class="level-indicator level-{{ level_info.level }} level-status-{{ level_info.status }}" data-level="{{ level_info.level }}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="level-info">
+                                            <span class="level-number">L{{ level_info.level }}</span>
+                                            <span class="level-crop">{{ level_info.crop_name }}</span>
+                                        </div>
+                                        <div class="level-actions">
+                                            {% if level_info.status == 'empty' %}
+                                                <a href="{% url 'cultivation:crop_create_for_level' plot_detail.plot.id level_info.level %}" 
+                                                   class="btn btn-xs btn-outline-success" 
+                                                   title="作物を追加">
+                                                    <i class="fas fa-plus"></i>
+                                                </a>
+                                            {% else %}
+                                                {% if level_info.crop %}
+                                                    <a href="{% url 'cultivation:crop_edit' level_info.crop.id %}" 
+                                                       class="btn btn-xs btn-outline-secondary" 
+                                                       title="編集">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    <a href="{% url 'cultivation:crop_delete_from_level' level_info.crop.id %}" 
+                                                       class="btn btn-xs btn-outline-danger" 
+                                                       title="削除">
+                                                        <i class="fas fa-trash"></i>
+                                                    </a>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if level_info.status != 'empty' %}
+                                        <div class="level-status">
+                                            {% if level_info.status == 'overdue' %}
+                                                <span class="text-danger small">期限超過</span>
+                                            {% elif level_info.status == 'harvest_ready' %}
+                                                <span class="text-warning small">収穫可能</span>
+                                            {% elif level_info.status == 'growing' and level_info.days_until_harvest %}
+                                                <span class="text-success small">あと{{ level_info.days_until_harvest }}日</span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    {% if level_info.progress_percentage %}
+                                        <div class="progress mt-1" style="height: 4px;">
+                                            <div class="progress-bar 
+                                                {% if level_info.status == 'overdue' %}bg-danger
+                                                {% elif level_info.status == 'harvest_ready' %}bg-warning
+                                                {% else %}bg-success{% endif %}" 
+                                                style="width: {{ level_info.progress_percentage }}%">
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if plot_detail.utilization_rate > 0 %}
+                            <div class="utilization-rate mt-2">
+                                <small class="text-muted">稼働率: {{ plot_detail.utilization_rate }}%</small>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="plot-actions">
+                        <a href="{% url 'cultivation:plot_detail' plot_detail.plot.id %}" class="btn btn-sm btn-outline-primary" title="詳細表示">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="{% url 'cultivation:plot_edit' plot_detail.plot.id %}" class="btn btn-sm btn-outline-secondary" title="編集">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <a href="{% url 'cultivation:crop_create' plot_detail.plot.id %}" class="btn btn-sm btn-outline-success" title="作物追加">
+                            <i class="fas fa-plus"></i>
+                        </a>
+                        <a href="{% url 'cultivation:plot_delete' plot_detail.plot.id %}" class="btn btn-sm btn-outline-danger" title="削除">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="text-center py-5">
+                    <div class="empty-state-icon" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;">
+                        🏠
+                    </div>
+                    <h4>まだ棚がありません</h4>
+                    <p class="text-muted mb-4">最初の棚を作成して、栽培を始めましょう</p>
+                    <a href="{% url 'cultivation:plot_create' %}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-plus me-2"></i>最初の棚を作成
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Three.js のCDNを追加 (r128を使用して安定性を確保) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// 3D表示用の変数
+let scene, camera, renderer, controls;
+let shelves = [];
+let is3DInitialized = false;
+
+// 3D表示の切り替え
+function toggle3DView() {
+    const display = document.getElementById('three-d-display');
+    if (display.style.display === 'none') {
+        display.style.display = 'block';
+        if (!is3DInitialized) {
+            init3DViewForPlots();
+        }
+    } else {
+        display.style.display = 'none';
+    }
+}
+
+// 棚管理ページ用の3D表示初期化
+function init3DViewForPlots() {
+    console.log('Initializing 3D view for plots management...');
+    
+    const container = document.getElementById('three-d-container-plots');
+    const loading = document.getElementById('three-d-loading-plots');
+    
+    if (!container) {
+        console.error('3D container not found');
+        return;
+    }
+    
+    // Three.jsが利用可能かチェック
+    if (typeof THREE === 'undefined') {
+        console.error('Three.js not loaded');
+        if (loading) loading.innerHTML = '<i class="fas fa-exclamation-triangle"></i>Three.jsが読み込まれていません';
+        return;
+    }
+    
+    // OrbitControlsが利用可能かチェック
+    if (typeof THREE.OrbitControls === 'undefined') {
+        console.error('OrbitControls not loaded');
+        if (loading) loading.innerHTML = '<i class="fas fa-exclamation-triangle"></i>OrbitControlsが読み込まれていません';
+        return;
+    }
+    
+    // シーンの初期化
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // スカイブルー
+    
+    // カメラの設定
+    camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+    camera.position.set(15, 10, 15);
+    
+    // レンダラーの設定
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    container.appendChild(renderer.domElement);
+    
+    // OrbitControls（カメラ操作）
+    if (THREE.OrbitControls) {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 5;
+        controls.maxDistance = 50;
+        controls.maxPolarAngle = Math.PI / 2;
+    }
+    
+    // ライティングの設定
+    setupLightingForPlots();
+    
+    // 棚を作成
+    createShelvesForPlots();
+    
+    // ローディング表示を隠す
+    if (loading) loading.style.display = 'none';
+    
+    // アニメーションループを開始
+    animateForPlots();
+    
+    is3DInitialized = true;
+}
+
+// ライティング設定
+function setupLightingForPlots() {
+    // 環境光
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    scene.add(ambientLight);
+    
+    // 主光源（太陽光）
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(50, 50, 50);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    directionalLight.shadow.camera.left = -50;
+    directionalLight.shadow.camera.right = 50;
+    directionalLight.shadow.camera.top = 50;
+    directionalLight.shadow.camera.bottom = -50;
+    scene.add(directionalLight);
+    
+    // 補助光
+    const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.5);
+    scene.add(hemisphereLight);
+}
+
+// 棚作成
+function createShelvesForPlots() {
+    shelves = [];
+    
+    // plots_with_detailsから棚データを取得
+    const plotsData = {{ plots_with_details|safe }};
+    
+    plotsData.forEach((plotDetail, index) => {
+        const plot = plotDetail.plot;
+        
+        // 3D座標を使用（デフォルト値の場合は計算）
+        let x = plot.threejs_x || (plot.x_position - 1) * 4.0;
+        let y = plot.threejs_y || 0.0;
+        let z = plot.threejs_z || (plot.y_position - 1) * 3.0;
+        
+        // 棚全体のグループ
+        const shelfGroup = new THREE.Group();
+        shelfGroup.position.set(x, y, z);
+        shelfGroup.userData = { plotId: plot.id, type: 'shelf' };
+        
+        // 棚の支柱を作成
+        createShelfPostsForPlots(shelfGroup, plot.levels);
+        
+        // 各レベルを処理
+        for (let level = 1; level <= plot.levels; level++) {
+            const levelDetail = plotDetail.level_details.find(l => l.level === level);
+            const status = levelDetail ? levelDetail.status : 'empty';
+            const cropName = levelDetail ? levelDetail.crop_name : '空き';
+            
+            // レベルの板を作成
+            const shelfLevel = createShelfLevelForPlots(level, status, cropName, plot.levels);
+            shelfLevel.userData = {
+                plotId: plot.id,
+                level: level,
+                status: status,
+                cropName: cropName,
+                type: 'level'
+            };
+            
+            shelfGroup.add(shelfLevel);
+        }
+        
+        scene.add(shelfGroup);
+        shelves.push(shelfGroup);
+    });
+}
+
+// 棚の支柱作成
+function createShelfPostsForPlots(shelfGroup, levelCount) {
+    const postGeometry = new THREE.BoxGeometry(0.1, levelCount * 1.5 + 0.5, 0.1);
+    const postMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // 茶色
+    
+    // 4本の支柱
+    const postPositions = [
+        [-1.5, levelCount * 0.75, -0.75],
+        [1.5, levelCount * 0.75, -0.75],
+        [-1.5, levelCount * 0.75, 0.75],
+        [1.5, levelCount * 0.75, 0.75]
+    ];
+    
+    postPositions.forEach(pos => {
+        const post = new THREE.Mesh(postGeometry, postMaterial);
+        post.position.set(pos[0], pos[1], pos[2]);
+        post.castShadow = true;
+        shelfGroup.add(post);
+    });
+}
+
+// 棚レベルの作成
+function createShelfLevelForPlots(level, status, cropName, totalLevels) {
+    const levelGroup = new THREE.Group();
+    const y = level * 1.5;
+    
+    // 棚板の作成
+    const shelfGeometry = new THREE.BoxGeometry(3, 0.1, 1.5);
+    const shelfMaterial = new THREE.MeshLambertMaterial({ color: 0xDEB887 }); // ベージュ
+    const shelf = new THREE.Mesh(shelfGeometry, shelfMaterial);
+    shelf.position.y = y;
+    shelf.castShadow = true;
+    shelf.receiveShadow = true;
+    levelGroup.add(shelf);
+    
+    // 状態に応じたコンテンツの作成
+    if (status !== 'empty') {
+        const cropGeometry = new THREE.BoxGeometry(2.5, 0.8, 1.2);
+        let cropColor;
+        
+        switch (status) {
+            case 'growing':
+                cropColor = 0x32CD32; // 緑
+                break;
+            case 'harvest_ready':
+                cropColor = 0xFFD700; // 金色
+                break;
+            case 'overdue':
+                cropColor = 0xFF4500; // 赤橙
+                break;
+            default:
+                cropColor = 0x90EE90; // 薄緑
+        }
+        
+        const cropMaterial = new THREE.MeshLambertMaterial({ 
+            color: cropColor,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const crop = new THREE.Mesh(cropGeometry, cropMaterial);
+        crop.position.set(0, y + 0.5, 0);
+        crop.castShadow = true;
+        levelGroup.add(crop);
+    }
+    
+    return levelGroup;
+}
+
+// アニメーションループ
+function animateForPlots() {
+    requestAnimationFrame(animateForPlots);
+    
+    if (controls) {
+        controls.update();
+    }
+    
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 棚カードのクリックイベント
+    const plotCards = document.querySelectorAll('.plot-card');
+    plotCards.forEach(function(card) {
+        card.addEventListener('click', function(e) {
+            // ボタンクリック時は除外
+            if (e.target.closest('.btn, .plot-actions')) {
+                return;
+            }
+            
+            // 詳細表示ページへ遷移
+            const detailLink = card.querySelector('a[href*="plot_detail"]');
+            if (detailLink) {
+                window.location.href = detailLink.href;
+            }
+        });
+        
+        // ホバー効果の強化
+        card.addEventListener('mouseenter', function() {
+            this.style.cursor = 'pointer';
+        });
+    });
+    
+    // 棚の作物情報を動的に読み込み（実際のデータがある場合）
+    updatePlotStatistics();
+});
+
+function updatePlotStatistics() {
+    // 統計情報をリアルタイムで計算
+    const plotCards = document.querySelectorAll('.plot-card');
+    let totalPlots = plotCards.length;
+    let growingCount = 0;
+    let harvestReadyCount = 0;
+    let emptyCount = 0;
+    let overdueCount = 0;
+    
+    plotCards.forEach(function(card) {
+        const status = card.classList.contains('plot-status-growing') ? 'growing' :
+                      card.classList.contains('plot-status-harvest-ready') ? 'harvest_ready' :
+                      card.classList.contains('plot-status-overdue') ? 'overdue' : 'empty';
+        
+        switch(status) {
+            case 'growing': growingCount++; break;
+            case 'harvest_ready': harvestReadyCount++; break;
+            case 'overdue': overdueCount++; break;
+            case 'empty': emptyCount++; break;
+        }
+    });
+    
+    // 統計情報を更新
+    const totalPlotsElement = document.querySelector('.stat-card-total .stat-number');
+    const growingElement = document.querySelector('.stat-card-growing .stat-number');
+    const harvestElement = document.querySelector('.stat-card-harvest .stat-number');
+    const emptyElement = document.querySelector('.stat-card-empty .stat-number');
+    
+    if (totalPlotsElement) totalPlotsElement.textContent = totalPlots;
+    if (growingElement) growingElement.textContent = growingCount;
+    if (harvestElement) harvestElement.textContent = harvestReadyCount;
+    if (emptyElement) emptyElement.textContent = emptyCount;
+}
+
+// 棚の状態に応じてカードの色を更新
+function updatePlotCardStyles() {
+    const plotCards = document.querySelectorAll('.plot-card');
+    plotCards.forEach(function(card) {
+        const levelIndicators = card.querySelectorAll('.level-indicator');
+        const statusCounts = {
+            empty: 0,
+            growing: 0,
+            harvest_ready: 0,
+            overdue: 0
+        };
+        
+        levelIndicators.forEach(function(indicator) {
+            if (indicator.classList.contains('level-status-empty')) statusCounts.empty++;
+            else if (indicator.classList.contains('level-status-growing')) statusCounts.growing++;
+            else if (indicator.classList.contains('level-status-harvest-ready')) statusCounts.harvest_ready++;
+            else if (indicator.classList.contains('level-status-overdue')) statusCounts.overdue++;
+        });
+        
+        // 棚全体のステータスを決定
+        card.classList.remove('plot-status-empty', 'plot-status-growing', 'plot-status-harvest-ready', 'plot-status-overdue');
+        const statusIndicator = card.querySelector('.status-indicator');
+        statusIndicator.classList.remove('status-empty', 'status-growing', 'status-harvest-ready', 'status-overdue');
+        
+        if (statusCounts.overdue > 0) {
+            card.classList.add('plot-status-overdue');
+            statusIndicator.classList.add('status-overdue');
+        } else if (statusCounts.harvest_ready > 0) {
+            card.classList.add('plot-status-harvest-ready');
+            statusIndicator.classList.add('status-harvest-ready');
+        } else if (statusCounts.growing > 0) {
+            card.classList.add('plot-status-growing');
+            statusIndicator.classList.add('status-growing');
+        } else {
+            card.classList.add('plot-status-empty');
+            statusIndicator.classList.add('status-empty');
+        }
+    });
+}
+
+// 棚区画管理ページ用のデータ設定
+{% if plots_json %}
+try {
+    window.plotsData = {{ plots_json|safe }};
+    console.log('Plots data loaded successfully:', window.plotsData);
+} catch (e) {
+    console.error('Error loading plots data:', e);
+    window.plotsData = null;
+}
+{% else %}
+window.plotsData = null;
+console.log('No plots data available');
+{% endif %}
+
+// 横から見る視点ボタンを追加
+function addSideViewButton() {
+    const filterSection = document.querySelector('.d-flex.justify-content-between.align-items-center.mb-4');
+    if (filterSection && !document.getElementById('side-view-btn')) {
+        const buttonGroup = document.createElement('div');
+        buttonGroup.className = 'btn-group';
+        buttonGroup.innerHTML = `
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="side-view-btn" onclick="showSideView()">
+                <i class="fas fa-arrow-right me-1"></i>横から見る（段数）
+            </button>
+        `;
+        filterSection.appendChild(buttonGroup);
+    }
+}
+
+// 横から見る視点のモーダルを表示
+function showSideView() {
+    if (!window.plotsData || !window.plotsData.plots) {
+        alert('表示するデータがありません');
+        return;
+    }
+    
+    // モーダルを作成
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'sideViewModal';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">横から見た段数構造</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <svg id="side-view-svg" width="100%" height="400" viewBox="0 0 800 400">
+                        <!-- グリッド背景 -->
+                        <defs>
+                            <pattern id="sideViewGrid" width="50" height="30" patternUnits="userSpaceOnUse">
+                                <path d="M 50 0 L 0 0 0 30" fill="none" stroke="#e0e0e0" stroke-width="1" opacity="0.5"/>
+                            </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#sideViewGrid)" />
+                        <!-- 棚構造がここに描画されます -->
+                    </svg>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // モーダル表示
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // 横から見る構造を描画
+    generateSideViewInModal();
+    
+    // モーダルが閉じられた時に削除
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+    });
+}
+
+// モーダル内に横から見る構造を描画
+function generateSideViewInModal() {
+    const svg = document.getElementById('side-view-svg');
+    if (!svg || !window.plotsData.plots) return;
+    
+    let xOffset = 50;
+    const yOffset = 50;
+    const shelfWidth = 60;
+    const levelHeight = 25;
+    const shelfSpacing = 80;
+    
+    window.plotsData.plots.forEach((item, index) => {
+        const shelfGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        
+        // 棚の基台
+        const baseRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        baseRect.setAttribute('x', xOffset);
+        baseRect.setAttribute('y', yOffset + 250);
+        baseRect.setAttribute('width', shelfWidth);
+        baseRect.setAttribute('height', 15);
+        baseRect.setAttribute('fill', '#8B4513');
+        baseRect.setAttribute('stroke', '#654321');
+        baseRect.setAttribute('stroke-width', '2');
+        shelfGroup.appendChild(baseRect);
+        
+        // 段数分のレベルを描画
+        const levels = item.levels || 3;
+        
+        for (let level = 1; level <= levels; level++) {
+            const levelY = yOffset + 250 - (level * levelHeight) - 10;
+            
+            // 棚板
+            const shelfRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            shelfRect.setAttribute('x', xOffset);
+            shelfRect.setAttribute('y', levelY);
+            shelfRect.setAttribute('width', shelfWidth);
+            shelfRect.setAttribute('height', 6);
+            shelfRect.setAttribute('fill', '#D2B48C');
+            shelfRect.setAttribute('stroke', '#B8860B');
+            shelfRect.setAttribute('stroke-width', '1');
+            shelfGroup.appendChild(shelfRect);
+            
+            // 作物表示エリア
+            const cropRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            cropRect.setAttribute('x', xOffset + 3);
+            cropRect.setAttribute('y', levelY - 18);
+            cropRect.setAttribute('width', shelfWidth - 6);
+            cropRect.setAttribute('height', 16);
+            
+            // レベル詳細から情報を取得
+            const levelData = item.level_details ? item.level_details.find(ld => ld.level === level) : null;
+            let fillColor = '#f8f9fa';
+            let cropName = '空き';
+            
+            if (levelData) {
+                cropName = levelData.crop_name || '空き';
+                fillColor = levelData.color || '#f8f9fa';
+            }
+            
+            cropRect.setAttribute('fill', fillColor);
+            cropRect.setAttribute('stroke', '#dee2e6');
+            cropRect.setAttribute('stroke-width', '1');
+            shelfGroup.appendChild(cropRect);
+            
+            // 作物名テキスト
+            const cropText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            cropText.setAttribute('x', xOffset + shelfWidth / 2);
+            cropText.setAttribute('y', levelY - 8);
+            cropText.setAttribute('font-size', '7');
+            cropText.setAttribute('font-family', 'sans-serif');
+            cropText.setAttribute('text-anchor', 'middle');
+            cropText.setAttribute('fill', '#333');
+            cropText.textContent = cropName.length > 5 ? cropName.substring(0, 5) + '…' : cropName;
+            shelfGroup.appendChild(cropText);
+            
+            // レベル番号
+            const levelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            levelText.setAttribute('x', xOffset - 12);
+            levelText.setAttribute('y', levelY - 8);
+            levelText.setAttribute('font-size', '8');
+            levelText.setAttribute('font-family', 'sans-serif');
+            levelText.setAttribute('text-anchor', 'middle');
+            levelText.setAttribute('fill', '#666');
+            levelText.textContent = level + '段';
+            shelfGroup.appendChild(levelText);
+        }
+        
+        // 棚番号
+        const shelfLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        shelfLabel.setAttribute('x', xOffset + shelfWidth / 2);
+        shelfLabel.setAttribute('y', yOffset + 280);
+        shelfLabel.setAttribute('font-size', '10');
+        shelfLabel.setAttribute('font-family', 'sans-serif');
+        shelfLabel.setAttribute('text-anchor', 'middle');
+        shelfLabel.setAttribute('fill', '#333');
+        shelfLabel.setAttribute('font-weight', 'bold');
+        shelfLabel.textContent = item.shelf_number || `棚${index + 1}`;
+        shelfGroup.appendChild(shelfLabel);
+        
+        svg.appendChild(shelfGroup);
+        xOffset += shelfSpacing;
+    });
+}
+
+// ページ読み込み時に横から見るボタンを追加
+document.addEventListener('DOMContentLoaded', function() {
+    addSideViewButton();
+});
+</script>
+{% endblock %}

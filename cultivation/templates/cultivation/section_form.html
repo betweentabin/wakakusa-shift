@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_create %}新規区画作成{% else %}区画編集{% endif %} - {{ layout.name }}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-help {
+        background-color: #f8f9fa;
+        border-left: 4px solid #28a745;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .position-suggestions {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .suggestion-btn {
+        margin: 2px;
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+    
+    .existing-positions {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .position-grid {
+        font-family: monospace;
+        font-size: 12px;
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        white-space: pre-line;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">
+                        {% if is_create %}新規区画作成{% else %}区画編集{% endif %}
+                    </h3>
+                    <small class="text-muted">
+                        {% if is_create %}
+                            レイアウト: {{ layout.name }}
+                        {% else %}
+                            レイアウト: {{ section.layout.name }}
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="card-body">
+                    {% if is_create %}
+                    <div class="form-help">
+                        <h6><i class="fas fa-info-circle me-2"></i>区画作成のヒント</h6>
+                        <ul class="mb-0">
+                            <li>区画名は識別しやすい名前を付けてください（例：A-1、北側1番）</li>
+                            <li>行・列番号は1から始まる数字を入力してください</li>
+                            <li>同じ位置に複数の区画は作成できません</li>
+                            <li>複数の区画を作成したい場合は「<a href="{% url 'cultivation:bulk_section_create' layout.id %}">一括区画作成</a>」をご利用ください</li>
+                        </ul>
+                    </div>
+                    
+                    {% if suggested_positions %}
+                    <div class="position-suggestions">
+                        <h6><i class="fas fa-lightbulb me-2"></i>推奨位置</h6>
+                        <p class="mb-2">以下の位置が利用可能です：</p>
+                        {% for row, column in suggested_positions %}
+                        <button type="button" class="btn btn-outline-primary suggestion-btn" 
+                                onclick="document.getElementById('id_row').value='{{ row }}'; document.getElementById('id_column').value='{{ column }}';">
+                            {{ row }}行{{ column }}列
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    {% if existing_sections %}
+                    <div class="existing-positions">
+                        <h6><i class="fas fa-map me-2"></i>既存区画の位置</h6>
+                        <div class="position-grid">
+                            {% for section in existing_sections %}
+                            {{ section.name }}: {{ section.row }}行{{ section.column }}列
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    <form method="post" id="sectionForm">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }}</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}
+                                <div class="text-danger">{{ form.name.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.row.id_for_label }}" class="form-label">{{ form.row.label }}</label>
+                                    {{ form.row }}
+                                    {% if form.row.errors %}
+                                        <div class="text-danger">{{ form.row.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.column.id_for_label }}" class="form-label">{{ form.column.label }}</label>
+                                    {{ form.column }}
+                                    {% if form.column.errors %}
+                                        <div class="text-danger">{{ form.column.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                                <div class="text-danger">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% if is_create %}{% url 'cultivation:layout_detail' layout.id %}{% else %}{% url 'cultivation:section_detail' section.id %}{% endif %}" 
+                               class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                {% if is_create %}作成{% else %}更新{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            {% if not is_create %}
+            <div class="card mt-4">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0 text-dark">
+                        <i class="fas fa-exclamation-triangle me-2"></i>危険な操作
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        この区画を削除すると、関連する栽培計画やログもすべて削除されます。
+                        この操作は取り消せません。
+                    </p>
+                    <a href="{% url 'cultivation:section_delete' section.id %}" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>区画を削除
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

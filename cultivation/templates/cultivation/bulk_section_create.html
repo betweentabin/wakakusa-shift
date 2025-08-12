@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}一括区画作成 - {{ layout.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preview-grid {
+        border: 2px solid #dee2e6;
+        background-color: #f8f9fa;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+        text-align: center;
+    }
+    
+    .preview-cell {
+        width: 40px;
+        height: 40px;
+        border: 1px solid #dee2e6;
+        margin: 1px;
+        display: inline-block;
+        text-align: center;
+        vertical-align: middle;
+        line-height: 40px;
+        font-size: 8px;
+        border-radius: 3px;
+        background-color: #e7f3ff;
+    }
+    
+    .info-card {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .warning-card {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">
+                        <i class="fas fa-th-large me-2"></i>一括区画作成
+                    </h3>
+                    <small class="text-muted">レイアウト: {{ layout.name }}</small>
+                </div>
+                <div class="card-body">
+                    <div class="info-card">
+                        <h6><i class="fas fa-info-circle me-2"></i>一括区画作成について</h6>
+                        <p class="mb-0">
+                            指定した行数・列数で区画を一括作成できます。既存の区画がある位置はスキップされます。
+                        </p>
+                    </div>
+                    
+                    {% if existing_count > 0 %}
+                    <div class="warning-card">
+                        <h6><i class="fas fa-exclamation-triangle me-2"></i>既存区画について</h6>
+                        <p class="mb-0">
+                            現在{{ existing_count }}個の区画が登録されています（最大: {{ max_row }}行{{ max_column }}列）。
+                            既存の区画と重複する位置は自動的にスキップされます。
+                        </p>
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post" id="bulkForm">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="rows" class="form-label">行数</label>
+                                    <input type="number" class="form-control" id="rows" name="rows" 
+                                           value="3" min="1" max="10" required>
+                                    <div class="form-text">作成する行数（1-10）</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="columns" class="form-label">列数</label>
+                                    <input type="number" class="form-control" id="columns" name="columns" 
+                                           value="3" min="1" max="10" required>
+                                    <div class="form-text">作成する列数（1-10）</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="name_prefix" class="form-label">区画名のプレフィックス</label>
+                            <input type="text" class="form-control" id="name_prefix" name="name_prefix" 
+                                   value="区画" required>
+                            <div class="form-text">例: "区画" → "区画-1-1", "区画-1-2" のように生成されます</div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h6>プレビュー</h6>
+                            <div class="preview-grid" id="previewGrid">
+                                <!-- JavaScriptで生成 -->
+                            </div>
+                            <small class="text-muted">
+                                <span id="previewInfo">3行 × 3列 = 9個の区画が作成されます</span>
+                            </small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'cultivation:layout_detail' layout.id %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus me-1"></i>区画を一括作成
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var rowsInput = document.getElementById('rows');
+    var columnsInput = document.getElementById('columns');
+    var namePrefix = document.getElementById('name_prefix');
+    var previewGrid = document.getElementById('previewGrid');
+    var previewInfo = document.getElementById('previewInfo');
+    
+    function updatePreview() {
+        var rows = parseInt(rowsInput.value) || 3;
+        var columns = parseInt(columnsInput.value) || 3;
+        var prefix = namePrefix.value || '区画';
+        
+        var gridHtml = '';
+        for (var row = 1; row <= rows; row++) {
+            for (var column = 1; column <= columns; column++) {
+                var cellName = prefix + '-' + row + '-' + column;
+                gridHtml += '<div class="preview-cell" title="' + cellName + '">' + 
+                           row + ',' + column + '</div>';
+            }
+            gridHtml += '<br>';
+        }
+        
+        previewGrid.innerHTML = gridHtml;
+        previewInfo.textContent = rows + '行 × ' + columns + '列 = ' + (rows * columns) + '個の区画が作成されます';
+    }
+    
+    rowsInput.addEventListener('input', updatePreview);
+    columnsInput.addEventListener('input', updatePreview);
+    namePrefix.addEventListener('input', updatePreview);
+    
+    // 初期プレビュー生成
+    updatePreview();
+});
+</script>
+{% endblock %} 

@@ -89,4 +89,28 @@ urlpatterns = [
     path('notifications/', views.notification_list, name='notification_list'),
     path('notifications/<int:pk>/read/', views.notification_mark_read, name='notification_mark_read'),
     path('api/notifications/mark-all-read/', views.api_mark_all_notifications_read, name='api_mark_all_notifications_read'),
+    
+    # 発注管理機能
+    path('inventory/', views.inventory_dashboard, name='inventory_dashboard'),
+    path('items/', views.item_list, name='item_list'),
+    path('items/create/', views.item_create, name='item_create'),
+    path('items/<int:pk>/edit/', views.item_edit, name='item_edit'),
+    path('transactions/create/', views.transaction_create, name='transaction_create'),
+    path('transactions/history/', views.transaction_history, name='transaction_history'),
+    path('orders/', views.order_list, name='order_list'),
+    path('orders/create/', views.order_create, name='order_create'),
+    path('orders/<int:pk>/update/', views.order_update_status, name='order_update_status'),
+    
+    # 請求書・納品書発行機能
+    path('invoices/', views.invoice_list, name='invoice_list'),
+    path('invoices/create/', views.invoice_create, name='invoice_create'),
+    path('invoices/<int:pk>/', views.invoice_detail, name='invoice_detail'),
+    path('invoices/<int:pk>/edit/', views.invoice_edit, name='invoice_edit'),
+    path('invoices/<int:pk>/pdf/', views.invoice_pdf, name='invoice_pdf'),
+    path('invoices/<int:pk>/change-status/', views.invoice_change_status, name='invoice_change_status'),
+    path('delivery-notes/', views.delivery_note_list, name='delivery_note_list'),
+    path('delivery-notes/create/', views.delivery_note_create, name='delivery_note_create'),
+    path('delivery-notes/<int:pk>/', views.delivery_note_detail, name='delivery_note_detail'),
+    path('delivery-notes/<int:pk>/pdf/', views.delivery_note_pdf, name='delivery_note_pdf'),
+    path('delivery-notes/<int:pk>/change-status/', views.delivery_note_change_status, name='delivery_note_change_status'),
 ]

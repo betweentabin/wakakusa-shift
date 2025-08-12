@@ -2,6 +2,61 @@
 
 {% block title %}シフト表印刷・エクスポート{% endblock %}
 
+{% block extra_css %}
+<style>
+  /* スタッフ選択チェックボックスのレイアウト調整 */
+  .staff-checkbox-container {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+  }
+  
+  .staff-checkbox-container ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .staff-checkbox-container li {
+    flex-basis: calc(33.333% - 0.334rem);
+    min-width: 150px;
+    margin: 0;
+  }
+  
+  .staff-checkbox-container .form-check {
+    margin: 0.25rem 0;
+  }
+  
+  .staff-checkbox-container .form-check-input {
+    margin-right: 0.5rem;
+  }
+  
+  .staff-checkbox-container .form-check-label {
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+  
+  /* モバイル対応 */
+  @media (max-width: 768px) {
+    .staff-checkbox-container li {
+      flex-basis: calc(50% - 0.25rem);
+      min-width: 120px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .staff-checkbox-container li {
+      flex-basis: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
   <h1 class="mb-4">シフト表印刷・エクスポート</h1>
@@ -42,8 +97,10 @@
         <div class="row mb-3">
           <div class="col-md-6">
             <label for="{{ form.staff.id_for_label }}" class="form-label">{{ form.staff.label }}</label>
-            {{ form.staff }}
-            <div class="form-text">Ctrlキーを押しながら複数選択できます。未選択の場合は全スタッフが対象になります。</div>
+            <div class="staff-checkbox-container">
+              {{ form.staff }}
+            </div>
+            <div class="form-text">複数選択可能です。未選択の場合は全スタッフが対象になります。</div>
             {% if form.staff.errors %}
               <div class="invalid-feedback d-block">
                 {% for error in form.staff.errors %}
@@ -53,20 +110,11 @@
             {% endif %}
           </div>
           <div class="col-md-6">
-            <label class="form-label">{{ form.format_type.label }}</label>
-            <div class="format-selector">
-              {% for choice in form.format_type %}
-                <div class="form-check">
-                  {{ choice.tag }}
-                  <label class="form-check-label" for="{{ choice.id_for_label }}">
-                    {{ choice.choice_label }}
-                  </label>
-                </div>
-              {% endfor %}
-            </div>
-            {% if form.format_type.errors %}
+            <label for="{{ form.format.id_for_label }}" class="form-label">{{ form.format.label }}</label>
+            {{ form.format }}
+            {% if form.format.errors %}
               <div class="invalid-feedback d-block">
-                {% for error in form.format_type.errors %}
+                {% for error in form.format.errors %}
                   {{ error }}
                 {% endfor %}
               </div>
@@ -99,35 +147,58 @@
 {% block extra_js %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // スタッフ選択の全選択/全解除ボタンの追加
-    const staffSelect = document.getElementById('{{ form.staff.id_for_label }}');
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.type = 'button';
-    selectAllBtn.className = 'btn btn-sm btn-outline-secondary mt-2 me-2';
-    selectAllBtn.textContent = '全て選択';
-    selectAllBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      for (let i = 0; i < staffSelect.options.length; i++) {
-        staffSelect.options[i].selected = true;
-      }
+    // スタッフ選択チェックボックスのスタイリング改善
+    const staffContainer = document.querySelector('.staff-checkbox-container');
+    if (!staffContainer) return;
+    
+    const checkboxes = staffContainer.querySelectorAll('input[type="checkbox"]');
+    const labels = staffContainer.querySelectorAll('label');
+    
+    // 各チェックボックスとラベルにBootstrapクラスを適用
+    checkboxes.forEach(function(checkbox) {
+      checkbox.classList.add('form-check-input');
     });
     
-    const deselectAllBtn = document.createElement('button');
-    deselectAllBtn.type = 'button';
-    deselectAllBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
-    deselectAllBtn.textContent = '全て解除';
-    deselectAllBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      for (let i = 0; i < staffSelect.options.length; i++) {
-        staffSelect.options[i].selected = false;
-      }
+    labels.forEach(function(label) {
+      label.classList.add('form-check-label');
     });
     
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'mt-2';
-    buttonContainer.appendChild(selectAllBtn);
-    buttonContainer.appendChild(deselectAllBtn);
-    staffSelect.parentNode.insertBefore(buttonContainer, staffSelect.nextSibling.nextSibling);
+    // 各li要素にform-checkクラスを追加
+    const listItems = staffContainer.querySelectorAll('li');
+    listItems.forEach(function(li) {
+      li.classList.add('form-check');
+    });
+    
+    // 全選択/全解除ボタンの追加
+    if (checkboxes.length > 0) {
+      const selectAllBtn = document.createElement('button');
+      selectAllBtn.type = 'button';
+      selectAllBtn.className = 'btn btn-sm btn-outline-primary me-2';
+      selectAllBtn.innerHTML = '<i class="fas fa-check-square"></i> 全て選択';
+      selectAllBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        checkboxes.forEach(function(checkbox) {
+          checkbox.checked = true;
+        });
+      });
+      
+      const deselectAllBtn = document.createElement('button');
+      deselectAllBtn.type = 'button';
+      deselectAllBtn.className = 'btn btn-sm btn-outline-secondary';
+      deselectAllBtn.innerHTML = '<i class="fas fa-square"></i> 全て解除';
+      deselectAllBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        checkboxes.forEach(function(checkbox) {
+          checkbox.checked = false;
+        });
+      });
+      
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'mb-2';
+      buttonContainer.appendChild(selectAllBtn);
+      buttonContainer.appendChild(deselectAllBtn);
+      staffContainer.parentNode.insertBefore(buttonContainer, staffContainer);
+    }
   });
 </script>
 {% endblock %}

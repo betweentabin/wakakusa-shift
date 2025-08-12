@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}画像アップロード - {{ crop.variety }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .crop-info-card {
+        background-color: #f8f9fa;
+        border-left: 4px solid #28a745;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .file-input-wrapper {
+        position: relative;
+        overflow: hidden;
+        display: inline-block;
+        cursor: pointer;
+    }
+    
+    .file-input-wrapper input[type=file] {
+        position: absolute;
+        left: -9999px;
+    }
+    
+    .file-input-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        border-radius: 5px;
+        transition: all 0.3s;
+    }
+    
+    .file-input-button:hover {
+        background-color: #0056b3;
+    }
+    
+    .preview-container {
+        margin-top: 20px;
+        text-align: center;
+    }
+    
+    .preview-image {
+        max-width: 100%;
+        max-height: 400px;
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .form-label {
+        font-weight: bold;
+        color: #495057;
+    }
+    
+    .btn-upload {
+        width: 100%;
+        padding: 12px;
+        font-size: 1.1em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="upload-container">
+                <h1 class="mb-4">画像アップロード</h1>
+                
+                <div class="crop-info-card">
+                    <h5 class="mb-3">作物情報</h5>
+                    <p class="mb-1"><strong>品種:</strong> {{ crop.variety }}</p>
+                    <p class="mb-1"><strong>棚番号:</strong> {{ crop.plot.shelf_number }}</p>
+                    <p class="mb-0"><strong>植付日:</strong> {{ crop.planting_date|date:"Y年m月d日" }}</p>
+                </div>
+                
+                <form method="post" enctype="multipart/form-data" id="uploadForm">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label class="form-label">画像を選択</label>
+                        <div class="file-input-wrapper">
+                            <div class="file-input-button">
+                                <i class="bi bi-camera"></i> 画像を選択
+                            </div>
+                            <input type="file" name="image" id="imageInput" accept="image/*" required>
+                        </div>
+                        <div class="form-text">対応形式: JPEG, PNG, GIF (最大5MB)</div>
+                    </div>
+                    
+                    <div class="preview-container" id="previewContainer" style="display: none;">
+                        <img id="previewImage" class="preview-image" alt="プレビュー">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="notes" class="form-label">備考（任意）</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                  placeholder="成長の様子、気づいたことなど"></textarea>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success btn-upload">
+                            <i class="bi bi-upload"></i> アップロード
+                        </button>
+                        <a href="{% url 'cultivation:plot_detail' crop.plot.id %}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> キャンセル
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const imageInput = document.getElementById('imageInput');
+    const previewContainer = document.getElementById('previewContainer');
+    const previewImage = document.getElementById('previewImage');
+    const uploadForm = document.getElementById('uploadForm');
+    
+    imageInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // ファイルサイズチェック (5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('ファイルサイズは5MB以下にしてください。');
+                imageInput.value = '';
+                previewContainer.style.display = 'none';
+                return;
+            }
+            
+            // プレビュー表示
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            previewContainer.style.display = 'none';
+        }
+    });
+    
+    // ファイル選択ボタンのクリックイベント
+    document.querySelector('.file-input-button').addEventListener('click', function() {
+        imageInput.click();
+    });
+});
+</script>
+{% endblock %}

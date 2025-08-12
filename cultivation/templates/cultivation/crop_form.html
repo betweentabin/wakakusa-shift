@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- パンくずナビゲーション -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}">栽培管理</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:crop_list' %}">作物名管理</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+        </ol>
+    </nav>
+
+    <!-- ヘッダー -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-seedling text-success me-2"></i>
+                {{ title }}
+            </h1>
+        </div>
+    </div>
+
+    <!-- フォーム -->
+    <div class="row">
+        <div class="col-12 col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-edit me-2"></i>
+                        作物情報
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.name %}
+                        <!-- 作物名（Crop用） -->
+                        <div class="mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">
+                                {{ form.name.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name }}
+                            {% if form.name.help_text %}
+                            <div class="form-text">{{ form.name.help_text }}</div>
+                            {% endif %}
+                            {% if form.name.errors %}
+                            <div class="text-danger">
+                                {% for error in form.name.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 表示色（Crop用） -->
+                        <div class="mb-3">
+                            <label for="{{ form.color.id_for_label }}" class="form-label">
+                                {{ form.color.label }}
+                            </label>
+                            <div class="d-flex align-items-center">
+                                {{ form.color }}
+                                <div class="ms-3">
+                                    <div class="color-preview" id="colorPreview" 
+                                         style="width: 40px; height: 40px; border: 1px solid #dee2e6; border-radius: 0.375rem; background-color: {{ form.color.value|default:'#28a745' }};"></div>
+                                </div>
+                            </div>
+                            {% if form.color.help_text %}
+                            <div class="form-text">{{ form.color.help_text }}</div>
+                            {% endif %}
+                            {% if form.color.errors %}
+                            <div class="text-danger">
+                                {% for error in form.color.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if available_crops %}
+                        <!-- 作物選択（ShelfCrop用） -->
+                        <div class="mb-3">
+                            <label for="crop_id" class="form-label">
+                                作物
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-control" id="crop_id" name="crop_id" required>
+                                <option value="">作物を選択してください</option>
+                                {% for crop in available_crops %}
+                                    <option value="{{ crop.id }}">{{ crop.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        
+                        {% if available_crops %}
+                        <!-- 植付日 -->
+                        <div class="mb-3">
+                            <label for="planting_date" class="form-label">
+                                植付日
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" class="form-control" id="planting_date" name="planting_date" required>
+                        </div>
+                        
+                        <!-- 収穫予定日 -->
+                        <div class="mb-3">
+                            <label for="expected_harvest_date" class="form-label">
+                                収穫予定日
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" class="form-control" id="expected_harvest_date" name="expected_harvest_date" required>
+                        </div>
+                        
+                        <!-- 備考 -->
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">
+                                備考
+                            </label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+                        {% else %}
+                        <!-- 植付日 -->
+                        <div class="mb-3">
+                            <label for="{{ form.planting_date.id_for_label }}" class="form-label">
+                                {{ form.planting_date.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.planting_date }}
+                            {% if form.planting_date.help_text %}
+                            <div class="form-text">{{ form.planting_date.help_text }}</div>
+                            {% endif %}
+                            {% if form.planting_date.errors %}
+                            <div class="text-danger">
+                                {% for error in form.planting_date.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 収穫予定日 -->
+                        <div class="mb-3">
+                            <label for="{{ form.expected_harvest_date.id_for_label }}" class="form-label">
+                                {{ form.expected_harvest_date.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.expected_harvest_date }}
+                            {% if form.expected_harvest_date.help_text %}
+                            <div class="form-text">{{ form.expected_harvest_date.help_text }}</div>
+                            {% endif %}
+                            {% if form.expected_harvest_date.errors %}
+                            <div class="text-danger">
+                                {% for error in form.expected_harvest_date.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- レベル -->
+                        {% if form.level %}
+                        <div class="mb-3">
+                            <label for="{{ form.level.id_for_label }}" class="form-label">
+                                {{ form.level.label }}
+                            </label>
+                            {{ form.level }}
+                            {% if plot and level %}
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                棚「{{ plot.shelf_number }}」のレベル{{ level }}に作物を追加します（自動設定済み）
+                            </div>
+                            {% endif %}
+                            {% if form.level.errors %}
+                            <div class="text-danger">
+                                {% for error in form.level.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- 備考 (form.notes用) -->
+                        {% if form.notes %}
+                        <div class="mb-3">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label">
+                                {{ form.notes.label }}
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.help_text %}
+                            <div class="form-text">{{ form.notes.help_text }}</div>
+                            {% endif %}
+                            {% if form.notes.errors %}
+                            <div class="text-danger">
+                                {% for error in form.notes.errors %}
+                                <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- ボタン -->
+                        <div class="d-flex flex-column flex-sm-row justify-content-between">
+                            {% if available_crops %}
+                            <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary mb-2 mb-sm-0">
+                                <i class="fas fa-arrow-left me-1"></i>棚区画一覧へ戻る
+                            </a>
+                            {% else %}
+                            <a href="{% url 'cultivation:crop_list' %}" class="btn btn-secondary mb-2 mb-sm-0">
+                                <i class="fas fa-arrow-left me-1"></i>戻る
+                            </a>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                {% if is_create %}作物を追加{% else %}変更を保存{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                </div>
+            </div>
+            
+        <!-- サイドバー -->
+        <div class="col-12 col-lg-4 mt-4 mt-lg-0">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ヘルプ
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6>作物名について</h6>
+                    <p class="text-muted small">
+                        栽培計画で使用する作物の名前を設定します。同じ名前の作物は登録できません。
+                    </p>
+                    
+                    <h6>表示色について</h6>
+                    <p class="text-muted small">
+                        栽培計画の画面で作物を区別するための色を設定します。見やすい色を選択してください。
+                    </p>
+                    
+                    <h6>推奨作物名</h6>
+                    <div class="row">
+                        <div class="col-6 col-sm-4 col-lg-12">
+                            <ul class="text-muted small list-unstyled">
+                                <li>• レタス</li>
+                                <li>• ほうれん草</li>
+                                <li>• 小松菜</li>
+                                <li>• バジル</li>
+                            </ul>
+                        </div>
+                        <div class="col-6 col-sm-4 col-lg-12">
+                            <ul class="text-muted small list-unstyled">
+                                <li>• ミント</li>
+                                <li>• パセリ</li>
+                                <li>• ルッコラ</li>
+                                <li>• 水菜</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 色変更時のプレビュー更新
+    const colorInput = document.getElementById('{{ form.color.id_for_label }}');
+    const colorPreview = document.getElementById('colorPreview');
+    
+    if (colorInput && colorPreview) {
+        colorInput.addEventListener('input', function() {
+            colorPreview.style.backgroundColor = this.value;
+        });
+    }
+});
+</script>
+{% endblock %} 

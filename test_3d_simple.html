@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Button Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>3D Button Test</h1>
+        
+        <!-- ビュー切り替えボタン -->
+        <div class="mb-3">
+            <button class="btn btn-primary" id="view-2d">
+                <i class="fas fa-map me-2"></i>2D平面図
+            </button>
+            <button class="btn btn-outline-primary" id="view-3d">
+                <i class="fas fa-cube me-2"></i>3D立体図
+            </button>
+        </div>
+        
+        <!-- 2D容器 -->
+        <div id="two-d-container" class="border p-3 mb-3">
+            <h3>2D View</h3>
+            <p>これは2D表示です</p>
+        </div>
+        
+        <!-- 3D容器 -->
+        <div id="three-d-container" class="border p-3 mb-3" style="display: none;">
+            <h3>3D View</h3>
+            <p>これは3D表示です</p>
+            <div id="three-d-container-scene" style="width: 100%; height: 400px; background: #87CEEB;"></div>
+        </div>
+        
+        <!-- デバッグ情報 -->
+        <div id="debug-info" class="alert alert-info">
+            <h5>Debug Info:</h5>
+            <ul id="debug-list"></ul>
+        </div>
+    </div>
+
+    <!-- Three.js CDN -->
+    <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+    // デバッグ情報を表示
+    function addDebugInfo(message) {
+        const debugList = document.getElementById('debug-list');
+        const li = document.createElement('li');
+        li.textContent = new Date().toLocaleTimeString() + ': ' + message;
+        debugList.appendChild(li);
+        console.log(message);
+    }
+
+    // ビュー切り替え関数
+    function switchView(viewType) {
+        addDebugInfo('switchView called with: ' + viewType);
+        
+        const view2dBtn = document.getElementById('view-2d');
+        const view3dBtn = document.getElementById('view-3d');
+        const twoDContainer = document.getElementById('two-d-container');
+        const threeDContainer = document.getElementById('three-d-container');
+        
+        if (viewType === '2d') {
+            view2dBtn.classList.remove('btn-outline-primary');
+            view2dBtn.classList.add('btn-primary');
+            view3dBtn.classList.remove('btn-primary');
+            view3dBtn.classList.add('btn-outline-primary');
+            
+            twoDContainer.style.display = 'block';
+            threeDContainer.style.display = 'none';
+            
+            addDebugInfo('Switched to 2D view');
+        } else if (viewType === '3d') {
+            view3dBtn.classList.remove('btn-outline-primary');
+            view3dBtn.classList.add('btn-primary');
+            view2dBtn.classList.remove('btn-primary');
+            view2dBtn.classList.add('btn-outline-primary');
+            
+            twoDContainer.style.display = 'none';
+            threeDContainer.style.display = 'block';
+            
+            addDebugInfo('Switched to 3D view');
+            
+            // 3D初期化をテスト
+            if (typeof THREE !== 'undefined') {
+                addDebugInfo('Three.js is available');
+                initSimple3D();
+            } else {
+                addDebugInfo('Three.js is NOT available');
+            }
+        }
+    }
+
+    // シンプルな3D初期化
+    function initSimple3D() {
+        try {
+            const container = document.getElementById('three-d-container-scene');
+            
+            // 既存のcanvasを削除
+            const existingCanvas = container.querySelector('canvas');
+            if (existingCanvas) {
+                existingCanvas.remove();
+            }
+            
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer();
+            
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
+            container.appendChild(renderer.domElement);
+            
+            // 簡単なキューブを作成
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            camera.position.z = 5;
+            
+            // レンダリング
+            function animate() {
+                requestAnimationFrame(animate);
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            addDebugInfo('3D scene initialized successfully');
+        } catch (error) {
+            addDebugInfo('Error initializing 3D: ' + error.message);
+        }
+    }
+
+    // DOM読み込み完了時の処理
+    document.addEventListener('DOMContentLoaded', function() {
+        addDebugInfo('DOM loaded');
+        
+        // ボタンイベント設定
+        const view2dBtn = document.getElementById('view-2d');
+        const view3dBtn = document.getElementById('view-3d');
+        
+        if (view2dBtn) {
+            view2dBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                addDebugInfo('2D button clicked');
+                switchView('2d');
+            });
+            addDebugInfo('2D button event listener added');
+        }
+        
+        if (view3dBtn) {
+            view3dBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                addDebugInfo('3D button clicked');
+                switchView('3d');
+            });
+            addDebugInfo('3D button event listener added');
+        }
+        
+        // 初期状態を2Dに
+        switchView('2d');
+        
+        // Three.js チェック
+        addDebugInfo('Three.js loaded: ' + (typeof THREE !== 'undefined'));
+        addDebugInfo('OrbitControls loaded: ' + (typeof THREE !== 'undefined' && typeof THREE.OrbitControls !== 'undefined'));
+    });
+    </script>
+</body>
+</html>

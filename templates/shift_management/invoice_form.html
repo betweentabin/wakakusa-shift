@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - わかくさシフト{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-file-invoice me-2 text-primary"></i>
+                        {{ title }}
+                    </h1>
+                    <p class="text-muted mb-0">
+                        {{ current_organization.name }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'shift_management:invoice_list' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>
+                        一覧に戻る
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <!-- 請求先情報 -->
+                            <div class="col-md-6">
+                                <h5 class="mb-3">請求先情報</h5>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.bill_to_name.id_for_label }}" class="form-label">
+                                        {{ form.bill_to_name.label }}
+                                    </label>
+                                    {{ form.bill_to_name }}
+                                    {% if form.bill_to_name.errors %}
+                                        <div class="text-danger small">{{ form.bill_to_name.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="{{ form.bill_to_address.id_for_label }}" class="form-label">
+                                        {{ form.bill_to_address.label }}
+                                    </label>
+                                    {{ form.bill_to_address }}
+                                    {% if form.bill_to_address.errors %}
+                                        <div class="text-danger small">{{ form.bill_to_address.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.bill_to_contact.id_for_label }}" class="form-label">
+                                                {{ form.bill_to_contact.label }}
+                                            </label>
+                                            {{ form.bill_to_contact }}
+                                            {% if form.bill_to_contact.errors %}
+                                                <div class="text-danger small">{{ form.bill_to_contact.errors.0 }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.bill_to_phone.id_for_label }}" class="form-label">
+                                                {{ form.bill_to_phone.label }}
+                                            </label>
+                                            {{ form.bill_to_phone }}
+                                            {% if form.bill_to_phone.errors %}
+                                                <div class="text-danger small">{{ form.bill_to_phone.errors.0 }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="{{ form.bill_to_email.id_for_label }}" class="form-label">
+                                        {{ form.bill_to_email.label }}
+                                    </label>
+                                    {{ form.bill_to_email }}
+                                    {% if form.bill_to_email.errors %}
+                                        <div class="text-danger small">{{ form.bill_to_email.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 請求情報 -->
+                            <div class="col-md-6">
+                                <h5 class="mb-3">請求情報</h5>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.issue_date.id_for_label }}" class="form-label">
+                                                {{ form.issue_date.label }}
+                                            </label>
+                                            {{ form.issue_date }}
+                                            {% if form.issue_date.errors %}
+                                                <div class="text-danger small">{{ form.issue_date.errors.0 }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="{{ form.due_date.id_for_label }}" class="form-label">
+                                                {{ form.due_date.label }}
+                                            </label>
+                                            {{ form.due_date }}
+                                            {% if form.due_date.errors %}
+                                                <div class="text-danger small">{{ form.due_date.errors.0 }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="{{ form.tax_rate.id_for_label }}" class="form-label">
+                                        {{ form.tax_rate.label }}
+                                    </label>
+                                    <div class="input-group">
+                                        {{ form.tax_rate }}
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                    {% if form.tax_rate.errors %}
+                                        <div class="text-danger small">{{ form.tax_rate.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="{{ form.notes.id_for_label }}" class="form-label">
+                                        {{ form.notes.label }}
+                                    </label>
+                                    {{ form.notes }}
+                                    {% if form.notes.errors %}
+                                        <div class="text-danger small">{{ form.notes.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- 請求明細 -->
+                        <div class="row">
+                            <div class="col-12">
+                                <h5 class="mb-3">請求明細</h5>
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-bordered" id="invoice-items-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th width="25%">品目名</th>
+                                                <th width="25%">説明</th>
+                                                <th width="12%">数量</th>
+                                                <th width="10%">単位</th>
+                                                <th width="15%">単価</th>
+                                                <th width="15%">金額</th>
+                                                <th width="8%">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="invoice-items-tbody">
+                                            <!-- 明細行はJavaScriptで動的に追加 -->
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="7">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm" id="add-item-btn">
+                                                        <i class="fas fa-plus me-1"></i>
+                                                        明細を追加
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <tr class="table-light">
+                                                <th colspan="5" class="text-end">小計</th>
+                                                <th class="text-end" id="subtotal-display">¥0</th>
+                                                <th></th>
+                                            </tr>
+                                            <tr class="table-light">
+                                                <th colspan="5" class="text-end">消費税 (<span id="tax-rate-display">10</span>%)</th>
+                                                <th class="text-end" id="tax-amount-display">¥0</th>
+                                                <th></th>
+                                            </tr>
+                                            <tr class="table-warning">
+                                                <th colspan="5" class="text-end">合計</th>
+                                                <th class="text-end" id="total-amount-display">¥0</th>
+                                                <th></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'shift_management:invoice_list' %}" class="btn btn-outline-secondary">
+                                キャンセル
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>
+                                保存
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let itemCounter = 0;
+    const tbody = document.getElementById('invoice-items-tbody');
+    const addBtn = document.getElementById('add-item-btn');
+    const taxRateInput = document.getElementById('{{ form.tax_rate.id_for_label }}');
+    
+    // 明細行を追加
+    function addItemRow() {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <input type="text" name="items-${itemCounter}-item_name" 
+                       class="form-control form-control-sm" placeholder="品目名">
+            </td>
+            <td>
+                <textarea name="items-${itemCounter}-item_description" 
+                          class="form-control form-control-sm" rows="1" placeholder="説明"></textarea>
+            </td>
+            <td>
+                <input type="number" name="items-${itemCounter}-quantity" 
+                       class="form-control form-control-sm quantity-input" 
+                       step="0.01" min="0" placeholder="0">
+            </td>
+            <td>
+                <input type="text" name="items-${itemCounter}-unit" 
+                       class="form-control form-control-sm" value="個" placeholder="単位">
+            </td>
+            <td>
+                <input type="number" name="items-${itemCounter}-unit_price" 
+                       class="form-control form-control-sm unit-price-input" 
+                       step="0.01" min="0" placeholder="0">
+            </td>
+            <td class="text-end">
+                <span class="amount-display">¥0</span>
+                <input type="hidden" name="items-${itemCounter}-amount" class="amount-input" value="0">
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm remove-item-btn">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+        itemCounter++;
+        
+        // イベントリスナーを追加
+        addRowEventListeners(row);
+        updateTotals();
+    }
+    
+    // 明細行のイベントリスナーを追加
+    function addRowEventListeners(row) {
+        const quantityInput = row.querySelector('.quantity-input');
+        const unitPriceInput = row.querySelector('.unit-price-input');
+        const removeBtn = row.querySelector('.remove-item-btn');
+        
+        // 数量・単価変更時に金額を再計算
+        quantityInput.addEventListener('input', function() {
+            updateRowAmount(row);
+            updateTotals();
+        });
+        
+        unitPriceInput.addEventListener('input', function() {
+            updateRowAmount(row);
+            updateTotals();
+        });
+        
+        // 行削除
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            updateTotals();
+        });
+    }
+    
+    // 行の金額を更新
+    function updateRowAmount(row) {
+        const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+        const unitPrice = parseFloat(row.querySelector('.unit-price-input').value) || 0;
+        const amount = quantity * unitPrice;
+        
+        row.querySelector('.amount-display').textContent = '¥' + amount.toLocaleString();
+        row.querySelector('.amount-input').value = amount;
+    }
+    
+    // 合計金額を更新
+    function updateTotals() {
+        let subtotal = 0;
+        
+        // 全ての明細行の金額を合計
+        document.querySelectorAll('.amount-input').forEach(input => {
+            subtotal += parseFloat(input.value) || 0;
+        });
+        
+        const taxRate = parseFloat(taxRateInput.value) || 0;
+        const taxAmount = subtotal * (taxRate / 100);
+        const totalAmount = subtotal + taxAmount;
+        
+        // 表示を更新
+        document.getElementById('subtotal-display').textContent = '¥' + subtotal.toLocaleString();
+        document.getElementById('tax-rate-display').textContent = taxRate;
+        document.getElementById('tax-amount-display').textContent = '¥' + taxAmount.toLocaleString();
+        document.getElementById('total-amount-display').textContent = '¥' + totalAmount.toLocaleString();
+    }
+    
+    // 税率変更時の処理
+    taxRateInput.addEventListener('input', updateTotals);
+    
+    // 明細追加ボタン
+    addBtn.addEventListener('click', addItemRow);
+    
+    // 初期行を1つ追加
+    addItemRow();
+    
+    // フォーム送信時に明細データを整理
+    document.querySelector('form').addEventListener('submit', function(e) {
+        // hidden fieldで明細数を送信
+        const itemCountInput = document.createElement('input');
+        itemCountInput.type = 'hidden';
+        itemCountInput.name = 'item_count';
+        itemCountInput.value = tbody.children.length;
+        this.appendChild(itemCountInput);
+    });
+});
+</script>
+{% endblock %}

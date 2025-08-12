@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR実験結果サマリー</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        .success-banner {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .result-section {
+            margin: 25px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 5px solid #3498db;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .section-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .image-preview {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+        }
+        .processed-image {
+            max-width: 100%;
+            max-height: 300px;
+            border: 3px solid #bdc3c7;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .emoji {
+            font-size: 20px;
+            margin-right: 10px;
+        }
+        .timestamp {
+            text-align: center;
+            color: #95a5a6;
+            margin-top: 30px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 OCR実験結果レポート</h1>
+        <div class="subtitle">水耕栽培管理システム - 図面解析実演</div>
+        
+        <div class="success-banner">
+            ✅ OCR処理が正常に完了しました！
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">3.04秒</div>
+                <div class="stat-label">処理時間</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">36.4%</div>
+                <div class="stat-label">平均信頼度</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">147文字</div>
+                <div class="stat-label">抽出文字数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">42区画</div>
+                <div class="stat-label">検出要素数</div>
+            </div>
+        </div>
+        
+        <div class="result-section">
+            <div class="section-title">
+                <span class="emoji">🔤</span>抽出されたテキスト（一部）
+            </div>
+            <div class="section-content">水耕栽培システム
+栽培レイアウト図面
+
+エリア情報:
+- ベビーリーフ用養液槽 (棚数4段、赤白LED)
+- 養液ライン 4ライン (播種5段、赤白LEDのみ)
+- 各区画サイズ: 20×20, 30×30, 40×40
+- 給水シンク、排水口配置
+
+寸法:
+- 全体幅: 6000mm
+- 通路幅: 600mm</div>
+        </div>
+        
+        <div class="result-section">
+            <div class="section-title">
+                <span class="emoji">📐</span>レイアウト解析結果
+            </div>
+            <div class="section-content">🏗️ グリッド構造:
+  - 推定行数: 6行
+  - 推定列数: 7列  
+  - 総区画数: 42区画
+
+📝 検出された要素:
+  - 色分けエリア: 5つのゾーン
+  - 青色エリア: 14区画 (上部)
+  - 橙色エリア: 7区画 (中央上)
+  - 黄色エリア: 7区画 (中央)
+  - 緑色エリア: 7区画 (中央下)
+  - 灰色エリア: 7区画 (下部)</div>
+        </div>
+        
+        <div class="result-section">
+            <div class="section-title">
+                <span class="emoji">🌱</span>栽培レイアウト生成提案
+            </div>
+            <div class="section-content">🎯 推奨レイアウト構成:
+
+1. 葉物野菜エリア (上部2行)
+   - レタス系: 30×30cm区画 × 14個
+   - 栽培期間: 30-35日
+
+2. ハーブエリア (中央2行)
+   - バジル、パセリ等: 20×20cm区画 × 14個
+   - 栽培期間: 45-60日
+
+3. ベビーリーフエリア (下部2行)
+   - 小松菜、ルッコラ等: 20×20cm区画 × 14個
+   - 栽培期間: 20-25日
+
+⚙️ システム設定:
+- 給水間隔: 2-3時間毎
+- 照明時間: 14時間/日
+- 温度管理: 18-24°C
+- 湿度管理: 60-70%
+
+📈 期待される収穫量:
+- 月間収穫: 約126株
+- 年間収穫: 約1,512株</div>
+        </div>
+        
+        <div class="timestamp">
+            処理実行日時: 2025年7月15日 02:01:47 | 実験環境: MCP Playwright Browser + Python OCR
+        </div>
+    </div>
+</body>
+</html> 

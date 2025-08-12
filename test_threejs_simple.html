@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Three.js Simple Test</title>
+</head>
+<body>
+    <h1>Three.js CDN Test</h1>
+    <div id="output"></div>
+    
+    <!-- Three.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" 
+            onload="console.log('Three.js loaded successfully')" 
+            onerror="console.error('Failed to load Three.js')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" 
+            onload="console.log('OrbitControls loaded successfully')" 
+            onerror="console.error('Failed to load OrbitControls')"></script>
+    
+    <script>
+        window.addEventListener('load', function() {
+            const output = document.getElementById('output');
+            
+            console.log('Three.js available:', typeof THREE !== 'undefined');
+            console.log('OrbitControls available:', typeof THREE !== 'undefined' && typeof THREE.OrbitControls !== 'undefined');
+            
+            if (typeof THREE !== 'undefined') {
+                output.innerHTML += '<p>✅ Three.js loaded successfully</p>';
+                if (typeof THREE.OrbitControls !== 'undefined') {
+                    output.innerHTML += '<p>✅ OrbitControls loaded successfully</p>';
+                } else {
+                    output.innerHTML += '<p>❌ OrbitControls not available</p>';
+                }
+            } else {
+                output.innerHTML += '<p>❌ Three.js not available</p>';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}在庫管理ダッシュボード - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.inventory-card {
+    transition: all 0.3s ease;
+    border: none;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.inventory-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}
+
+.inventory-header {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    padding: 1.2rem;
+}
+
+.inventory-body {
+    padding: 1.2rem;
+}
+
+.low-stock-card .inventory-header {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+}
+
+.stock-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #4CAF50;
+}
+
+.low-stock-number {
+    color: #ff6b6b;
+}
+
+.threshold-info {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.btn-action {
+    border-radius: 20px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+}
+
+.alert-banner {
+    background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+    color: white;
+    border-radius: 15px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="mb-3">
+                <i class="fas fa-warehouse me-2 text-success"></i>
+                在庫管理ダッシュボード
+            </h1>
+            <p class="text-muted">
+                {{ current_organization.name }} - 水耕栽培資材の在庫管理
+            </p>
+        </div>
+    </div>
+
+    <!-- 在庫不足アラート -->
+    {% if low_stock_items %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-banner">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                    <div>
+                        <h5 class="mb-1">在庫不足アラート</h5>
+                        <p class="mb-0">
+                            {{ low_stock_items|length }}品目が在庫閾値を下回っています。発注をご検討ください。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- アクションボタン -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:item_create' %}" class="btn btn-success btn-action">
+                    <i class="fas fa-plus me-1"></i>
+                    品目登録
+                </a>
+                <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-primary btn-action">
+                    <i class="fas fa-exchange-alt me-1"></i>
+                    入出庫処理
+                </a>
+                <a href="{% url 'shift_management:order_create' %}" class="btn btn-warning btn-action">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    発注登録
+                </a>
+                <a href="{% url 'shift_management:transaction_history' %}" class="btn btn-info btn-action">
+                    <i class="fas fa-history me-1"></i>
+                    履歴確認
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 在庫一覧 -->
+    <div class="row">
+        {% for data in inventory_data %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card inventory-card h-100 {% if data.is_low_stock %}low-stock-card{% endif %}">
+                <div class="inventory-header">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">{{ data.item.item_code }}</h6>
+                            <h5 class="mb-0">{{ data.item.item_name }}</h5>
+                        </div>
+                        {% if data.is_low_stock %}
+                        <span class="badge bg-danger">不足</span>
+                        {% else %}
+                        <span class="badge bg-success">充足</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="inventory-body">
+                    <div class="text-center mb-3">
+                        <div class="stock-number {% if data.is_low_stock %}low-stock-number{% endif %}">
+                            {{ data.inventory.current_stock }}
+                        </div>
+                        <div class="text-muted">{{ data.item.unit }}</div>
+                    </div>
+                    
+                    <div class="threshold-info text-center mb-3">
+                        閾値: {{ data.item.threshold }}{{ data.item.unit }}
+                    </div>
+                    
+                    <!-- 発注先URL -->
+                    {% if data.item.order_url %}
+                    <div class="mb-3">
+                        <a href="{{ data.item.order_url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="fas fa-external-link-alt me-1"></i>
+                            発注先サイト
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- アクション -->
+                    <div class="d-flex gap-1">
+                        <a href="{% url 'shift_management:item_edit' data.item.pk %}" 
+                           class="btn btn-sm btn-outline-secondary flex-fill">
+                            <i class="fas fa-edit me-1"></i>
+                            編集
+                        </a>
+                        {% if data.is_low_stock %}
+                        <a href="{% url 'shift_management:order_create' %}?item={{ data.item.pk }}" 
+                           class="btn btn-sm btn-warning flex-fill">
+                            <i class="fas fa-shopping-cart me-1"></i>
+                            発注
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">品目が登録されていません</h4>
+                <p class="text-muted">
+                    最初の品目を登録してください。<br>
+                    <a href="{% url 'shift_management:item_create' %}" class="btn btn-success mt-2">
+                        <i class="fas fa-plus me-1"></i>
+                        品目登録
+                    </a>
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 簡易統計 -->
+    {% if inventory_data %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        在庫状況サマリー
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="h3 text-primary">{{ inventory_data|length }}</div>
+                            <div class="text-muted">総品目数</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-success" id="sufficient-items">-</div>
+                            <div class="text-muted">充足品目</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-danger">{{ low_stock_items|length }}</div>
+                            <div class="text-muted">在庫不足品目</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-info" id="shortage-rate">-</div>
+                            <div class="text-muted">不足率</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 統計計算
+    const totalItems = {{ inventory_data|length }};
+    const lowStockItems = {{ low_stock_items|length }};
+    const sufficientItems = totalItems - lowStockItems;
+    const shortageRate = totalItems > 0 ? Math.round((lowStockItems / totalItems) * 100) : 0;
+    
+    // 値を更新
+    document.getElementById('sufficient-items').textContent = sufficientItems;
+    document.getElementById('shortage-rate').textContent = shortageRate + '%';
+});
+</script>
+{% endblock %}

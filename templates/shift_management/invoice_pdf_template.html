@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>請求書 - {{ invoice.invoice_number }}</title>
+</head>
+<body>
+    <div class="invoice-header">
+        <h1 class="invoice-title">請求書</h1>
+    </div>
+
+    <div class="invoice-info">
+        <table>
+            <tr>
+                <td>請求書番号:</td>
+                <td>{{ invoice.invoice_number }}</td>
+            </tr>
+            <tr>
+                <td>発行日:</td>
+                <td>{{ invoice.issue_date|date:"Y年n月j日" }}</td>
+            </tr>
+            <tr>
+                <td>支払期限:</td>
+                <td>{{ invoice.due_date|date:"Y年n月j日" }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="bill-to">
+        <h3>請求先</h3>
+        <div>
+            <strong>{{ invoice.bill_to_name }}</strong><br>
+            {{ invoice.bill_to_address|linebreaks }}
+            {% if invoice.bill_to_contact %}
+                担当者: {{ invoice.bill_to_contact }}<br>
+            {% endif %}
+            {% if invoice.bill_to_phone %}
+                TEL: {{ invoice.bill_to_phone }}<br>
+            {% endif %}
+            {% if invoice.bill_to_email %}
+                Email: {{ invoice.bill_to_email }}<br>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="items-section">
+        <h3>請求明細</h3>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>品目名</th>
+                    <th>説明</th>
+                    <th>数量</th>
+                    <th>単位</th>
+                    <th>単価</th>
+                    <th>金額</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.item_name }}</td>
+                    <td>{{ item.item_description|default:"-" }}</td>
+                    <td class="amount">{{ item.quantity|floatformat:0 }}</td>
+                    <td>{{ item.unit }}</td>
+                    <td class="amount">¥{{ item.unit_price|floatformat:0 }}</td>
+                    <td class="amount">¥{{ item.amount|floatformat:0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="total-section">
+        <table>
+            <tr>
+                <td>小計</td>
+                <td class="amount">¥{{ invoice.subtotal|floatformat:0 }}</td>
+            </tr>
+            <tr>
+                <td>消費税({{ invoice.tax_rate }}%)</td>
+                <td class="amount">¥{{ invoice.tax_amount|floatformat:0 }}</td>
+            </tr>
+            <tr class="total-row">
+                <td>合計</td>
+                <td class="amount">¥{{ invoice.total_amount|floatformat:0 }}</td>
+            </tr>
+        </table>
+    </div>
+
+    {% if invoice.notes %}
+    <div class="notes">
+        <h3>備考</h3>
+        <p>{{ invoice.notes|linebreaks }}</p>
+    </div>
+    {% endif %}
+</body>
+</html>

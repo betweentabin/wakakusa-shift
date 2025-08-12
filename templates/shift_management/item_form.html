@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - わかくさシフト{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-box me-2"></i>
+                        {{ title }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.item_code.id_for_label }}" class="form-label">
+                                        {{ form.item_code.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.item_code }}
+                                    {% if form.item_code.errors %}
+                                        <div class="text-danger small">{{ form.item_code.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.unit.id_for_label }}" class="form-label">
+                                        {{ form.unit.label }}
+                                    </label>
+                                    {{ form.unit }}
+                                    {% if form.unit.errors %}
+                                        <div class="text-danger small">{{ form.unit.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.item_name.id_for_label }}" class="form-label">
+                                {{ form.item_name.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.item_name }}
+                            {% if form.item_name.errors %}
+                                <div class="text-danger small">{{ form.item_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.order_url.id_for_label }}" class="form-label">
+                                {{ form.order_url.label }}
+                            </label>
+                            {{ form.order_url }}
+                            <div class="form-text">
+                                発注時に参照するURLを入力してください（任意）
+                            </div>
+                            {% if form.order_url.errors %}
+                                <div class="text-danger small">{{ form.order_url.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.threshold.id_for_label }}" class="form-label">
+                                        {{ form.threshold.label }}
+                                    </label>
+                                    {{ form.threshold }}
+                                    <div class="form-text">
+                                        この数を下回ると在庫不足として警告が表示されます
+                                    </div>
+                                    {% if form.threshold.errors %}
+                                        <div class="text-danger small">{{ form.threshold.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if not is_create %}
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">現在の在庫数</label>
+                                    <div class="form-control-plaintext">
+                                        <strong class="text-primary">{{ item.current_stock }}{{ item.unit }}</strong>
+                                        {% if item.is_low_stock %}
+                                        <span class="badge bg-danger ms-2">在庫不足</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        {% if form.organization.field.widget.input_type != 'hidden' %}
+                        <div class="mb-3">
+                            <label for="{{ form.organization.id_for_label }}" class="form-label">
+                                {{ form.organization.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.organization }}
+                            {% if form.organization.errors %}
+                                <div class="text-danger small">{{ form.organization.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        {{ form.organization }}
+                        {% endif %}
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>
+                                戻る
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                {% if is_create %}登録{% else %}更新{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

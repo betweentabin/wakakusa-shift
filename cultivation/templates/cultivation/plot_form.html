@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">{{ title }}</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.shelf_number.id_for_label }}" class="form-label">棚番号</label>
+                            {{ form.shelf_number }}
+                            <div class="form-text">例: A-1, B-2, C-3</div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.x_position.id_for_label }}" class="form-label">X座標（横位置）</label>
+                                    {{ form.x_position }}
+                                    <div class="form-text">0から始まる数値</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.y_position.id_for_label }}" class="form-label">Y座標（縦位置）</label>
+                                    {{ form.y_position }}
+                                    <div class="form-text">0から始まる数値</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.levels.id_for_label }}" class="form-label">段数</label>
+                            {{ form.levels }}
+                            <div class="form-text">1以上の数値</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>一覧に戻る
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                {% if is_create %}作成{% else %}更新{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            {% if not is_create %}
+            <div class="card mt-4">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0 text-dark">
+                        <i class="fas fa-exclamation-triangle me-2"></i>危険な操作
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        この棚区画を削除すると、関連する作物データもすべて削除されます。
+                        この操作は取り消せません。
+                    </p>
+                    <a href="{% url 'cultivation:plot_delete' plot.id %}" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>棚区画を削除
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

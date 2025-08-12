@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block title %}休み・通院申請{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-clock"></i> 
+                        {% if is_create %}新規{% else %}編集{% endif %}休み・通院申請
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row mb-3">
+                            <div class="col-sm-3">
+                                <label class="col-form-label"><strong>申請者</strong></label>
+                            </div>
+                            <div class="col-sm-9">
+                                <p class="form-control-plaintext">{{ staff_obj.name }} ({{ staff_obj.get_role_type_display }})</p>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.request_type.id_for_label }}" class="col-sm-3 col-form-label">{{ form.request_type.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.request_type }}
+                                {% if form.request_type.errors %}
+                                    <div class="text-danger">{{ form.request_type.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.start_date.id_for_label }}" class="col-sm-3 col-form-label">{{ form.start_date.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.start_date }}
+                                {% if form.start_date.errors %}
+                                    <div class="text-danger">{{ form.start_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.end_date.id_for_label }}" class="col-sm-3 col-form-label">{{ form.end_date.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.end_date }}
+                                {% if form.end_date.errors %}
+                                    <div class="text-danger">{{ form.end_date.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">日帰りの場合は開始日と同じ日付を入力してください</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.priority.id_for_label }}" class="col-sm-3 col-form-label">{{ form.priority.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.priority }}
+                                {% if form.priority.errors %}
+                                    <div class="text-danger">{{ form.priority.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">緊急の場合は「緊急」を選択してください</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.reason.id_for_label }}" class="col-sm-3 col-form-label">{{ form.reason.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.reason }}
+                                {% if form.reason.errors %}
+                                    <div class="text-danger">{{ form.reason.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">申請の理由を詳しく入力してください</small>
+                            </div>
+                        </div>
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-sm-9 offset-sm-3">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> 申請を送信
+                                </button>
+                                <a href="{% url 'shift_management:leave_request_list' %}" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> キャンセル
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 注意事項 -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-info-circle"></i> 申請時の注意事項</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li>申請は管理者による承認が必要です</li>
+                        <li>緊急の申請は可能な限り早めに送信してください</li>
+                        <li>理由は具体的に記載してください</li>
+                        <li>承認結果は申請一覧で確認できます</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 開始日が変更されたら終了日も同じ値に設定（日帰りの場合のデフォルト）
+document.getElementById('{{ form.start_date.id_for_label }}').addEventListener('change', function() {
+    const endDateField = document.getElementById('{{ form.end_date.id_for_label }}');
+    if (!endDateField.value) {
+        endDateField.value = this.value;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,534 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}高度な一括シフト登録{% endblock %}
+
+{% block extra_css %}
+<style>
+    .configured-dates {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+    }
+    .configured-date-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        margin-bottom: 0.25rem;
+        background-color: white;
+        border-radius: 0.25rem;
+        border: 1px solid #dee2e6;
+    }
+    .configured-date-item:last-child {
+        margin-bottom: 0;
+    }
+    .date-info {
+        font-weight: bold;
+        color: #495057;
+    }
+    .time-info {
+        color: #6c757d;
+    }
+    .btn-generate {
+        margin-top: 1rem;
+    }
+    .preset-buttons .btn {
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .preset-btn-single {
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">高度な一括シフト登録</h2>
+    
+    <form method="post" id="advanced-bulk-shift-form">
+        {% csrf_token %}
+        
+        <!-- 基本設定 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">基本設定</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.start_date.label_tag }}
+                            {{ form.start_date }}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.end_date.label_tag }}
+                            {{ form.end_date }}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    {{ form.shift_type.label_tag }}
+                    {{ form.shift_type }}
+                    <small class="form-text text-muted">
+                        デフォルトのシフト種別を選択してください。各日付で個別に変更できます。
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <label>{{ form.weekdays.label }}</label>
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="select-all-weekdays">
+                            全選択
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-weekdays">
+                            全解除
+                        </button>
+                    </div>
+                    <div class="d-flex flex-wrap">
+                        {% for choice in form.weekdays %}
+                            <div class="form-check me-3">
+                                {{ choice.tag }}
+                                <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <button type="button" class="btn btn-primary btn-generate" id="generate-dates">
+                    日付別時間設定を生成
+                </button>
+                
+                <div class="preset-buttons">
+                    <button type="button" class="btn btn-sm btn-outline-info preset-btn" 
+                            data-start="09:00" data-end="17:00">
+                        9:00-17:00（通常勤務）
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info preset-btn" 
+                            data-start="08:00" data-end="16:00">
+                        8:00-16:00（早番）
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-info preset-btn" 
+                            data-start="10:00" data-end="19:00">
+                        10:00-19:00（遅番）
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 日付別時間設定 -->
+        <div class="card mb-4" id="date-time-settings-card" style="display: none;">
+            <div class="card-header">
+                <h5 class="mb-0">日付別時間設定</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="date-selector" class="form-label">設定する日付を選択</label>
+                        <select id="date-selector" class="form-control">
+                            <option value="">-- 日付を選択してください --</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="selected-date-settings" style="display: none;">
+                    <div class="alert alert-info">
+                        <strong id="selected-date-display"></strong> の時間設定
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label class="form-label">開始時間</label>
+                            <select id="current-start-time" class="form-control">
+                                <!-- JavaScriptで時間選択肢を生成 -->
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">終了時間</label>
+                            <select id="current-end-time" class="form-control">
+                                <!-- JavaScriptで時間選択肢を生成 -->
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">プリセット</label>
+                            <div class="preset-buttons">
+                                <button type="button" class="btn btn-sm btn-outline-info preset-btn-single" 
+                                        data-start="09:00" data-end="17:00">
+                                    9:00-17:00
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info preset-btn-single" 
+                                        data-start="08:00" data-end="16:00">
+                                    8:00-16:00
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info preset-btn-single" 
+                                        data-start="10:00" data-end="19:00">
+                                    10:00-19:00
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-primary" id="save-time-setting">
+                            この日付の時間を保存
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="apply-to-all">
+                            全ての日付に適用
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h6>設定済み日付一覧</h6>
+                    <div id="configured-dates-list" class="configured-dates">
+                        <p class="text-muted">まだ設定された日付がありません。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- スタッフ選択 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">スタッフ選択</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="select-all-staff">
+                        全選択
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-staff">
+                        全解除
+                    </button>
+                </div>
+                <div class="row">
+                    {% for choice in form.staff %}
+                        <div class="col-md-3 col-sm-6">
+                            <div class="form-check">
+                                {{ choice.tag }}
+                                <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                {% if form.staff.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.staff.errors }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- オプション -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">オプション</h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check">
+                    {{ form.overwrite }}
+                    <label class="form-check-label" for="{{ form.overwrite.id_for_label }}">
+                        {{ form.overwrite.label }}
+                    </label>
+                </div>
+                <small class="form-text text-muted">
+                    チェックを入れると、既存のシフトが上書きされます。
+                </small>
+            </div>
+        </div>
+        
+        {{ form.time_settings }}
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">シフトを登録</button>
+            <a href="{% url 'shift_management:calendar' %}" class="btn btn-secondary">キャンセル</a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const startDateInput = document.getElementById('advanced-start-date');
+    const endDateInput = document.getElementById('advanced-end-date');
+    const generateBtn = document.getElementById('generate-dates');
+    const dateTimeSettingsCard = document.getElementById('date-time-settings-card');
+    const dateSelector = document.getElementById('date-selector');
+    const selectedDateSettings = document.getElementById('selected-date-settings');
+    const selectedDateDisplay = document.getElementById('selected-date-display');
+    const currentStartTime = document.getElementById('current-start-time');
+    const currentEndTime = document.getElementById('current-end-time');
+    const saveTimeSettingBtn = document.getElementById('save-time-setting');
+    const applyToAllBtn = document.getElementById('apply-to-all');
+    const configuredDatesList = document.getElementById('configured-dates-list');
+    const timeSettingsInput = document.querySelector('input[name="time_settings"]');
+    const form = document.getElementById('advanced-bulk-shift-form');
+    
+    // 時間設定を保存するオブジェクト
+    let timeSettings = {};
+    let availableDates = [];
+    
+    // 時間選択肢を生成
+    function generateTimeOptions() {
+        let options = '';
+        for (let hour = 0; hour < 24; hour++) {
+            for (let minute of [0, 30]) {
+                const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                options += `<option value="${time}">${time}</option>`;
+            }
+        }
+        return options;
+    }
+    
+    // 時間選択肢を初期化
+    currentStartTime.innerHTML = generateTimeOptions();
+    currentEndTime.innerHTML = generateTimeOptions();
+    
+    // 曜日の全選択/全解除
+    document.getElementById('select-all-weekdays').addEventListener('click', function() {
+        document.querySelectorAll('.weekday-checkbox').forEach(checkbox => {
+            checkbox.checked = true;
+        });
+    });
+    
+    document.getElementById('deselect-all-weekdays').addEventListener('click', function() {
+        document.querySelectorAll('.weekday-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+    });
+    
+    // スタッフの全選択/全解除
+    document.getElementById('select-all-staff').addEventListener('click', function() {
+        document.querySelectorAll('input[name="staff"]').forEach(checkbox => {
+            checkbox.checked = true;
+        });
+    });
+    
+    document.getElementById('deselect-all-staff').addEventListener('click', function() {
+        document.querySelectorAll('input[name="staff"]').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+    });
+    
+    // 単一日付用のプリセットボタン
+    document.querySelectorAll('.preset-btn-single').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const startTime = this.dataset.start;
+            const endTime = this.dataset.end;
+            
+            currentStartTime.value = startTime;
+            currentEndTime.value = endTime;
+        });
+    });
+    
+    // 日付別時間設定を生成
+    generateBtn.addEventListener('click', function() {
+        const startDate = new Date(startDateInput.value);
+        const endDate = new Date(endDateInput.value);
+        
+        if (!startDateInput.value || !endDateInput.value) {
+            alert('開始日と終了日を入力してください。');
+            return;
+        }
+        
+        if (startDate > endDate) {
+            alert('開始日は終了日より前である必要があります。');
+            return;
+        }
+        
+        // 選択された曜日を取得
+        const selectedWeekdays = [];
+        document.querySelectorAll('.weekday-checkbox:checked').forEach(checkbox => {
+            selectedWeekdays.push(parseInt(checkbox.value));
+        });
+        
+        if (selectedWeekdays.length === 0) {
+            alert('少なくとも1つの曜日を選択してください。');
+            return;
+        }
+        
+        // 利用可能な日付を生成
+        availableDates = [];
+        const currentDate = new Date(startDate);
+        const weekdayNames = ['月', '火', '水', '木', '金', '土', '日'];
+        
+        while (currentDate <= endDate) {
+            const weekday = currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1; // 月曜日を0とする
+            
+            if (selectedWeekdays.includes(weekday)) {
+                const dateStr = currentDate.toISOString().split('T')[0];
+                const dateLabel = currentDate.toLocaleDateString('ja-JP', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                }) + `（${weekdayNames[weekday]}曜日）`;
+                
+                availableDates.push({
+                    dateStr: dateStr,
+                    dateLabel: dateLabel
+                });
+            }
+            
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // 日付選択プルダウンを更新
+        updateDateSelector();
+        
+        // 時間設定をリセット
+        timeSettings = {};
+        updateConfiguredDatesList();
+        
+        dateTimeSettingsCard.style.display = 'block';
+        selectedDateSettings.style.display = 'none';
+    });
+    
+    // 日付選択プルダウンを更新
+    function updateDateSelector() {
+        dateSelector.innerHTML = '<option value="">-- 日付を選択してください --</option>';
+        
+        availableDates.forEach(dateInfo => {
+            const option = document.createElement('option');
+            option.value = dateInfo.dateStr;
+            option.textContent = dateInfo.dateLabel;
+            dateSelector.appendChild(option);
+        });
+    }
+    
+    // 日付選択時の処理
+    dateSelector.addEventListener('change', function() {
+        const selectedDate = this.value;
+        
+        if (selectedDate) {
+            const dateInfo = availableDates.find(d => d.dateStr === selectedDate);
+            selectedDateDisplay.textContent = dateInfo.dateLabel;
+            
+            // 既存の設定があれば読み込み
+            if (timeSettings[selectedDate]) {
+                currentStartTime.value = timeSettings[selectedDate].start_time;
+                currentEndTime.value = timeSettings[selectedDate].end_time;
+            } else {
+                // デフォルト時間を設定
+                currentStartTime.value = '09:00';
+                currentEndTime.value = '17:00';
+            }
+            
+            selectedDateSettings.style.display = 'block';
+        } else {
+            selectedDateSettings.style.display = 'none';
+        }
+    });
+    
+    // 時間設定を保存
+    saveTimeSettingBtn.addEventListener('click', function() {
+        const selectedDate = dateSelector.value;
+        
+        if (!selectedDate) {
+            alert('日付を選択してください。');
+            return;
+        }
+        
+        timeSettings[selectedDate] = {
+            start_time: currentStartTime.value,
+            end_time: currentEndTime.value
+        };
+        
+        updateConfiguredDatesList();
+        alert('時間設定を保存しました。');
+    });
+    
+    // 全ての日付に適用
+    applyToAllBtn.addEventListener('click', function() {
+        const startTime = currentStartTime.value;
+        const endTime = currentEndTime.value;
+        
+        if (confirm('現在の時間設定を全ての日付に適用しますか？')) {
+            availableDates.forEach(dateInfo => {
+                timeSettings[dateInfo.dateStr] = {
+                    start_time: startTime,
+                    end_time: endTime
+                };
+            });
+            
+            updateConfiguredDatesList();
+            alert('全ての日付に時間設定を適用しました。');
+        }
+    });
+    
+    // 設定済み日付一覧を更新
+    function updateConfiguredDatesList() {
+        if (Object.keys(timeSettings).length === 0) {
+            configuredDatesList.innerHTML = '<p class="text-muted">まだ設定された日付がありません。</p>';
+            return;
+        }
+        
+        let html = '';
+        Object.keys(timeSettings).sort().forEach(dateStr => {
+            const dateInfo = availableDates.find(d => d.dateStr === dateStr);
+            const setting = timeSettings[dateStr];
+            
+            html += `
+                <div class="configured-date-item">
+                    <div>
+                        <span class="date-info">${dateInfo ? dateInfo.dateLabel : dateStr}</span>
+                    </div>
+                    <div>
+                        <span class="time-info">${setting.start_time} 〜 ${setting.end_time}</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2 delete-setting" data-date="${dateStr}">
+                            削除
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        configuredDatesList.innerHTML = html;
+        
+        // 削除ボタンのイベント設定
+        document.querySelectorAll('.delete-setting').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const dateStr = this.dataset.date;
+                if (confirm('この日付の設定を削除しますか？')) {
+                    delete timeSettings[dateStr];
+                    updateConfiguredDatesList();
+                }
+            });
+        });
+    }
+    
+    // フォーム送信時の処理
+    form.addEventListener('submit', function(e) {
+        // 未設定の日付がある場合は警告
+        const unsetDates = availableDates.filter(dateInfo => !timeSettings[dateInfo.dateStr]);
+        
+        if (unsetDates.length > 0) {
+            const unsetDatesText = unsetDates.map(d => d.dateLabel).join('、');
+            if (!confirm(`以下の日付の時間が設定されていません:\n${unsetDatesText}\n\nデフォルト時間（9:00-17:00）で登録しますか？`)) {
+                e.preventDefault();
+                return;
+            }
+            
+            // デフォルト時間を設定
+            unsetDates.forEach(dateInfo => {
+                timeSettings[dateInfo.dateStr] = {
+                    start_time: '09:00',
+                    end_time: '17:00'
+                };
+            });
+        }
+        
+        timeSettingsInput.value = JSON.stringify(timeSettings);
+    });
+});
+</script>
+{% endblock %}

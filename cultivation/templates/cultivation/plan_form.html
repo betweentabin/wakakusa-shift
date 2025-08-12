@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_create %}新規栽培計画{% else %}栽培計画編集{% endif %} - {{ section.name }}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auto-calc-info {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .calc-result {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">
+        {% if is_create %}新規栽培計画{% else %}栽培計画編集{% endif %}
+        <small class="text-muted">{{ section.name }}</small>
+    </h1>
+
+    <div class="auto-calc-info">
+        <h6><i class="fas fa-calculator me-2"></i>自動計算機能</h6>
+        <p class="mb-0">
+            栽培期間（日数）を入力すると、播種日または定植日から収穫予定日を自動計算します。
+            収穫予定日を直接入力することも可能です。
+        </p>
+    </div>
+
+    <form method="post" id="planForm">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+            <label for="{{ form.crop.id_for_label }}" class="form-label">{{ form.crop.label }}</label>
+            {{ form.crop }}
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="{{ form.sowing_date.id_for_label }}" class="form-label">{{ form.sowing_date.label }}</label>
+                    {{ form.sowing_date }}
+                    <div class="form-text">播種を行う場合は入力してください</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="{{ form.planting_date.id_for_label }}" class="form-label">{{ form.planting_date.label }}</label>
+                    {{ form.planting_date }}
+                    <div class="form-text">定植を行う場合は入力してください</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="{{ form.cultivation_period_days.id_for_label }}" class="form-label">
+                        {{ form.cultivation_period_days.label }}
+                        <i class="fas fa-info-circle" title="栽培期間を入力すると収穫予定日が自動計算されます"></i>
+                    </label>
+                    {{ form.cultivation_period_days }}
+                    <div class="form-text">{{ form.cultivation_period_days.help_text }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+        <div class="mb-3">
+            <label for="{{ form.harvest_date_planned.id_for_label }}" class="form-label">{{ form.harvest_date_planned.label }}</label>
+            {{ form.harvest_date_planned }}
+                    <div class="form-text">直接指定するか、上記の栽培期間から自動計算</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="calcResult" class="calc-result" style="display: none;">
+            <strong>計算結果:</strong> <span id="calcText"></span>
+        </div>
+
+        <div class="mb-3">
+            <label for="{{ form.notes.id_for_label }}" class="form-label">{{ form.notes.label }}</label>
+            {{ form.notes }}
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">
+                {% if is_create %}作成{% else %}更新{% endif %}
+            </button>
+            <a href="{% url 'cultivation:section_detail' section.id %}" class="btn btn-secondary">キャンセル</a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sowingDateField = document.getElementById('sowing_date');
+    const plantingDateField = document.getElementById('planting_date');
+    const cultivationPeriodField = document.getElementById('cultivation_period_days');
+    const harvestDateField = document.getElementById('harvest_date_planned');
+    const calcResult = document.getElementById('calcResult');
+    const calcText = document.getElementById('calcText');
+    
+    function calculateHarvestDate() {
+        const sowingDate = sowingDateField.value;
+        const plantingDate = plantingDateField.value;
+        const periodDays = parseInt(cultivationPeriodField.value);
+        
+        if (periodDays && (sowingDate || plantingDate)) {
+            const startDate = new Date(plantingDate || sowingDate);
+            const harvestDate = new Date(startDate);
+            harvestDate.setDate(startDate.getDate() + periodDays);
+            
+            const formattedDate = harvestDate.toISOString().split('T')[0];
+            harvestDateField.value = formattedDate;
+            
+            const startDateName = plantingDate ? '定植日' : '播種日';
+            calcText.textContent = `${startDateName}から${periodDays}日後の${formattedDate}に設定されました`;
+            calcResult.style.display = 'block';
+        } else {
+            calcResult.style.display = 'none';
+        }
+    }
+    
+    function calculatePeriod() {
+        const sowingDate = sowingDateField.value;
+        const plantingDate = plantingDateField.value;
+        const harvestDate = harvestDateField.value;
+        
+        if (harvestDate && (sowingDate || plantingDate)) {
+            const startDate = new Date(plantingDate || sowingDate);
+            const endDate = new Date(harvestDate);
+            const diffTime = endDate - startDate;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays > 0) {
+                cultivationPeriodField.value = diffDays;
+                const startDateName = plantingDate ? '定植日' : '播種日';
+                calcText.textContent = `${startDateName}から収穫予定日まで${diffDays}日間の栽培期間です`;
+                calcResult.style.display = 'block';
+            }
+        }
+    }
+    
+    // イベントリスナーを追加
+    cultivationPeriodField.addEventListener('input', calculateHarvestDate);
+    sowingDateField.addEventListener('change', function() {
+        calculateHarvestDate();
+        calculatePeriod();
+    });
+    plantingDateField.addEventListener('change', function() {
+        calculateHarvestDate();
+        calculatePeriod();
+    });
+    harvestDateField.addEventListener('change', calculatePeriod);
+    
+    // 初期計算
+    calculatePeriod();
+});
+</script>
+{% endblock %} 

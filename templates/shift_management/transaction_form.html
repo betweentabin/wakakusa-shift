@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - わかくさシフト{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2"></i>
+                        {{ title }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="transactionForm">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.item.id_for_label }}" class="form-label">
+                                {{ form.item.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.item }}
+                            {% if form.item.errors %}
+                                <div class="text-danger small">{{ form.item.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.transaction_type.id_for_label }}" class="form-label">
+                                        {{ form.transaction_type.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.transaction_type }}
+                                    {% if form.transaction_type.errors %}
+                                        <div class="text-danger small">{{ form.transaction_type.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.quantity.id_for_label }}" class="form-label">
+                                        {{ form.quantity.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.quantity }}
+                                    <div id="quantityHelp" class="form-text"></div>
+                                    {% if form.quantity.errors %}
+                                        <div class="text-danger small">{{ form.quantity.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 現在の在庫表示エリア -->
+                        <div id="currentStockInfo" class="alert alert-info" style="display: none;">
+                            <i class="fas fa-info-circle me-2"></i>
+                            現在の在庫数: <span id="currentStockValue">-</span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label">
+                                {{ form.notes.label }}
+                            </label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}
+                                <div class="text-danger small">{{ form.notes.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>
+                                戻る
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                処理実行
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemSelect = document.getElementById('{{ form.item.id_for_label }}');
+    const transactionTypeSelect = document.getElementById('{{ form.transaction_type.id_for_label }}');
+    const quantityInput = document.getElementById('{{ form.quantity.id_for_label }}');
+    const quantityHelp = document.getElementById('quantityHelp');
+    const currentStockInfo = document.getElementById('currentStockInfo');
+    const currentStockValue = document.getElementById('currentStockValue');
+    
+    // 品目選択時の処理
+    function updateStockInfo() {
+        const selectedItem = itemSelect.value;
+        if (selectedItem) {
+            // ここでAjaxリクエストを送って現在の在庫数を取得することも可能
+            // 今は簡易的にスタティックな表示
+            currentStockInfo.style.display = 'block';
+            currentStockValue.textContent = '取得中...';
+        } else {
+            currentStockInfo.style.display = 'none';
+        }
+    }
+    
+    // トランザクションタイプ選択時のヘルプテキスト更新
+    function updateQuantityHelp() {
+        const transactionType = transactionTypeSelect.value;
+        switch(transactionType) {
+            case 'in':
+                quantityHelp.textContent = '入庫する数量を入力してください';
+                quantityHelp.className = 'form-text text-success';
+                break;
+            case 'out':
+                quantityHelp.textContent = '出庫する数量を入力してください';
+                quantityHelp.className = 'form-text text-warning';
+                break;
+            case 'adjustment':
+                quantityHelp.textContent = '調整後の在庫数を入力してください（現在の在庫数に関係なく、この値に設定されます）';
+                quantityHelp.className = 'form-text text-info';
+                break;
+            default:
+                quantityHelp.textContent = '';
+                quantityHelp.className = 'form-text';
+        }
+    }
+    
+    itemSelect.addEventListener('change', updateStockInfo);
+    transactionTypeSelect.addEventListener('change', updateQuantityHelp);
+    
+    // 初期状態の設定
+    updateStockInfo();
+    updateQuantityHelp();
+});
+</script>
+{% endblock %}

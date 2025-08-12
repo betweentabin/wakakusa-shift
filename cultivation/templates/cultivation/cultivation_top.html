@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}栽培管理システム{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 20px 0;
+        border-radius: 15px;
+        margin-bottom: 20px;
+    }
+    
+    @media (min-width: 768px) {
+        .hero-section {
+            padding: 40px 0;
+            margin-bottom: 30px;
+        }
+    }
+    
+    .layout-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+    
+    .layout-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .layout-image {
+        height: 150px;
+        object-fit: cover;
+        border-radius: 15px 15px 0 0;
+    }
+    
+    @media (min-width: 576px) {
+        .layout-image {
+            height: 200px;
+        }
+    }
+    
+    .stats-card {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        border-radius: 15px;
+        padding: 15px;
+        text-align: center;
+        margin-bottom: 15px;
+        border: none;
+    }
+    
+    @media (min-width: 768px) {
+        .stats-card {
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    }
+    
+    .stats-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        display: block;
+    }
+    
+    @media (min-width: 768px) {
+        .stats-number {
+            font-size: 2rem;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .stats-number {
+            font-size: 1.25rem;
+        }
+        
+        .stats-card {
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+    }
+    
+    .stats-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .quick-actions {
+        background-color: #f8f9fa;
+        border-radius: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    @media (min-width: 768px) {
+        .quick-actions {
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+    }
+    
+    .action-btn {
+        margin: 3px;
+        border-radius: 25px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
+    }
+    
+    @media (min-width: 576px) {
+        .action-btn {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 1rem;
+        }
+    }
+    
+    .layout-stats {
+        background-color: #e7f3ff;
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+    
+    .layout-stats .stat-item {
+        display: inline-block;
+        margin-right: 15px;
+        font-size: 0.9rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background-color: #f8f9fa;
+        border-radius: 15px;
+        margin: 30px 0;
+    }
+    
+    .empty-state-icon {
+        font-size: 4rem;
+        color: #6c757d;
+        margin-bottom: 20px;
+    }
+    
+    /* モバイル用のタイトル調整 */
+    @media (max-width: 767px) {
+        .hero-section h1 {
+            font-size: 1.75rem;
+        }
+        
+        .hero-section .lead {
+            font-size: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- ヒーローセクション -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-12 col-md-8 text-center text-md-start">
+                    <h1 class="display-6 display-md-4 mb-3">
+                        <i class="fas fa-seedling me-3"></i>水耕栽培管理システム
+                    </h1>
+                    <p class="lead mb-0">効率的な栽培計画と区画管理で、最適な収穫を実現します</p>
+                </div>
+                <div class="col-12 col-md-4 text-center text-md-end mt-3 mt-md-0">
+                    <a href="{% url 'cultivation:layout_create' %}" class="btn btn-light btn-lg">
+                        <i class="fas fa-plus me-2"></i>新規レイアウト作成
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 統計情報 -->
+    <div class="row mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stats-card">
+                <span class="stats-number">{{ total_layouts }}</span>
+                <span class="stats-label">栽培レイアウト</span>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stats-card">
+                <span class="stats-number">{{ total_plots }}</span>
+                <span class="stats-label">総棚数</span>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stats-card">
+                <span class="stats-number">{{ active_crops }}</span>
+                <span class="stats-label">栽培中</span>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stats-card">
+                <span class="stats-number">{{ harvest_ready }}</span>
+                <span class="stats-label">収穫可能</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- クイックアクション -->
+    <div class="quick-actions">
+        <h5 class="mb-3">
+            <i class="fas fa-bolt me-2"></i>クイックアクション
+        </h5>
+        <div class="dropdown">
+            <button class="btn btn-primary action-btn dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-plus me-1"></i>レイアウト作成
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item" href="{% url 'cultivation:layout_create' %}">
+                        <i class="fas fa-magic me-2"></i>ガイド付き作成
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'cultivation:layout_create_simple' %}">
+                        <i class="fas fa-edit me-2"></i>シンプル作成
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <a href="{% url 'cultivation:crop_list' %}" class="btn btn-info action-btn">
+            <i class="fas fa-seedling me-1"></i>作物名管理
+        </a>
+        <a href="{% url 'cultivation:plot_management' %}" class="btn btn-success action-btn">
+            <i class="fas fa-warehouse me-1"></i>棚区画管理
+        </a>
+        {% if layouts %}
+            <a href="{% url 'cultivation:layout_detail' layouts.0.id %}" class="btn btn-info action-btn">
+                <i class="fas fa-eye me-1"></i>最新レイアウト表示
+            </a>
+        {% endif %}
+    </div>
+
+    <!-- レイアウト一覧 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h4 mb-0">
+            <i class="fas fa-layer-group me-2"></i>栽培レイアウト一覧
+        </h2>
+        <span class="badge bg-secondary">{{ total_layouts }}件</span>
+    </div>
+    
+    {% if layouts %}
+        <div class="row">
+            {% for layout in layouts %}
+                <div class="col-12 col-sm-6 col-lg-4 mb-4">
+                    <div class="card layout-card">
+                        {% if layout.layout_image %}
+                            <img src="{{ layout.layout_image.url }}" class="layout-image" alt="{{ layout.name }} のレイアウト図">
+                        {% else %}
+                            <div class="layout-image d-flex align-items-center justify-content-center bg-light">
+                                <i class="fas fa-image fa-3x text-muted"></i>
+                            </div>
+                        {% endif %}
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="fas fa-seedling me-2 text-success"></i>{{ layout.name }}
+                            </h5>
+                            
+                            <div class="layout-stats">
+                                <div class="stat-item">
+                                    <i class="fas fa-th me-1"></i>
+                                    <strong>{{ layout.sections_count }}</strong> 区画
+                                </div>
+                                <div class="stat-item">
+                                    <i class="fas fa-leaf me-1"></i>
+                                    <strong>{{ layout.active_crops_count }}</strong> 栽培中
+                                </div>
+                                <div class="stat-item">
+                                    <i class="fas fa-calendar-check me-1"></i>
+                                    <strong>{{ layout.harvest_ready_count }}</strong> 収穫可能
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between mt-3">
+                                <a href="{% url 'cultivation:layout_detail' layout.id %}" class="btn btn-primary">
+                                    <i class="fas fa-eye me-1"></i>詳細表示
+                                </a>
+                                <div class="btn-group" role="group">
+                                    <a href="{% url 'cultivation:section_create' layout.id %}" class="btn btn-outline-success btn-sm" title="区画追加">
+                                        <i class="fas fa-plus"></i>
+                                        <span class="d-none d-sm-inline ms-1">追加</span>
+                                    </a>
+                                    <a href="{% url 'cultivation:layout_delete' layout.id %}" class="btn btn-outline-danger btn-sm" title="削除">
+                                        <i class="fas fa-trash"></i>
+                                        <span class="d-none d-sm-inline ms-1">削除</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-seedling"></i>
+            </div>
+            <h4>まだレイアウトが登録されていません</h4>
+            <p class="text-muted mb-4">最初の栽培レイアウトを作成して、栽培管理を始めましょう</p>
+            <a href="{% url 'cultivation:layout_create' %}" class="btn btn-primary btn-lg">
+                <i class="fas fa-plus me-2"></i>最初のレイアウトを作成
+            </a>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

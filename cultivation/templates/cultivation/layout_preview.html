@@ -1,0 +1,324 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}栽培レイアウト図 - プレビュー{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/layout_visualization.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-seedling"></i> 栽培レイアウト図</h2>
+                <div class="btn-group">
+                    <a href="{% url 'cultivation:layout_create_ocr' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> 戻る
+                    </a>
+                    <button type="button" class="btn btn-primary" onclick="exportLayout()">
+                        <i class="fas fa-download"></i> エクスポート
+                    </button>
+                </div>
+            </div>
+            
+            <!-- アラート表示 -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            
+            <div class="layout-preview-container">
+                <!-- OCR結果パネル -->
+                <div class="ocr-results-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-eye"></i> OCR処理結果
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if ocr_result.success %}
+                                <div class="ocr-stats mb-3">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="stat-item">
+                                                <span class="stat-value">{{ layout_stats.total_sections }}</span>
+                                                <span class="stat-label">検出区画数</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="stat-item">
+                                                <span class="stat-value">{{ layout_stats.avg_confidence|floatformat:1 }}%</span>
+                                                <span class="stat-label">平均信頼度</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="stat-item">
+                                                <span class="stat-value">{{ layout_stats.grid_size.rows }}×{{ layout_stats.grid_size.cols }}</span>
+                                                <span class="stat-label">グリッドサイズ</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 信頼度分布 -->
+                                <div class="confidence-distribution mb-3">
+                                    <h6>信頼度分布</h6>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="confidence-item high">
+                                                <span class="confidence-count">{{ layout_stats.confidence_distribution.high }}</span>
+                                                <span class="confidence-label">高信頼度 (80%+)</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="confidence-item medium">
+                                                <span class="confidence-count">{{ layout_stats.confidence_distribution.medium }}</span>
+                                                <span class="confidence-label">中信頼度 (60-79%)</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="confidence-item low">
+                                                <span class="confidence-count">{{ layout_stats.confidence_distribution.low }}</span>
+                                                <span class="confidence-label">低信頼度 (60%未満)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 区画一覧 -->
+                                <div class="sections-list">
+                                    <h6>検出された区画</h6>
+                                    <div class="sections-container">
+                                        {% for section in sections %}
+                                            <div class="shelf-item" data-shelf="{{ section.shelf_number }}" data-grid-x="{{ section.position.grid_x }}" data-grid-y="{{ section.position.grid_y }}">
+                                                <div class="shelf-info">
+                                                    <span class="shelf-number">{{ section.shelf_number }}</span>
+                                                    <span class="shelf-position">{{ section.position.grid_x }},{{ section.position.grid_y }}</span>
+                                                </div>
+                                                <div class="shelf-confidence">
+                                                    <span class="confidence-value">{{ section.confidence }}%</span>
+                                                    <div class="confidence-bar">
+                                                        <div class="confidence-fill" style="width: {{ section.confidence }}%"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    OCR処理に失敗しました。
+                                    {% if ocr_result.error %}
+                                        <br>エラー: {{ ocr_result.error }}
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- レイアウト図表示パネル -->
+                <div class="layout-visualization-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-map"></i> 栽培レイアウト図
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if layout_svg %}
+                                <div class="layout-svg-container" id="layoutSvgContainer">
+                                    {{ layout_svg|safe }}
+                                </div>
+                                <div class="layout-controls mt-3">
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-outline-primary" onclick="zoomIn()">
+                                            <i class="fas fa-search-plus"></i> 拡大
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary" onclick="zoomOut()">
+                                            <i class="fas fa-search-minus"></i> 縮小
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="resetView()">
+                                            <i class="fas fa-refresh"></i> リセット
+                                        </button>
+                                    </div>
+                                    <div class="btn-group ms-2" role="group">
+                                        <button type="button" class="btn btn-outline-info" onclick="toggleGrid()">
+                                            <i class="fas fa-th"></i> グリッド
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info" onclick="toggleLabels()">
+                                            <i class="fas fa-tags"></i> ラベル
+                                        </button>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="empty-layout">
+                                    <i class="fas fa-exclamation-circle fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">レイアウト情報がありません</h5>
+                                    <p class="text-muted">OCR処理を実行してください</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 区画詳細モーダル -->
+<div class="modal fade" id="sectionModal" tabindex="-1" aria-labelledby="sectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sectionModalLabel">区画詳細</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="sectionDetails">
+                <!-- 区画詳細がここに表示されます -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="button" class="btn btn-primary" onclick="editSection()">編集</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- エクスポートモーダル -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">レイアウト図エクスポート</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label for="exportFormat" class="form-label">フォーマット</label>
+                        <select class="form-select" id="exportFormat">
+                            <option value="svg">SVG</option>
+                            <option value="png">PNG</option>
+                            <option value="pdf">PDF</option>
+                            <option value="json">JSON (データ)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exportSize" class="form-label">サイズ</label>
+                        <select class="form-select" id="exportSize">
+                            <option value="small">小 (800x600)</option>
+                            <option value="medium" selected>中 (1200x900)</option>
+                            <option value="large">大 (1600x1200)</option>
+                            <option value="custom">カスタム</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="customSizeInputs" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="customWidth" class="form-label">幅 (px)</label>
+                                <input type="number" class="form-control" id="customWidth" value="1200">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="customHeight" class="form-label">高さ (px)</label>
+                                <input type="number" class="form-control" id="customHeight" value="900">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeGrid" checked>
+                            <label class="form-check-label" for="includeGrid">
+                                グリッド線を含める
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeLegend" checked>
+                            <label class="form-check-label" for="includeLegend">
+                                凡例を含める
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" onclick="performExport()">エクスポート</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/layout_visualization.js' %}"></script>
+<script>
+// レイアウトデータの初期化
+const layoutData = {{ layout_data|safe }};
+const sectionData = {{ section_data|safe }};
+
+// モーダルイベントリスナー
+document.getElementById('exportSize').addEventListener('change', function() {
+    const customInputs = document.getElementById('customSizeInputs');
+    if (this.value === 'custom') {
+        customInputs.style.display = 'block';
+    } else {
+        customInputs.style.display = 'none';
+    }
+});
+
+// エクスポート機能
+function exportLayout() {
+    const exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
+    exportModal.show();
+}
+
+function performExport() {
+    const format = document.getElementById('exportFormat').value;
+    const size = document.getElementById('exportSize').value;
+    const includeGrid = document.getElementById('includeGrid').checked;
+    const includeLegend = document.getElementById('includeLegend').checked;
+    
+    let width = 1200, height = 900;
+    
+    if (size === 'small') {
+        width = 800; height = 600;
+    } else if (size === 'large') {
+        width = 1600; height = 1200;
+    } else if (size === 'custom') {
+        width = parseInt(document.getElementById('customWidth').value);
+        height = parseInt(document.getElementById('customHeight').value);
+    }
+    
+    const params = new URLSearchParams({
+        format: format,
+        width: width,
+        height: height,
+        include_grid: includeGrid,
+        include_legend: includeLegend
+    });
+    
+    window.location.href = `/cultivation/layout/export/?${params.toString()}`;
+    
+    // モーダルを閉じる
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+}
+
+// 区画編集機能
+function editSection() {
+    const modalElement = document.getElementById('sectionModal');
+    const shelfNumber = modalElement.dataset.currentShelf;
+    if (shelfNumber) {
+        window.location.href = `/cultivation/section/${shelfNumber}/edit/`;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,268 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}品目一覧 - わかくさシフト{% endblock %}
+
+{% block extra_css %}
+<style>
+.item-card {
+    transition: all 0.3s ease;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.item-header {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+}
+
+.item-body {
+    padding: 1.5rem;
+}
+
+.stock-info {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.stock-sufficient {
+    border-left: 4px solid #28a745;
+}
+
+.stock-low {
+    border-left: 4px solid #dc3545;
+}
+
+.btn-action {
+    border-radius: 20px;
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-box me-2 text-primary"></i>
+                        品目一覧
+                    </h1>
+                    <p class="text-muted mb-0">
+                        {{ current_organization.name }} - 登録品目の管理
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'shift_management:item_create' %}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>
+                        新規品目登録
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ナビゲーション -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-warehouse me-1"></i>
+                    在庫ダッシュボード
+                </a>
+                <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-outline-success">
+                    <i class="fas fa-exchange-alt me-1"></i>
+                    入出庫処理
+                </a>
+                <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-warning">
+                    <i class="fas fa-clipboard-list me-1"></i>
+                    発注履歴
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 品目一覧 -->
+    <div class="row">
+        {% for item in items %}
+        <div class="col-lg-6 col-xl-4 mb-3">
+            <div class="card item-card">
+                <div class="item-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">{{ item.item_code }}</h6>
+                            <h5 class="mb-0">{{ item.item_name }}</h5>
+                        </div>
+                        <div class="text-end">
+                            {% if item.is_active %}
+                            <div class="badge bg-light text-dark">有効</div>
+                            {% else %}
+                            <div class="badge bg-secondary">無効</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="item-body">
+                    <!-- 在庫情報 -->
+                    <div class="stock-info {% if item.is_low_stock %}stock-low{% else %}stock-sufficient{% endif %}">
+                        <div class="row">
+                            <div class="col-6">
+                                <strong>現在在庫:</strong><br>
+                                <span class="{% if item.is_low_stock %}text-danger{% else %}text-success{% endif %} h5">
+                                    {{ item.current_stock }}{{ item.unit }}
+                                </span>
+                            </div>
+                            <div class="col-6">
+                                <strong>在庫閾値:</strong><br>
+                                <span class="text-muted">{{ item.threshold }}{{ item.unit }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <strong>状態:</strong>
+                                {% if item.is_low_stock %}
+                                <span class="badge bg-danger">⚠ 在庫不足</span>
+                                {% else %}
+                                <span class="badge bg-success">✓ 充足</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 基本情報 -->
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-6">
+                                <strong>単位:</strong> {{ item.unit }}
+                            </div>
+                            <div class="col-6">
+                                <strong>登録日:</strong><br>
+                                <small class="text-muted">{{ item.created_at|date:"Y/m/d" }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 発注先URL -->
+                    {% if item.order_url %}
+                    <div class="mb-3">
+                        <a href="{{ item.order_url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="fas fa-external-link-alt me-1"></i>
+                            発注先サイト
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- アクション -->
+                    <div class="d-flex gap-1">
+                        <a href="{% url 'shift_management:item_edit' item.pk %}" 
+                           class="btn btn-sm btn-outline-secondary flex-fill btn-action">
+                            <i class="fas fa-edit me-1"></i>
+                            編集
+                        </a>
+                        {% if item.is_low_stock %}
+                        <a href="{% url 'shift_management:order_create' %}?item={{ item.pk }}" 
+                           class="btn btn-sm btn-warning flex-fill btn-action">
+                            <i class="fas fa-shopping-cart me-1"></i>
+                            発注
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-box fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">品目が登録されていません</h4>
+                <p class="text-muted">
+                    まだ品目が登録されていません。<br>
+                    <a href="{% url 'shift_management:item_create' %}" class="btn btn-success mt-2">
+                        <i class="fas fa-plus me-1"></i>
+                        最初の品目を登録
+                    </a>
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 統計情報 -->
+    {% if items %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        品目管理サマリー
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="h3 text-primary">{{ items|length }}</div>
+                            <div class="text-muted">総品目数</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-success" id="active-items">-</div>
+                            <div class="text-muted">有効品目</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-warning" id="low-stock-count">-</div>
+                            <div class="text-muted">在庫不足</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h3 text-info" id="with-url-count">-</div>
+                            <div class="text-muted">発注URL設定済み</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 統計計算
+    const totalItems = {{ items|length }};
+    let activeItems = 0;
+    let lowStockCount = 0;
+    let withUrlCount = 0;
+    
+    {% for item in items %}
+    {% if item.is_active %}activeItems++;{% endif %}
+    {% if item.is_low_stock %}lowStockCount++;{% endif %}
+    {% if item.order_url %}withUrlCount++;{% endif %}
+    {% endfor %}
+    
+    // 値を更新
+    if (document.getElementById('active-items')) {
+        document.getElementById('active-items').textContent = activeItems;
+    }
+    if (document.getElementById('low-stock-count')) {
+        document.getElementById('low-stock-count').textContent = lowStockCount;
+    }
+    if (document.getElementById('with-url-count')) {
+        document.getElementById('with-url-count').textContent = withUrlCount;
+    }
+});
+</script>
+{% endblock %}

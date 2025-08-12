@@ -1,0 +1,1750 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ layout.name }} - レイアウト詳細{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+<link rel="stylesheet" href="{% static 'css/layout_visualization.css' %}">
+<style>
+    /* 棚区画管理と同じスタイル */
+    .plots-grid-container {
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 20px;
+    }
+
+    .plots-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+        .plots-grid {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 15px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .plots-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+    }
+
+    .plot-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .plot-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+
+    .plot-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .plot-number {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 0;
+    }
+
+    .plot-dimensions {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 15px;
+    }
+
+    .plot-levels-detail {
+        margin-bottom: 15px;
+    }
+
+    .level-indicator {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 12px;
+        margin-bottom: 5px;
+        border-radius: 6px;
+        background: #e9ecef;
+        font-size: 0.85rem;
+    }
+
+    .level-indicator.level-status-growing {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+    }
+
+    .level-indicator.level-status-harvest_ready {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+    }
+
+    .level-indicator.level-status-overdue {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+    }
+
+    .level-indicator.level-status-empty {
+        background: #e9ecef;
+    }
+
+    .btn.btn-xs {
+        padding: 0.1rem 0.3rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        border-radius: 0.2rem;
+    }
+
+    .level-actions {
+        display: flex;
+        gap: 4px;
+    }
+
+    .level-indicator {
+        position: relative;
+    }
+
+    .level-indicator .d-flex {
+        align-items: center;
+    }
+
+    .level-info {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .level-number {
+        font-weight: bold;
+        color: #495057;
+    }
+
+    .level-crop {
+        color: #6c757d;
+    }
+
+    .level-status {
+        margin-top: 4px;
+    }
+
+    .progress {
+        border-radius: 2px;
+    }
+
+    .plot-body {
+        padding-top: 0;
+    }
+
+    /* レベル状態の色分け */
+    .level-status-empty {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+
+    .level-status-growing {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+    }
+
+    .level-status-harvest_ready {
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+    }
+
+    .level-status-overdue {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+    }
+    /* 棚グリッドコンテナ（他ページのfloor-plan-containerと統一） */
+    .shelf-grid {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+        position: relative;
+    }
+    
+    .shelf-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .shelf-cell {
+        min-width: 120px;
+        width: 100%;
+        max-width: 140px;
+        min-height: 80px; 
+        height: auto;
+        aspect-ratio: 1.4/1;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.3s ease;
+        position: relative;
+        background-color: #ffffff;
+        cursor: pointer;
+        padding: 0.5rem;
+    }
+    
+    .shelf-cell:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .shelf-cell.has-crop {
+        background-color: #d4edda;
+        border-color: #28a745;
+    }
+    
+    .shelf-cell.harvest-ready {
+        background-color: #fff3cd;
+        border-color: #ffc107;
+    }
+    
+    .shelf-cell.overdue {
+        background-color: #f8d7da;
+        border-color: #dc3545;
+    }
+    
+    .shelf-cell.empty {
+        background-color: #e9ecef;
+        border-color: #adb5bd;
+        cursor: default;
+    }
+    
+    .shelf-cell.empty:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    .shelf-number {
+        font-size: 14px;
+        font-weight: bold;
+        color: #495057;
+        margin-bottom: 4px;
+    }
+    
+    .crop-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: #155724;
+        margin-bottom: 2px;
+        text-align: center;
+    }
+    
+    .days-info {
+        font-size: 10px;
+        color: #6c757d;
+        font-weight: 500;
+        text-align: center;
+    }
+    
+    .days-info.warning {
+        color: #856404;
+    }
+    
+    .days-info.danger {
+        color: #721c24;
+    }
+    
+    .empty-text {
+        font-size: 11px;
+        color: #6c757d;
+    }
+    
+    .grid-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        padding: 15px;
+        border-radius: 10px 10px 0 0;
+        margin-bottom: 0;
+    }
+    
+    .legend-section {
+        background-color: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .legend-color {
+        width: 30px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 10px;
+        border: 1px solid #dee2e6;
+    }
+    
+    /* 統計カードのスタイル（他ページと統一） */
+    .stat-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-3px);
+    }
+
+    .stat-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 5px;
+    }
+
+    /* 状態別カラークラス */
+    .growing { color: #28a745; }
+    .harvest-ready { color: #ffc107; }
+    .empty { color: #6c757d; }
+    .overdue { color: #dc3545; }
+
+    /* ビュー切り替えボタン（他ページと統一） */
+    .btn-group .btn {
+        padding: 12px 24px;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-group .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* 3D表示コンテナ（他ページと統一） */
+    .view-container {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+        position: relative;
+    }
+
+    .three-d-scene {
+        width: 100%;
+        height: 600px;
+        background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    /* モバイル対応 */
+    @media (max-width: 768px) {
+        .container-fluid {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+        
+        /* ヘッダー部分の調整 */
+        .page-header {
+            flex-direction: column;
+            align-items: stretch !important;
+            gap: 15px;
+        }
+        
+        .page-title {
+            text-align: center;
+            font-size: 1.5rem;
+        }
+        
+        /* ボタン群をモバイル向けに調整 */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        
+        .action-buttons .btn {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        
+        .action-buttons .btn i {
+            margin-right: 8px;
+            width: 16px;
+            text-align: center;
+        }
+        
+        /* 統計パネルの調整 */
+        .stats-panel .row > div {
+            margin-bottom: 15px;
+        }
+        
+        .stat-number {
+            font-size: 20px;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+        }
+        
+        /* 棚グリッドの調整 */
+        .shelf-grid {
+            padding: 15px 10px;
+            margin: 15px 0;
+        }
+        
+        .shelf-row {
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+        
+        .shelf-cell {
+            width: 80px;
+            height: 70px;
+            min-width: 80px;
+        }
+        
+        .shelf-number {
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+        
+        .crop-name {
+            font-size: 9px;
+            margin-bottom: 1px;
+            line-height: 1.2;
+        }
+        
+        .days-info {
+            font-size: 8px;
+        }
+        
+        .empty-text {
+            font-size: 9px;
+        }
+        
+        /* 凡例セクションの調整 */
+        .legend-section {
+            padding: 15px;
+        }
+        
+        .legend-section .row > div {
+            margin-bottom: 10px;
+        }
+        
+        .legend-item {
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 25px;
+            height: 16px;
+            margin-right: 8px;
+        }
+    }
+    
+    /* さらに小さい画面向け */
+    @media (max-width: 576px) {
+        .shelf-cell {
+            width: 70px;
+            height: 60px;
+            min-width: 70px;
+        }
+        
+        .shelf-number {
+            font-size: 10px;
+        }
+        
+        .crop-name {
+            font-size: 8px;
+        }
+        
+        .days-info {
+            font-size: 7px;
+        }
+        
+        .empty-text {
+            font-size: 8px;
+        }
+        
+        .stats-panel {
+            padding: 15px;
+        }
+        
+        .stat-number {
+            font-size: 18px;
+        }
+        
+        .stat-label {
+            font-size: 10px;
+        }
+    }
+    
+    /* 3D表示用スタイル */
+    .three-d-wrapper {
+        position: relative;
+        height: 600px;
+        background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .three-d-scene {
+        width: 100%;
+        height: 100%;
+    }
+
+    .three-d-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 18px;
+        color: #6c757d;
+        z-index: 10;
+    }
+
+    .three-d-info-panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        padding: 15px;
+        font-size: 14px;
+        z-index: 5;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        max-width: 250px;
+    }
+
+    .info-title {
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #333;
+    }
+
+    .info-content div {
+        margin-bottom: 5px;
+        color: #555;
+    }
+
+    .three-d-controls {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        padding: 15px;
+        z-index: 5;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .control-group {
+        margin-bottom: 15px;
+    }
+
+    .control-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .control-group-title {
+        font-size: 12px;
+        font-weight: bold;
+        color: #666;
+        margin-bottom: 8px;
+        text-align: center;
+    }
+
+    .control-row {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        margin-bottom: 6px;
+    }
+
+    .control-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .control-divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, #ddd, transparent);
+        margin: 12px 0;
+    }
+
+    .zoom-btn {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        border: 1px solid #dee2e6;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 14px;
+        color: #495057;
+    }
+
+    .zoom-btn:hover {
+        background: rgba(13, 110, 253, 0.1);
+        border-color: #0d6efd;
+        color: #0d6efd;
+        transform: translateY(-1px);
+    }
+
+    .zoom-btn:active {
+        transform: translateY(0);
+    }
+
+    .zoom-btn.active {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: white;
+    }
+
+    .tooltip-text {
+        position: absolute;
+        bottom: -35px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.2s ease;
+        pointer-events: none;
+        z-index: 1000;
+    }
+
+    .zoom-btn:hover .tooltip-text {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .shelf-tooltip {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        pointer-events: none;
+        z-index: 1000;
+        max-width: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 page-header">
+        <div class="mb-2">
+            <h1 class="mb-0 page-title">
+                <i class="fas fa-th-large me-2"></i>{{ layout.name }}
+            </h1>
+            <p class="text-muted mb-0 mt-1">
+                <small>水耕栽培の栽培区画管理・2D/3D視覚化</small>
+            </p>
+        </div>
+        <div class="action-buttons">
+            <!-- 表示タイプ切り替えボタン -->
+            <div class="btn-group me-2" role="group" aria-label="Display type toggle">
+                <a href="?display=plots" class="btn {% if display_type == 'plots' or not display_type %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="fas fa-warehouse"></i> 棚区画表示
+                </a>
+                <a href="?display=sections" class="btn {% if display_type == 'sections' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="fas fa-th-large"></i> 栽培区画表示
+                </a>
+            </div>
+            
+            <!-- 2D/3D切り替えボタン -->
+            <div class="btn-group me-2" role="group" aria-label="View toggle">
+                <button type="button" class="btn btn-primary" id="view-2d">
+                    <i class="fas fa-th-large"></i> 2D表示
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="view-3d">
+                    <i class="fas fa-cube"></i> 3D立体図
+                </button>
+            </div>
+            
+            <a href="{% url 'cultivation:layout_floor_plan' layout.id %}" class="btn btn-warning">
+                <i class="fas fa-map"></i>栽培区画 2D平面図
+            </a>
+            <a href="{% url 'cultivation:plot_floor_plan_with_layout' layout.id %}" class="btn btn-info">
+                <i class="fas fa-cube"></i>棚区画 2D/3D平面図
+            </a>
+            <a href="{% url 'cultivation:section_create' layout.id %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i>新規区画作成
+            </a>
+            <a href="{% url 'cultivation:bulk_section_create' layout.id %}" class="btn btn-success">
+                <i class="fas fa-th-large"></i>一括区画作成
+            </a>
+            <a href="{% url 'cultivation:visual_section_create' layout.id %}" class="btn btn-info">
+                <i class="fas fa-mouse-pointer"></i>視覚的区画作成
+            </a>
+            <a href="{% url 'cultivation:layout_delete' layout.id %}" class="btn btn-outline-danger">
+                <i class="fas fa-trash"></i>削除
+            </a>
+            <a href="{% url 'cultivation:layout_list' %}" class="btn btn-secondary">
+                <i class="fas fa-list"></i>一覧へ
+            </a>
+            <a href="{% url 'cultivation:cultivation_top' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i>戻る
+            </a>
+        </div>
+    </div>
+
+    <!-- 統計パネル -->
+    <!-- 統計カード -->
+    <div class="stat-cards">
+        <div class="stat-card">
+            <div class="stat-number">{{ sections_count }}</div>
+            <div class="stat-label">総区画数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number growing">{{ active_plans_count }}</div>
+            <div class="stat-label">栽培中</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number harvest-ready">{{ harvest_ready_count }}</div>
+            <div class="stat-label">収穫可能</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number empty">{{ empty_sections_count }}</div>
+            <div class="stat-label">空き区画</div>
+        </div>
+    </div>
+
+    {% if layout.layout_image %}
+        <div class="mb-4 text-center">
+            <img src="{{ layout.layout_image.url }}" class="img-fluid" alt="{{ layout.name }} のレイアウト図" style="max-height: 300px; border-radius: 10px;">
+        </div>
+    {% endif %}
+
+    <!-- 2D表示 -->
+    <div id="two-d-container" class="view-container">
+        {% if display_type == 'plots' or not display_type %}
+            <!-- 棚区画2D表示（以前のカード形式） -->
+            <div class="shelf-grid">
+                <div class="grid-header mb-3">
+                    <h4 class="mb-0">
+                        <i class="fas fa-warehouse me-2"></i>棚区画一覧 (2D表示)
+                    </h4>
+                </div>
+                
+                {% if plots_with_details %}
+                    <div class="row">
+                        {% for plot in plots_with_details %}
+                            <div class="col-12 col-md-6 col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-header bg-primary text-white">
+                                        <h6 class="mb-0">{{ plot.shelf_number }}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <small class="text-muted">位置: ({{ plot.x_position }}, {{ plot.y_position }})</small>
+                                        </div>
+                                        <div class="mb-2">
+                                            <small class="text-muted">{{ plot.levels }}段構成</small>
+                                        </div>
+                                        {% for level_detail in plot.level_details %}
+                                            <div class="level-row mb-1 p-2 rounded level-status-{{ level_detail.status }}">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-bold">L{{ level_detail.level }}</span>
+                                                    <span>{{ level_detail.crop_name }}</span>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="card-footer">
+                                        <a href="{% url 'cultivation:plot_detail' plot.id %}" class="btn btn-sm btn-primary">詳細</a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-warehouse fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">棚区画がありません</h5>
+                        <p class="text-muted">まず棚区画を作成してください。</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <!-- 栽培区画グリッド -->
+            <div class="shelf-grid">
+                <div class="grid-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-seedling me-2"></i>栽培区画一覧 (2D表示)
+                    </h4>
+                </div>
+                
+                    {% for row_data in grid_data %}
+                    <div class="shelf-row">
+                            {% for cell in row_data %}
+                                    {% if cell.section %}
+                                        <a href="{% url 'cultivation:section_detail' cell.section.id %}" 
+                                   class="shelf-cell {% if cell.plan and cell.plan.crop %}has-crop{% endif %} {% if cell.plan and cell.plan.is_harvest_ready %}harvest-ready{% endif %} {% if cell.plan and cell.plan.days_overdue > 0 %}overdue{% endif %}"
+                                   data-section-id="{{ cell.section.id }}"
+                                   data-section-name="{{ cell.section.name }}"
+                                   data-row="{{ cell.section.row }}"
+                                   data-column="{{ cell.section.column }}"
+                                   data-crop="{{ cell.plan.crop.name|default:'空き' }}">
+                                    <div class="shelf-number">{{ cell.section.name }}</div>
+                                            {% if cell.plan and cell.plan.crop %}
+                                        <div class="crop-name">{{ cell.plan.crop.name }}</div>
+                                        {% if cell.plan.days_until_harvest is not None %}
+                                            <div class="days-info {% if cell.plan.is_harvest_ready %}warning{% endif %} {% if cell.plan.days_overdue > 0 %}danger{% endif %}">
+                                                {% if cell.plan.days_until_harvest > 0 %}
+                                                    残り{{ cell.plan.days_until_harvest }}日
+                                                {% elif cell.plan.days_until_harvest == 0 %}
+                                                    収穫時期
+                                                {% else %}
+                                                    期限超過
+                                                {% endif %}
+                                                </div>
+                                        {% elif cell.plan.days_since_planting %}
+                                            <div class="days-info">{{ cell.plan.days_since_planting }}日経過</div>
+                                        {% elif cell.plan.days_since_sowing %}
+                                            <div class="days-info">{{ cell.plan.days_since_sowing }}日経過</div>
+                                            {% endif %}
+                                    {% else %}
+                                        <div class="empty-text">空き</div>
+                                    {% endif %}
+                                </a>
+                            {% else %}
+                                <div class="shelf-cell empty">
+                                    <div class="empty-text">―</div>
+                                </div>
+                            {% endif %}
+                            {% endfor %}
+                    </div>
+                    {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- 3D立体図 -->
+    <div id="three-d-container" class="view-container" style="display: none;">
+        <h3 class="mb-3">
+            <i class="fas fa-cube me-2"></i>3D立体図レイアウト
+        </h3>
+        
+        <!-- 3D表示エリア -->
+        <div class="three-d-wrapper">
+            <!-- ローディング表示 -->
+            <div class="three-d-loading" id="three-d-loading">
+                <i class="fas fa-spinner fa-spin me-2"></i>3Dシーンを準備中...
+            </div>
+            
+            <!-- 3D情報パネル -->
+            <div class="three-d-info-panel" id="three-d-info-panel" style="display: none;">
+                <div class="info-title"><strong>3D栽培区画配置図</strong></div>
+                <div class="info-content">
+                    <div>総区画数: <span id="total-sections">{{ sections_count }}</span></div>
+                    <div>栽培中: <span id="active-sections">{{ active_plans_count }}</span></div>
+                    <div>視点: <span id="camera-info">デフォルト</span></div>
+                </div>
+                <div class="info-controls mt-2">
+                    <small>
+                        <div>• マウス左: 回転</div>
+                        <div>• マウス右: パン</div>
+                        <div>• ホイール: ズーム</div>
+                        <div>• クリック: 詳細表示</div>
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 3D操作コントロール -->
+            <div class="three-d-controls">
+                <!-- 視点コントロール -->
+                <div class="control-group">
+                    <div class="control-group-title">視点</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="view-top-btn">
+                            <i class="fas fa-eye"></i>
+                            <span class="tooltip-text">上面図 (T)</span>
+                        </button>
+                        <button class="zoom-btn" id="view-front-btn">
+                            <i class="fas fa-arrows-alt-h"></i>
+                            <span class="tooltip-text">正面図 (F)</span>
+                        </button>
+                        <button class="zoom-btn" id="view-side-btn">
+                            <i class="fas fa-arrows-alt-v"></i>
+                            <span class="tooltip-text">側面図 (S)</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <!-- カメラコントロール -->
+                <div class="control-group">
+                    <div class="control-group-title">カメラ</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="zoom-in-3d-btn">
+                            <i class="fas fa-plus"></i>
+                            <span class="tooltip-text">ズームイン (+)</span>
+                        </button>
+                        <button class="zoom-btn" id="zoom-out-3d-btn">
+                            <i class="fas fa-minus"></i>
+                            <span class="tooltip-text">ズームアウト (-)</span>
+                        </button>
+                    </div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="focus-all-btn">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                            <span class="tooltip-text">全体表示 (A)</span>
+                        </button>
+                        <button class="zoom-btn" id="reset-3d-btn">
+                            <i class="fas fa-home"></i>
+                            <span class="tooltip-text">リセット (R)</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <!-- アニメーション -->
+                <div class="control-group">
+                    <div class="control-group-title">アニメ</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="auto-rotate-btn">
+                            <i class="fas fa-sync-alt"></i>
+                            <span class="tooltip-text">自動回転 (Space)</span>
+                        </button>
+                        <button class="zoom-btn" id="fly-mode-btn">
+                            <i class="fas fa-paper-plane"></i>
+                            <span class="tooltip-text">フライモード (Ctrl)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Three.js コンテナ -->
+            <div id="three-d-container-scene" class="three-d-scene"></div>
+            
+            <!-- ツールチップ -->
+            <div class="shelf-tooltip" id="shelf-tooltip" style="display: none;">
+                <div class="tooltip-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="legend-section">
+        <h5><i class="fas fa-info-circle me-2"></i>凡例</h5>
+        <div class="row">
+            <div class="col-12 col-md-6">
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #ffffff; border-color: #dee2e6;"></div>
+                    <span>空き区画</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #d4edda; border-color: #28a745;"></div>
+                    <span>栽培中</span>
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #fff3cd; border-color: #ffc107;"></div>
+                    <span>収穫可能</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #f8d7da; border-color: #dc3545;"></div>
+                    <span>期限超過</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 棚区画管理へのリンク -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card bg-light">
+                <div class="card-body text-center py-4">
+                    <h4 class="mb-3">
+                        <i class="fas fa-warehouse me-2"></i>棚区画管理
+                    </h4>
+                    <p class="text-muted mb-4">
+                        全ての棚区画を一元管理できます。棚の追加、編集、作物の管理、2D平面図での表示が可能です。
+                    </p>
+                    <a href="{% url 'cultivation:plot_management' %}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-warehouse me-2"></i>棚区画管理ページへ
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// 2D/3D切り替え機能（グローバルスコープ）
+window.switchView = function(viewType) {
+    const view2dBtn = document.getElementById('view-2d');
+    const view3dBtn = document.getElementById('view-3d'); 
+    const twoDContainer = document.getElementById('two-d-container');
+    const threeDContainer = document.getElementById('three-d-container');
+    
+    if (viewType === '2d') {
+        // 2D表示
+        view2dBtn.classList.add('btn-primary');
+        view2dBtn.classList.remove('btn-outline-primary');
+        view3dBtn.classList.add('btn-outline-primary');
+        view3dBtn.classList.remove('btn-primary');
+        
+        if (twoDContainer) twoDContainer.style.display = 'block';
+        if (threeDContainer) threeDContainer.style.display = 'none';
+    } else if (viewType === '3d') {
+        // 3D表示
+        view3dBtn.classList.add('btn-primary');
+        view3dBtn.classList.remove('btn-outline-primary');
+        view2dBtn.classList.add('btn-outline-primary');
+        view2dBtn.classList.remove('btn-primary');
+        
+        if (twoDContainer) twoDContainer.style.display = 'none';
+        if (threeDContainer) threeDContainer.style.display = 'block';
+        
+        // 3D描画を初期化
+        if (typeof init3DView === 'function') {
+            init3DView();
+        }
+    }
+};
+
+// Three.js 3D表示システム
+let scene, camera, renderer, controls;
+let sections = [];
+let raycaster, mouse;
+let animationId;
+
+// 3D表示の初期化（グローバルスコープ）
+function init3DView() {
+    console.log('Initializing Three.js 3D view for sections...');
+    
+    const container = document.getElementById('three-d-container-scene');
+    const loading = document.getElementById('three-d-loading');
+    const infoPanel = document.getElementById('three-d-info-panel');
+    
+    if (!container) {
+        console.error('3D container not found');
+        return;
+    }
+    
+    // 既存のレンダラーがあれば削除
+    if (renderer) {
+        container.removeChild(renderer.domElement);
+        renderer.dispose();
+    }
+    
+    // シーンの初期化
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // スカイブルー
+    
+    // カメラの設定
+    camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+    camera.position.set(15, 10, 15);
+    
+    // レンダラーの設定
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    container.appendChild(renderer.domElement);
+    
+    // OrbitControls（カメラ操作）
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 5;
+    controls.maxDistance = 50;
+    controls.maxPolarAngle = Math.PI / 2;
+    
+    // ライティングの設定
+    setupLighting();
+    
+    // 地面の作成
+    createGround();
+    
+    // 栽培区画の作成
+    createSections();
+    
+    // インタラクション設定
+    setupInteraction();
+    
+    // コントロールボタンの設定
+    setupControls();
+    
+    // ローディング表示を隠してパネルを表示
+    if (loading) loading.style.display = 'none';
+    if (infoPanel) infoPanel.style.display = 'block';
+    
+    // アニメーションループ開始
+    animate();
+    
+    console.log('3D view initialized successfully');
+}
+
+// ライティングの設定
+function setupLighting() {
+    // 環境光
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    scene.add(ambientLight);
+    
+    // 主光源（太陽光）
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(50, 50, 50);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    directionalLight.shadow.camera.left = -50;
+    directionalLight.shadow.camera.right = 50;
+    directionalLight.shadow.camera.top = 50;
+    directionalLight.shadow.camera.bottom = -50;
+    scene.add(directionalLight);
+    
+    // 補助光源
+    const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1a, 0.5);
+    scene.add(hemisphereLight);
+}
+
+// 地面の作成
+function createGround() {
+    const groundGeometry = new THREE.PlaneGeometry(100, 100);
+    const groundMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x90EE90,
+        transparent: true,
+        opacity: 0.8
+    });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    
+    // グリッドヘルパー
+    const gridHelper = new THREE.GridHelper(100, 20, 0x888888, 0xcccccc);
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.3;
+    scene.add(gridHelper);
+}
+
+// 栽培区画の作成
+function createSections() {
+    sections = [];
+    const sectionCells = document.querySelectorAll('.shelf-cell[data-section-id]');
+    
+    sectionCells.forEach((cell, index) => {
+        const sectionId = cell.dataset.sectionId;
+        const sectionName = cell.dataset.sectionName;
+        const row = parseInt(cell.dataset.row);
+        const column = parseInt(cell.dataset.column);
+        const cropName = cell.dataset.crop || '空き';
+        
+        if (!sectionId) return;
+        
+        // 位置を計算（グリッド座標を3D座標に変換）
+        const x = (column - 1) * 3 - 6; // 列を3Dのx座標に
+        const z = (row - 1) * 3 - 6;    // 行を3Dのz座標に
+        const y = 0.5; // 高さは固定
+        
+        // 状態に応じた色を決定
+        let color = 0xe9ecef; // デフォルト（空き）
+        if (cell.classList.contains('has-crop')) {
+            color = 0x28a745; // 栽培中：緑
+        }
+        if (cell.classList.contains('harvest-ready')) {
+            color = 0xffc107; // 収穫可能：黄
+        }
+        if (cell.classList.contains('overdue')) {
+            color = 0xdc3545; // 期限超過：赤
+        }
+        
+        // 区画ボックスの作成
+        const geometry = new THREE.BoxGeometry(2.5, 1, 2.5);
+        const material = new THREE.MeshLambertMaterial({ 
+            color: color,
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const sectionMesh = new THREE.Mesh(geometry, material);
+        sectionMesh.position.set(x, y, z);
+        sectionMesh.castShadow = true;
+        sectionMesh.receiveShadow = true;
+        
+        // ユーザーデータを設定
+        sectionMesh.userData = {
+            isSection: true,
+            sectionId: sectionId,
+            sectionName: sectionName,
+            row: row,
+            column: column,
+            cropName: cropName,
+            status: cropName === '空き' ? 'empty' : 'growing'
+        };
+        
+        scene.add(sectionMesh);
+        sections.push(sectionMesh);
+        
+        // 区画名ラベルの作成
+        createSectionLabel(sectionName, x, y + 1, z);
+        
+        // 作物がある場合は作物オブジェクトを追加
+        if (cropName !== '空き') {
+            createCropObject(cropName, x, y + 1.5, z, color);
+        }
+    });
+    
+    console.log(`Created ${sections.length} sections`);
+}
+
+// 区画ラベルの作成
+function createSectionLabel(text, x, y, z) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 128;
+    
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.fillStyle = '#333333';
+    context.font = 'bold 32px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const labelMaterial = new THREE.MeshBasicMaterial({ 
+        map: texture, 
+        transparent: true 
+    });
+    const labelGeometry = new THREE.PlaneGeometry(2, 1);
+    const labelMesh = new THREE.Mesh(labelGeometry, labelMaterial);
+    
+    labelMesh.position.set(x, y, z);
+    labelMesh.lookAt(camera.position);
+    
+    scene.add(labelMesh);
+}
+
+// 作物オブジェクトの作成
+function createCropObject(cropName, x, y, z, baseColor) {
+    // 簡単な植物のような形状を作成
+    const trunkGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.8);
+    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.set(x, y, z);
+    trunk.castShadow = true;
+    scene.add(trunk);
+    
+    // 葉っぱ部分
+    const leavesGeometry = new THREE.SphereGeometry(0.8, 8, 6);
+    const leavesMaterial = new THREE.MeshLambertMaterial({ color: baseColor });
+    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+    leaves.position.set(x, y + 0.6, z);
+    leaves.castShadow = true;
+    scene.add(leaves);
+}
+
+// インタラクション設定
+function setupInteraction() {
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+    
+    const container = document.getElementById('three-d-container-scene');
+    
+    container.addEventListener('mousemove', onMouseMove);
+    container.addEventListener('click', onMouseClick);
+}
+
+// マウス移動イベント
+function onMouseMove(event) {
+    const container = document.getElementById('three-d-container-scene');
+    const rect = container.getBoundingClientRect();
+    
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(sections);
+    
+    const tooltip = document.getElementById('shelf-tooltip');
+    
+    if (intersects.length > 0) {
+        const intersected = intersects[0].object;
+        const userData = intersected.userData;
+        
+        if (userData.isSection) {
+            // ツールチップ表示
+            tooltip.style.display = 'block';
+            tooltip.style.left = event.clientX + 10 + 'px';
+            tooltip.style.top = event.clientY - 10 + 'px';
+            
+            tooltip.querySelector('.tooltip-content').innerHTML = `
+                <strong>${userData.sectionName}</strong><br>
+                作物: ${userData.cropName}<br>
+                位置: 行${userData.row}, 列${userData.column}
+            `;
+            
+            container.style.cursor = 'pointer';
+        }
+    } else {
+        tooltip.style.display = 'none';
+        container.style.cursor = 'default';
+    }
+}
+
+// マウスクリックイベント
+function onMouseClick(event) {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(sections);
+    
+    if (intersects.length > 0) {
+        const intersected = intersects[0].object;
+        const userData = intersected.userData;
+        
+        if (userData.isSection) {
+            // 区画詳細ページに遷移
+            window.location.href = `/cultivation/sections/${userData.sectionId}/`;
+        }
+    }
+}
+
+// 3D制御機能の実装
+let autoRotateEnabled = false;
+let flyModeEnabled = false;
+
+// カメラ視点の設定
+function setCameraView(viewType) {
+    if (!camera || !controls) return;
+    
+    const distance = 30;
+    let position, target;
+    
+    switch(viewType) {
+        case 'top':
+            position = { x: 0, y: distance, z: 0 };
+            target = { x: 0, y: 0, z: 0 };
+            updateCameraInfo('上面図');
+            break;
+        case 'front':
+            position = { x: 0, y: 10, z: distance };
+            target = { x: 0, y: 5, z: 0 };
+            updateCameraInfo('正面図');
+            break;
+        case 'side':
+            position = { x: distance, y: 10, z: 0 };
+            target = { x: 0, y: 5, z: 0 };
+            updateCameraInfo('側面図');
+            break;
+        default:
+            position = { x: 15, y: 15, z: 15 };
+            target = { x: 0, y: 5, z: 0 };
+            updateCameraInfo('デフォルト');
+    }
+    
+    // スムーズなカメラ移動
+    animateCamera(position, target);
+}
+
+// カメラアニメーション
+function animateCamera(targetPosition, targetLookAt, duration = 1000) {
+    if (!camera || !controls) return;
+    
+    const startPosition = camera.position.clone();
+    const startLookAt = controls.target.clone();
+    const startTime = Date.now();
+    
+    function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function (easeInOutCubic)
+        const easeProgress = progress < 0.5 
+            ? 4 * progress * progress * progress 
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        
+        // 位置の補間
+        camera.position.lerpVectors(startPosition, new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z), easeProgress);
+        controls.target.lerpVectors(startLookAt, new THREE.Vector3(targetLookAt.x, targetLookAt.y, targetLookAt.z), easeProgress);
+        
+        controls.update();
+        
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    }
+    
+    animate();
+}
+
+// ズーム機能
+function zoomCamera(direction) {
+    if (!camera || !controls) return;
+    
+    const zoomStep = 2;
+    const currentDistance = camera.position.distanceTo(controls.target);
+    
+    if (direction === 'in' && currentDistance > 5) {
+        const factor = currentDistance / (currentDistance + zoomStep);
+        camera.position.lerp(controls.target, 1 - factor);
+    } else if (direction === 'out' && currentDistance < 50) {
+        const direction = camera.position.clone().sub(controls.target).normalize();
+        camera.position.add(direction.multiplyScalar(zoomStep));
+    }
+    
+    controls.update();
+}
+
+// 全体表示（すべての区画が見えるようにフィット）
+function focusAll() {
+    if (!camera || !controls || !scene) return;
+    
+    // 全区画の境界ボックスを計算
+    const box = new THREE.Box3();
+    scene.traverse((child) => {
+        if (child.userData && child.userData.isSection) {
+            box.expandByObject(child);
+        }
+    });
+    
+    if (box.isEmpty()) return;
+    
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const distance = maxDim * 1.5;
+    
+    const position = {
+        x: center.x + distance * 0.7,
+        y: center.y + distance * 0.7,
+        z: center.z + distance * 0.7
+    };
+    
+    animateCamera(position, center);
+    updateCameraInfo('全体表示');
+}
+
+// 自動回転の切り替え
+function toggleAutoRotate() {
+    if (!controls) return;
+    
+    autoRotateEnabled = !autoRotateEnabled;
+    controls.autoRotate = autoRotateEnabled;
+    controls.autoRotateSpeed = 1.0;
+    
+    const btn = document.getElementById('auto-rotate-btn');
+    if (btn) {
+        if (autoRotateEnabled) {
+            btn.classList.add('active');
+            btn.style.backgroundColor = '#0d6efd';
+            btn.style.color = 'white';
+        } else {
+            btn.classList.remove('active');
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+        }
+    }
+}
+
+// フライモードの切り替え
+function toggleFlyMode() {
+    if (!controls) return;
+    
+    flyModeEnabled = !flyModeEnabled;
+    
+    const btn = document.getElementById('fly-mode-btn');
+    if (btn) {
+        if (flyModeEnabled) {
+            btn.classList.add('active');
+            btn.style.backgroundColor = '#0d6efd';
+            btn.style.color = 'white';
+            controls.enablePan = true;
+            controls.enableRotate = true;
+            controls.enableZoom = true;
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.PAN,
+                MIDDLE: THREE.MOUSE.DOLLY,
+                RIGHT: THREE.MOUSE.ROTATE
+            };
+        } else {
+            btn.classList.remove('active');
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.ROTATE,
+                MIDDLE: THREE.MOUSE.DOLLY,
+                RIGHT: THREE.MOUSE.PAN
+            };
+        }
+    }
+}
+
+// キーボードショートカットの実装
+function setupKeyboardControls() {
+    document.addEventListener('keydown', (event) => {
+        // 入力フィールドにフォーカスがある場合はスキップ
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // 3D表示中のみ有効
+        const threeDContainer = document.getElementById('three-d-container');
+        if (!threeDContainer || threeDContainer.style.display === 'none') {
+            return;
+        }
+        
+        switch(event.key.toLowerCase()) {
+            case 't':
+                event.preventDefault();
+                setCameraView('top');
+                break;
+            case 'f':
+                event.preventDefault();
+                setCameraView('front');
+                break;
+            case 's':
+                event.preventDefault();
+                setCameraView('side');
+                break;
+            case '+':
+            case '=':
+                event.preventDefault();
+                zoomCamera('in');
+                break;
+            case '-':
+                event.preventDefault();
+                zoomCamera('out');
+                break;
+            case 'a':
+                event.preventDefault();
+                focusAll();
+                break;
+            case 'r':
+                event.preventDefault();
+                setCameraView('default');
+                break;
+            case ' ':
+                event.preventDefault();
+                toggleAutoRotate();
+                break;
+        }
+        
+        // Ctrlキーでフライモード
+        if (event.ctrlKey && !event.repeat) {
+            event.preventDefault();
+            toggleFlyMode();
+        }
+    });
+    
+    // Ctrlキーが離されたときにフライモードを解除
+    document.addEventListener('keyup', (event) => {
+        if (event.key === 'Control' && flyModeEnabled) {
+            toggleFlyMode();
+        }
+    });
+}
+
+// 3D制御ボタンのイベントリスナー設定
+function setup3DControlEvents() {
+    // 視点コントロール
+    const viewTopBtn = document.getElementById('view-top-btn');
+    const viewFrontBtn = document.getElementById('view-front-btn');
+    const viewSideBtn = document.getElementById('view-side-btn');
+    
+    if (viewTopBtn) viewTopBtn.addEventListener('click', () => setCameraView('top'));
+    if (viewFrontBtn) viewFrontBtn.addEventListener('click', () => setCameraView('front'));
+    if (viewSideBtn) viewSideBtn.addEventListener('click', () => setCameraView('side'));
+    
+    // カメラコントロール
+    const zoomInBtn = document.getElementById('zoom-in-3d-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-3d-btn');
+    const focusAllBtn = document.getElementById('focus-all-btn');
+    const resetBtn = document.getElementById('reset-3d-btn');
+    
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => zoomCamera('in'));
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => zoomCamera('out'));
+    if (focusAllBtn) focusAllBtn.addEventListener('click', focusAll);
+    if (resetBtn) resetBtn.addEventListener('click', () => setCameraView('default'));
+    
+    // アニメーションコントロール
+    const autoRotateBtn = document.getElementById('auto-rotate-btn');
+    const flyModeBtn = document.getElementById('fly-mode-btn');
+    
+    if (autoRotateBtn) autoRotateBtn.addEventListener('click', toggleAutoRotate);
+    if (flyModeBtn) flyModeBtn.addEventListener('click', toggleFlyMode);
+}
+
+// コントロールボタンの設定
+function setupControls() {
+    // 新しい3D制御システムを初期化
+    setup3DControlEvents();
+    
+    // キーボードショートカットを初期化
+    setupKeyboardControls();
+    
+    // 統計情報を更新
+    updateStats();
+}
+
+// アニメーションループ
+function animate() {
+    animationId = requestAnimationFrame(animate);
+    
+    // OrbitControlsの自動回転を使用（新しいシステム）
+    if (controls) {
+        controls.update();
+    }
+    
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+}
+
+// 統計情報の更新
+function updateStats() {
+    const totalSectionsElement = document.getElementById('total-sections');
+    if (totalSectionsElement) {
+        totalSectionsElement.textContent = sections.length;
+    }
+}
+
+// カメラ情報の更新
+function updateCameraInfo(viewName) {
+    const cameraInfoElement = document.getElementById('camera-info');
+    if (cameraInfoElement) {
+        cameraInfoElement.textContent = viewName;
+    }
+}
+
+// ウィンドウリサイズ対応
+function onWindowResize() {
+    const container = document.getElementById('three-d-container-scene');
+    if (!container || !camera || !renderer) return;
+    
+    camera.aspect = container.offsetWidth / container.offsetHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+}
+
+window.addEventListener('resize', onWindowResize);
+
+// OrbitControls がロードされるまで待機
+function waitForOrbitControls(callback) {
+    if (window.THREE && window.THREE.OrbitControls) {
+        callback();
+    } else {
+        setTimeout(() => waitForOrbitControls(callback), 100);
+    }
+}
+
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Layout detail page loaded');
+    
+    // 初期表示を2Dに設定
+    window.switchView('2d');
+    
+    // 2D/3Dボタンのイベントリスナーを追加
+    const view2dBtn = document.getElementById('view-2d');
+    const view3dBtn = document.getElementById('view-3d');
+    
+    if (view2dBtn) {
+        view2dBtn.addEventListener('click', function() {
+            console.log('2D button clicked');
+            window.switchView('2d');
+        });
+    }
+    
+    if (view3dBtn) {
+        view3dBtn.addEventListener('click', function() {
+            console.log('3D button clicked');
+            window.switchView('3d');
+        });
+    }
+    
+    // OrbitControlsのロードを待ってから初期化
+    waitForOrbitControls(() => {
+        console.log('OrbitControls loaded, ready for 3D initialization');
+    });
+});
+</script>
+{% endblock %} 

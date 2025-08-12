@@ -1,0 +1,747 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if selected_layout %}{{ selected_layout.name }} - {% endif %}棚区画 2D/3D平面図{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/casual_design.css' %}">
+<link rel="stylesheet" href="{% static 'css/layout_visualization.css' %}">
+<link rel="stylesheet" href="{% static 'css/floor_plan_common.css' %}">
+<!-- Three.js CDN imports are now at the bottom of the template -->
+<!-- Three.js availability check moved to after script loading -->
+<style>
+    /* plot_floor_plan.html 固有のスタイル */
+    
+    /* 棚移動時のスタイル */
+    .plot-dragging {
+        opacity: 0.7;
+        transform: scale(1.05);
+        filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3));
+    }
+    
+    /* plot_floor_plan.html 固有の3D表示スタイル */
+    .three-d-wrapper {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .three-d-loading {
+        color: white;
+        font-size: 18px;
+    }
+    
+    .three-d-info-panel {
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        min-width: 200px;
+    }
+    
+    /* 3D専用コントロール */
+    .three-d-controls {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.85);
+        padding: 16px;
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        min-width: 200px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .three-d-controls .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .three-d-controls .control-group-title {
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+        opacity: 0.8;
+    }
+    
+    .three-d-controls .control-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    
+    .three-d-controls .control-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.15);
+        margin: 4px 0;
+    }
+    
+    .three-d-controls .zoom-btn {
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        position: relative;
+        min-width: 60px;
+        height: 30px;
+        justify-content: center;
+        flex: 1;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    
+    .three-d-controls .zoom-btn span {
+        font-size: 9px;
+        font-weight: 500;
+    }
+    
+    .three-d-controls .zoom-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.4);
+        transform: translateY(-1px);
+    }
+    
+    .three-d-controls .zoom-btn:active {
+        transform: translateY(0);
+    }
+    
+    .three-d-controls .zoom-btn i {
+        font-size: 14px;
+    }
+    
+    
+    /* 棚移動保存のアニメーション */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+    
+    .pulse-animation {
+        animation: pulse 1.5s infinite;
+    }
+    
+    /* 3Dシーンコンテナのサイズ設定 */
+    .three-d-scene {
+        width: 100%;
+        height: 600px;
+        min-height: 500px;
+        background: linear-gradient(135deg, #87CEEB 0%, #98D5E6 100%);
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    /* SVG 2D平面図用のスタイル */
+    .floor-plan-svg {
+        width: 100%;
+        height: 600px;
+        border-radius: 12px;
+        background: #f8f9fa;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .shelf-level {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .shelf-level:hover .level-rect {
+        filter: url(#hoverShadow);
+        stroke-width: 2;
+    }
+    
+    .plot-group {
+        cursor: pointer;
+    }
+    
+    @media (max-width: 768px) {
+        .floor-plan-svg {
+            height: 400px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {% csrf_token %}
+    <!-- パンくずリスト -->
+    {% if selected_layout %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}">栽培管理</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:layout_list' %}">レイアウト一覧</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:layout_detail' selected_layout.id %}">{{ selected_layout.name }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">棚区画 2D/3D平面図</li>
+        </ol>
+    </nav>
+    {% endif %}
+
+    <!-- ヘッダー部分 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="header-section">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <div class="mb-3 mb-md-0">
+                        <h1 class="casual-title">
+                            📐 {% if selected_layout %}{{ selected_layout.name }} - {% endif %}棚配置平面図
+                        </h1>
+                        <p class="casual-subtitle">{% if selected_layout %}{{ selected_layout.name }}レイアウトの{% endif %}水耕栽培棚区画を2D/3D視覚化で効率的に管理</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        {% if selected_layout %}
+                        <span class="badge bg-info">{{ selected_layout.name }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary">全レイアウト</span>
+                        {% endif %}
+                        
+                        <a href="{% url 'cultivation:plot_create' %}" class="btn-casual btn-casual-primary">
+                            <i class="fas fa-plus me-1"></i>
+                            <span class="d-none d-sm-inline">新しい棚を追加</span>
+                            <span class="d-inline d-sm-none">棚追加</span>
+                        </a>
+                        
+                        {% if selected_layout %}
+                            <a href="{% url 'cultivation:layout_detail' selected_layout.id %}" class="btn-casual btn-casual-info">
+                                <i class="fas fa-arrow-left me-1"></i>
+                                <span class="d-none d-sm-inline">{{ selected_layout.name }}レイアウトへ</span>
+                                <span class="d-inline d-sm-none">戻る</span>
+                            </a>
+                        {% else %}
+                        <a href="{% url 'cultivation:plot_management' %}" class="btn-casual btn-casual-info">
+                            <i class="fas fa-warehouse me-1"></i>
+                            <span class="d-none d-sm-inline">棚区画管理</span>
+                            <span class="d-inline d-sm-none">管理</span>
+                        </a>
+                        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            <span class="d-none d-sm-inline">栽培管理へ</span>
+                            <span class="d-inline d-sm-none">戻る</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 統計情報 -->
+    <div class="stat-cards">
+        <div class="stat-card stat-card-total">
+            <div class="stat-icon">🏠</div>
+            <div class="stat-content">
+                <div class="stat-number">{{ statistics.total_items }}</div>
+                <div class="stat-label">{% if display_type == 'sections' %}総区画数{% else %}総棚数{% endif %}</div>
+            </div>
+        </div>
+        <div class="stat-card stat-card-growing">
+            <div class="stat-icon">🌱</div>
+            <div class="stat-content">
+                <div class="stat-number">{{ statistics.growing_count }}</div>
+                <div class="stat-label">栽培中</div>
+            </div>
+        </div>
+        <div class="stat-card stat-card-harvest">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-content">
+                <div class="stat-number">{{ statistics.harvest_ready_count }}</div>
+                <div class="stat-label">収穫可能</div>
+            </div>
+        </div>
+        <div class="stat-card stat-card-empty">
+            <div class="stat-icon">📦</div>
+            <div class="stat-content">
+                <div class="stat-number">{{ statistics.empty_count }}</div>
+                <div class="stat-label">空き</div>
+            </div>
+        </div>
+        {% if statistics.overdue_count > 0 %}
+        <div class="stat-card stat-card-overdue">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-content">
+                <div class="stat-number">{{ statistics.overdue_count }}</div>
+                <div class="stat-label">期限超過</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ビュー切り替えボタン -->
+    <div class="view-toggle">
+        <button class="btn btn-primary" id="view-2d">
+            <i class="fas fa-map me-2"></i>2D平面図
+        </button>
+        <button class="btn btn-outline-primary" id="view-3d">
+            <i class="fas fa-cube me-2"></i>3D立体図
+        </button>
+    </div>
+
+
+    <!-- 2D平面図 -->
+    {% if floor_plan_data %}
+    <div id="two-d-container" class="floor-plan-container">
+        <h3 class="mb-3">
+            <i class="fas fa-map me-2"></i>{% if selected_layout %}{{ selected_layout.name }} - {% endif %}棚配置平面図
+        </h3>
+        
+        <!-- SVG平面図ラッパー -->
+        <div class="floor-plan-wrapper">
+            <!-- ズーム・パンコントロール -->
+            <div class="floor-plan-controls">
+                <button class="zoom-btn" id="zoom-in-btn" title="ズームイン">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="zoom-btn" id="zoom-out-btn" title="ズームアウト">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="zoom-btn" id="reset-zoom-btn" title="リセット">
+                    <i class="fas fa-home"></i>
+                </button>
+                <!-- 保存ボタン -->
+                <button class="zoom-btn save-btn" id="save-positions-btn" title="位置を保存" style="display: none; background: #28a745; color: white;">
+                    <i class="fas fa-save"></i>
+                </button>
+            </div>
+            
+            <!-- SVG平面図 -->
+            <svg id="floor-plan-svg" class="floor-plan-svg" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+            <!-- グリッド背景とグラデーション定義 -->
+            <defs>
+                <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e9ecef" stroke-width="0.5" opacity="0.3"/>
+                </pattern>
+                
+                <!-- 背景グラデーション -->
+                <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#ffffff;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- 状態別グラデーション - モダンで美しいカラーパレット -->
+                <linearGradient id="emptyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#f1f3f4;stop-opacity:1" />
+                    <stop offset="50%" style="stop-color:#e8eaed;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#dadce0;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- グリーン系：自然で活力のある色合い -->
+                <linearGradient id="growingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#e8f5e8;stop-opacity:1" />
+                    <stop offset="30%" style="stop-color:#c8e6c9;stop-opacity:1" />
+                    <stop offset="70%" style="stop-color:#a5d6a7;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#81c784;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- ゴールド系：豊かで温かみのある色合い -->
+                <linearGradient id="harvestGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#fff8e1;stop-opacity:1" />
+                    <stop offset="30%" style="stop-color:#ffecb3;stop-opacity:1" />
+                    <stop offset="70%" style="stop-color:#ffe082;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#ffd54f;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- レッド系：注意を引く美しい赤 -->
+                <linearGradient id="overdueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ffebee;stop-opacity:1" />
+                    <stop offset="30%" style="stop-color:#ffcdd2;stop-opacity:1" />
+                    <stop offset="70%" style="stop-color:#ef9a9a;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#e57373;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- 棚背景のグラデーション - より洗練された背景 -->
+                <linearGradient id="shelfBackground" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+                    <stop offset="50%" style="stop-color:#fafbfc;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#f1f3f4;stop-opacity:1" />
+                </linearGradient>
+                
+                <!-- モダンな影効果 -->
+                <filter id="shelfShadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+                    <feOffset dx="0" dy="4" result="offset"/>
+                    <feFlood flood-color="#000000" flood-opacity="0.08"/>
+                    <feComposite in2="offset" operator="in"/>
+                    <feMerge>
+                        <feMergeNode/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+                
+                <!-- レベル用の軽やかな影効果 -->
+                <filter id="levelShadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="1"/>
+                    <feOffset dx="0" dy="2" result="offset"/>
+                    <feFlood flood-color="#000000" flood-opacity="0.06"/>
+                    <feComposite in2="offset" operator="in"/>
+                    <feMerge>
+                        <feMergeNode/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+                
+                <!-- ホバー効果用の際立つ影 -->
+                <filter id="hoverShadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                    <feOffset dx="0" dy="6" result="offset"/>
+                    <feFlood flood-color="#000000" flood-opacity="0.15"/>
+                    <feComposite in2="offset" operator="in"/>
+                    <feMerge>
+                        <feMergeNode/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#backgroundGradient)" />
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            
+            <!-- 各棚レベルを描画 -->
+            {% if floor_plan_data.plots %}
+                {% for plot_info in floor_plan_data.plots %}
+                <!-- 棚の表示 -->
+                <g class="plot-group" data-plot-id="{{ plot_info.plot.id }}">
+                    <!-- 棚全体の背景 -->
+                    <rect class="plot-background"
+                          x="{{ plot_info.svg_x }}"
+                          y="{{ plot_info.svg_y }}" 
+                          width="{{ plot_info.svg_width }}"
+                          height="{{ plot_info.svg_height }}"
+                          fill="url(#shelfBackground)"
+                          stroke="#dee2e6"
+                          stroke-width="2"
+                          rx="8"
+                          ry="8"
+                          filter="url(#shelfShadow)">
+                    </rect>
+                    
+                    <!-- 棚番号ラベル背景 - モダンなピル型デザイン -->
+                    <rect x="{{ plot_info.svg_x|add:3 }}"
+                          y="{{ plot_info.svg_y|add:-20 }}"
+                          width="74"
+                          height="18"
+                          rx="9"
+                          ry="9"
+                          fill="url(#shelfBackground)"
+                          stroke="rgba(74, 144, 226, 0.3)"
+                          stroke-width="1.5"
+                          filter="url(#levelShadow)">
+                    </rect>
+                    
+                    <!-- 棚番号表示 - より読みやすいフォント -->
+                    <text class="shelf-text"
+                          x="{{ plot_info.svg_x|add:40 }}"
+                          y="{{ plot_info.svg_y|add:-8 }}"
+                          font-weight="600"
+                          font-size="10"
+                          text-anchor="middle"
+                          fill="#4a90e2"
+                          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                        {{ plot_info.shelf_number }}
+                    </text>
+                    
+                    <!-- 各レベルを描画 -->
+                    {% for level_info in plot_info.level_details %}
+                    <g class="shelf-level"
+                       data-plot-id="{{ plot_info.plot.id }}"
+                       data-level="{{ level_info.level }}"
+                       data-shelf-number="{{ plot_info.shelf_number }}"
+                       data-status="{{ level_info.status }}"
+                       data-crop="{{ level_info.crop_name }}">
+                       
+                        <!-- レベルの色を状態に応じて設定 -->
+                        {% if level_info.status == 'empty' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:8 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-16 }}"
+                                      height="14"
+                                      fill="url(#emptyGradient)"
+                                      stroke="#adb5bd"
+                                      stroke-width="1"
+                                      rx="3"
+                                      ry="3"
+                                      filter="url(#levelShadow)">
+                                </rect>
+                        {% elif level_info.status == 'growing' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:8 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-16 }}"
+                                      height="14"
+                                      fill="url(#growingGradient)"
+                                      stroke="#28a745"
+                                      stroke-width="1.5"
+                                      rx="3"
+                                      ry="3"
+                                      filter="url(#levelShadow)">
+                                </rect>
+                        {% elif level_info.status == 'harvest_ready' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:8 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-16 }}"
+                                      height="14"
+                                      fill="url(#harvestGradient)"
+                                      stroke="#ffc107"
+                                      stroke-width="1.5"
+                                      rx="3"
+                                      ry="3"
+                                      filter="url(#levelShadow)">
+                                </rect>
+                        {% elif level_info.status == 'overdue' %}
+                                <rect class="level-rect"
+                                      x="{{ plot_info.svg_x|add:8 }}"
+                                      y="{{ level_info.rect_y }}"
+                                      width="{{ plot_info.svg_width|add:-16 }}"
+                                      height="14"
+                                      fill="url(#overdueGradient)"
+                                      stroke="#dc3545"
+                                      stroke-width="1.5"
+                                      rx="3"
+                                      ry="3"
+                                      filter="url(#levelShadow)">
+                                </rect>
+                        {% endif %}
+                        
+                        <!-- レベル番号を円形のバッジで表示 -->
+                        <circle cx="{{ plot_info.svg_x|add:18 }}"
+                                cy="{{ level_info.rect_y|add:7 }}"
+                                r="6"
+                                fill="rgba(74, 144, 226, 0.9)"
+                                stroke="#ffffff"
+                                stroke-width="1.5"
+                                filter="url(#levelShadow)">
+                        </circle>
+                        
+                        <!-- レベル番号テキスト -->
+                        <text x="{{ plot_info.svg_x|add:18 }}"
+                              y="{{ level_info.rect_y|add:10 }}"
+                              font-size="8"
+                              font-weight="bold"
+                              text-anchor="middle"
+                              fill="#ffffff"
+                              font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                            {{ level_info.level }}
+                        </text>
+                        
+                        <!-- 作物名を美しいピル型で表示 -->
+                        {% if level_info.crop_name != '空き' %}
+                        <rect x="{{ plot_info.svg_x|add:28 }}"
+                              y="{{ level_info.rect_y|add:3 }}"
+                              width="{{ level_info.crop_name|length|add:20 }}"
+                              height="8"
+                              rx="4"
+                              ry="4"
+                              fill="rgba(255, 255, 255, 0.95)"
+                              stroke="rgba(0, 0, 0, 0.1)"
+                              stroke-width="0.5"
+                              filter="url(#levelShadow)">
+                        </rect>
+                        
+                        <text x="{{ plot_info.svg_x|add:38 }}"
+                              y="{{ level_info.rect_y|add:9 }}"
+                              font-size="7"
+                              font-weight="500"
+                              text-anchor="start"
+                              fill="#333333"
+                              font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+                            {{ level_info.crop_name }}
+                        </text>
+                        {% else %}
+                        <!-- 空きスロットの表示 -->
+                        <rect x="{{ plot_info.svg_x|add:28 }}"
+                              y="{{ level_info.rect_y|add:4 }}"
+                              width="16"
+                              height="6"
+                              rx="3"
+                              ry="3"
+                              fill="none"
+                              stroke="#adb5bd"
+                              stroke-width="1"
+                              stroke-dasharray="2,1">
+                        </rect>
+                        {% endif %}
+                    </g>
+                    {% endfor %}
+                </g>
+                {% endfor %}
+            {% endif %}
+        </svg>
+        </div>
+    </div>
+    
+    <!-- 3D立体図 -->
+    <div id="three-d-container" class="floor-plan-container" style="display: none;">
+        <h3 class="mb-3">
+            <i class="fas fa-cube me-2"></i>{% if selected_layout %}{{ selected_layout.name }}専用 - {% endif %}3D立体図レイアウト
+        </h3>
+        
+        <!-- 3D表示エリア -->
+        <div class="three-d-wrapper">
+            <!-- ローディング表示 -->
+            <div class="three-d-loading" id="three-d-loading">
+                <i class="fas fa-spinner fa-spin me-2"></i>3Dシーンを準備中...
+            </div>
+            
+            <!-- 3D情報パネル -->
+            <div class="three-d-info-panel" id="three-d-info-panel" style="display: none;">
+                <div class="info-title"><strong>{% if selected_layout %}{{ selected_layout.name }} - {% endif %}3D棚配置図</strong></div>
+                <div class="info-content">
+                    {% if selected_layout %}
+                    <div>レイアウト: <span class="badge bg-info">{{ selected_layout.name }}</span></div>
+                    {% endif %}
+                    <div>総棚数: <span id="total-shelves">0</span></div>
+                    <div>表示レベル: <span id="current-level">全て</span></div>
+                    <div>視点: <span id="camera-info">デフォルト</span></div>
+                </div>
+                <div class="info-controls mt-2">
+                    <small>
+                        <div>• マウス左: 回転</div>
+                        <div>• マウス右: パン</div>
+                        <div>• ホイール: ズーム</div>
+                        <div>• クリック: 詳細表示</div>
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 3D操作コントロール -->
+            <div class="three-d-controls">
+                <!-- 視点コントロール -->
+                <div class="control-group">
+                    <div class="control-group-title">視点</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="view-top-btn">
+                            <i class="fas fa-eye"></i>
+                            <span>上面図 (T)</span>
+                        </button>
+                        <button class="zoom-btn" id="view-front-btn">
+                            <i class="fas fa-arrows-alt-h"></i>
+                            <span>正面図 (F)</span>
+                        </button>
+                        <button class="zoom-btn" id="view-side-btn">
+                            <i class="fas fa-arrows-alt-v"></i>
+                            <span>側面図 (S)</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <!-- カメラコントロール -->
+                <div class="control-group">
+                    <div class="control-group-title">カメラ</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="zoom-in-3d-btn">
+                            <i class="fas fa-plus"></i>
+                            <span>ズームイン (+)</span>
+                        </button>
+                        <button class="zoom-btn" id="zoom-out-3d-btn">
+                            <i class="fas fa-minus"></i>
+                            <span>ズームアウト (-)</span>
+                        </button>
+                    </div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="focus-all-btn">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                            <span>全体表示 (A)</span>
+                        </button>
+                        <button class="zoom-btn" id="reset-3d-btn">
+                            <i class="fas fa-home"></i>
+                            <span>リセット (R)</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="control-divider"></div>
+                
+                <!-- アニメーション -->
+                <div class="control-group">
+                    <div class="control-group-title">アニメ</div>
+                    <div class="control-row">
+                        <button class="zoom-btn" id="auto-rotate-btn">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>自動回転 (Space)</span>
+                        </button>
+                        <button class="zoom-btn" id="fly-mode-btn">
+                            <i class="fas fa-paper-plane"></i>
+                            <span>フライモード (Ctrl)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Three.js コンテナ -->
+            <div id="three-d-container-scene" class="three-d-scene"></div>
+            
+            <!-- ツールチップ -->
+            <div class="shelf-tooltip" id="shelf-tooltip" style="display: none;">
+                <div class="tooltip-content"></div>
+            </div>
+        </div>
+        
+        <!-- 2D表示用ツールチップ - モダンなデザイン -->
+        <div class="shelf-tooltip" id="svg-tooltip" style="display: none; position: absolute; z-index: 1000; background: rgba(255,255,255,0.98); color: #333; padding: 12px 16px; border-radius: 12px; font-size: 13px; max-width: 220px; pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,0.12); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.2); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;">
+            <div class="tooltip-content"></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 詳細パネル -->
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-panel-header">
+            <h5 class="mb-0">棚詳細情報</h5>
+            <button class="btn btn-sm btn-outline-secondary" id="close-detail-btn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="detail-panel-content" id="detail-content">
+            <!-- JavaScript で動的に内容を更新 -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Three.js のCDNを追加 -->
+<script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- シンプルな3D機能 -->
+<script src="{% static 'js/plot_floor_plan_simple.js' %}"></script>
+
+<script>
+// Djangoテンプレート変数をJavaScriptに渡す
+{% if floor_plan_data_json %}
+window.floorPlanData = {{ floor_plan_data_json|safe }};
+console.log('Floor plan data loaded successfully');
+{% else %}
+window.floorPlanData = null;
+console.log('No floor plan data available');
+{% endif %}
+
+{% if selected_layout %}
+window.selectedLayout = {
+    id: {{ selected_layout.id }},
+    name: "{{ selected_layout.name|escapejs }}",
+    description: "{{ selected_layout.description|escapejs }}"
+};
+console.log('Selected layout:', window.selectedLayout);
+{% else %}
+window.selectedLayout = null;
+console.log('No specific layout selected - showing all plots');
+{% endif %}
+</script>
+{% endblock %}
