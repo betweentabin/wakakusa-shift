@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.db import models
 from django.urls import reverse
 from django.template.loader import render_to_string
+from django.conf import settings
 from django import forms
 import json
 import calendar
@@ -17,6 +18,7 @@ from io import StringIO
 import tempfile
 import os
 from io import BytesIO
+from urllib.parse import quote
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -28,6 +30,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 try:
     from weasyprint import HTML, CSS
+    from urllib.parse import urlparse
     WEASYPRINT_AVAILABLE = True
 except ImportError:
     WEASYPRINT_AVAILABLE = False
@@ -1134,6 +1137,13 @@ def shift_export(request):
     current_staff = get_staff_for_user(request.user)
     current_organization = get_current_organization(request)
     
+    # 本番環境でのユーザー・組織情報を確認
+    print(f"=== USER/ORG DEBUG ===")
+    print(f"User: {request.user.username}")
+    print(f"Current staff: {current_staff}")
+    print(f"Current organization: {current_organization}")
+    print("=======================")
+    
     
     if not (request.user.is_superuser or (current_staff and current_staff.role_type == 'manager')):
         messages.error(request, 'シフトエクスポート権限がありません。')
@@ -1358,7 +1368,9 @@ def shift_export(request):
                     # レスポンス作成
                     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
                     filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.pdf'
-                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    # RFC 2231形式でファイル名をエンコード
+                    encoded_filename = quote(filename)
+                    response['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
                     
                     return response
                 except ImportError:
@@ -1367,9 +1379,11 @@ def shift_export(request):
                 
             elif format_type == 'csv':
                 # CSV出力
-                response = HttpResponse(content_type='text/csv')
+                response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
                 filename = f'shift_table_{start_date.strftime("%Y%m%d")}-{end_date.strftime("%Y%m%d")}.csv'
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                # RFC 2231形式でファイル名をエンコード
+                encoded_filename = quote(filename)
+                response['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
                 
                 # CSVライター設定
                 response.write('\ufeff')  # BOMを追加してExcelでの文字化け対策
@@ -2464,7 +2478,7 @@ def organization_create(request):
         return redirect('shift_management:organization_admin_login')
     
     if request.method == 'POST':
-        form = OrganizationForm(request.POST)
+        form = OrganizationForm(request.POST, request.FILES)
         if form.is_valid():
             organization = form.save()
             messages.success(request, f'✅ 組織「{organization.name}」を作成しました。')
@@ -2488,7 +2502,7 @@ def organization_edit(request, pk):
     organization = get_object_or_404(Organization, pk=pk)
     
     if request.method == 'POST':
-        form = OrganizationForm(request.POST, instance=organization)
+        form = OrganizationForm(request.POST, request.FILES, instance=organization)
         if form.is_valid():
             organization = form.save()
             messages.success(request, f'✅ 組織「{organization.name}」を更新しました。')
@@ -2568,19 +2582,6 @@ def organization_select(request):
         'current_organization_name': request.session.get('current_organization_name'),
     })
 
-def get_current_organization(request):
-    """現在選択中の組織を取得するヘルパー関数"""
-    org_id = request.session.get('current_organization_id')
-    if org_id:
-        try:
-            return Organization.objects.get(id=org_id, is_active=True)
-        except Organization.DoesNotExist:
-            # 無効な組織IDの場合はセッションをクリア
-            if 'current_organization_id' in request.session:
-                del request.session['current_organization_id']
-            if 'current_organization_name' in request.session:
-                del request.session['current_organization_name']
-    return None
 
 @login_required
 def calendar_view(request):
@@ -3246,6 +3247,10 @@ def item_list(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '在庫管理機能を閲覧する権限がありません。')
+        return redirect('shift_management:calendar')
     
     items = Item.objects.filter(organization=current_organization, is_active=True)
     
@@ -3448,6 +3453,10 @@ def order_create(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '発注を登録する権限がありません。')
+        return redirect('shift_management:order_list')
     
     if request.method == 'POST':
         form = OrderForm(request.POST, organization=current_organization)
@@ -3458,6 +3467,14 @@ def order_create(request):
             if not order.supplier_url and order.item.order_url:
                 order.supplier_url = order.item.order_url
             order.save()
+            # 監査ログ
+            log_model_change(
+                user=request.user,
+                organization=current_organization,
+                action='order_create',
+                instance=order,
+                request=request
+            )
             
             messages.success(request, f'品目「{order.item.item_name}」の発注を登録しました。')
             return redirect('shift_management:order_list')
@@ -3476,9 +3493,15 @@ def order_update_status(request, pk):
     current_organization = get_current_organization(request)
     order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
     
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '発注ステータスを更新する権限がありません。')
+        return redirect('shift_management:order_list')
+
     if request.method == 'POST':
         form = OrderStatusForm(request.POST, instance=order)
         if form.is_valid():
+            old_status = order.status
             order = form.save()
             
             # 納品済みになった場合は自動入庫処理
@@ -3504,6 +3527,15 @@ def order_update_status(request, pk):
                 messages.success(request, f'発注ステータスを更新し、自動入庫処理を実行しました。')
             else:
                 messages.success(request, f'発注ステータスを更新しました。')
+            # 監査ログ
+            log_model_change(
+                user=request.user,
+                organization=current_organization,
+                action='order_update',
+                instance=order,
+                old_values={'status': old_status},
+                request=request
+            )
             
             return redirect('shift_management:order_list')
     else:
@@ -3551,6 +3583,10 @@ def invoice_list(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '請求書一覧を閲覧する権限がありません。')
+        return redirect('shift_management:calendar')
     
     invoices = Invoice.objects.filter(
         organization=current_organization
@@ -3593,6 +3629,10 @@ def invoice_create(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '請求書を作成する権限がありません。')
+        return redirect('shift_management:invoice_list')
     
     if request.method == 'POST':
         form = InvoiceForm(request.POST, organization=current_organization)
@@ -3639,6 +3679,14 @@ def invoice_create(request):
                 invoice.tax_amount = subtotal * (Decimal(str(invoice.tax_rate)) / Decimal('100'))
                 invoice.total_amount = invoice.subtotal + invoice.tax_amount
                 invoice.save()
+                # 監査ログ
+                log_model_change(
+                    user=request.user,
+                    organization=current_organization,
+                    action='invoice_create',
+                    instance=invoice,
+                    request=request
+                )
                 
                 messages.success(request, f'請求書「{invoice.invoice_number}」を作成しました。')
                 return redirect('shift_management:invoice_detail', pk=invoice.pk)
@@ -3657,6 +3705,10 @@ def invoice_detail(request, pk):
     """請求書詳細"""
     current_organization = get_current_organization(request)
     invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '請求書を閲覧する権限がありません。')
+        return redirect('shift_management:invoice_list')
     
     return render(request, 'shift_management/invoice_detail.html', {
         'invoice': invoice,
@@ -3665,10 +3717,38 @@ def invoice_detail(request, pk):
 
 
 @login_required
+def invoice_print(request, pk):
+    """請求書 印刷用HTML表示（ブラウザ印刷）"""
+    current_organization = get_current_organization(request)
+    invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '請求書を印刷する権限がありません。')
+        return redirect('shift_management:invoice_detail', pk=pk)
+
+    issuer = {
+        'name': invoice.issuer_name or (current_organization.name if current_organization else ''),
+        'address': invoice.issuer_address or (getattr(current_organization, 'address', '') if current_organization else ''),
+        'contact_phone': invoice.issuer_phone or (getattr(current_organization, 'contact_phone', '') if current_organization else ''),
+        'contact_email': invoice.issuer_email or (getattr(current_organization, 'contact_email', '') if current_organization else ''),
+    }
+
+    return render(request, 'shift_management/invoice_print.html', {
+        'invoice': invoice,
+        'items': invoice.items.all(),
+        'issuer': issuer,
+    })
+
+
+@login_required
 def invoice_edit(request, pk):
     """請求書編集"""
     current_organization = get_current_organization(request)
     invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '請求書を編集する権限がありません。')
+        return redirect('shift_management:invoice_detail', pk=invoice.pk)
     
     # 請求済み・入金済みの請求書は編集不可
     if invoice.status in ['paid']:
@@ -3678,7 +3758,23 @@ def invoice_edit(request, pk):
     if request.method == 'POST':
         form = InvoiceForm(request.POST, instance=invoice, organization=current_organization)
         if form.is_valid():
+            old_values = {
+                'bill_to_name': invoice.bill_to_name,
+                'issue_date': invoice.issue_date,
+                'due_date': invoice.due_date,
+                'tax_rate': invoice.tax_rate,
+                'notes': invoice.notes,
+            }
             form.save()
+            # 監査ログ
+            log_model_change(
+                user=request.user,
+                organization=current_organization,
+                action='invoice_update',
+                instance=invoice,
+                old_values=old_values,
+                request=request
+            )
             messages.success(request, f'請求書「{invoice.invoice_number}」を更新しました。')
             return redirect('shift_management:invoice_detail', pk=invoice.pk)
     else:
@@ -3700,6 +3796,10 @@ def delivery_note_list(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '納品書一覧を閲覧する権限がありません。')
+        return redirect('shift_management:calendar')
     
     delivery_notes = DeliveryNote.objects.filter(
         organization=current_organization
@@ -3742,6 +3842,10 @@ def delivery_note_create(request):
     if not current_organization:
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '納品書を作成する権限がありません。')
+        return redirect('shift_management:delivery_note_list')
     
     if request.method == 'POST':
         form = DeliveryNoteForm(request.POST, organization=current_organization)
@@ -3754,7 +3858,7 @@ def delivery_note_create(request):
                 
                 # 明細データを処理
                 item_count = int(request.POST.get('item_count', 0))
-                
+                from decimal import Decimal
                 for i in range(item_count):
                     item_name = request.POST.get(f'items-{i}-item_name')
                     item_description = request.POST.get(f'items-{i}-item_description')
@@ -3764,8 +3868,8 @@ def delivery_note_create(request):
                     
                     if item_name and quantity:
                         try:
-                            quantity_decimal = float(quantity)
-                            delivered_quantity_decimal = float(delivered_quantity) if delivered_quantity else 0
+                            quantity_decimal = Decimal(str(quantity))
+                            delivered_quantity_decimal = Decimal(str(delivered_quantity)) if delivered_quantity else Decimal('0')
                             
                             DeliveryNoteItem.objects.create(
                                 delivery_note=delivery_note,
@@ -3777,6 +3881,14 @@ def delivery_note_create(request):
                             )
                         except (ValueError, TypeError):
                             continue
+                # 監査ログ
+                log_model_change(
+                    user=request.user,
+                    organization=current_organization,
+                    action='delivery_note_create',
+                    instance=delivery_note,
+                    request=request
+                )
                 
                 messages.success(request, f'納品書「{delivery_note.delivery_number}」を作成しました。')
                 return redirect('shift_management:delivery_note_detail', pk=delivery_note.pk)
@@ -3795,10 +3907,187 @@ def delivery_note_detail(request, pk):
     """納品書詳細"""
     current_organization = get_current_organization(request)
     delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '納品書を閲覧する権限がありません。')
+        return redirect('shift_management:delivery_note_list')
     
     return render(request, 'shift_management/delivery_note_detail.html', {
         'delivery_note': delivery_note,
         'current_organization': current_organization,
+    })
+
+
+@login_required
+def delivery_note_print(request, pk):
+    """納品書 印刷用HTML表示（ブラウザ印刷）"""
+    current_organization = get_current_organization(request)
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    # 閲覧権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '納品書を印刷する権限がありません。')
+        return redirect('shift_management:delivery_note_detail', pk=pk)
+
+    issuer = {
+        'name': delivery_note.issuer_name or (current_organization.name if current_organization else ''),
+        'address': delivery_note.issuer_address or (getattr(current_organization, 'address', '') if current_organization else ''),
+        'contact_phone': delivery_note.issuer_phone or (getattr(current_organization, 'contact_phone', '') if current_organization else ''),
+        'contact_email': delivery_note.issuer_email or (getattr(current_organization, 'contact_email', '') if current_organization else ''),
+    }
+
+    return render(request, 'shift_management/delivery_note_print.html', {
+        'delivery_note': delivery_note,
+        'items': delivery_note.items.all(),
+        'issuer': issuer,
+    })
+
+
+@login_required
+def order_create_invoice(request, pk):
+    """発注から請求書作成（下書き）。明細は発注品目を初期入力。"""
+    current_organization = get_current_organization(request)
+    order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
+    # 編集権限
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '請求書を作成する権限がありません。')
+        return redirect('shift_management:order_list')
+
+    if request.method == 'POST':
+        form = InvoiceForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            with db_transaction.atomic():
+                invoice = form.save(commit=False)
+                invoice.organization = current_organization
+                invoice.created_by = request.user
+                invoice.order = order
+                invoice.save()
+                # 明細処理
+                from decimal import Decimal
+                item_count = int(request.POST.get('item_count', 0))
+                subtotal = Decimal('0')
+                for i in range(item_count):
+                    item_name = request.POST.get(f'items-{i}-item_name')
+                    item_description = request.POST.get(f'items-{i}-item_description')
+                    quantity = request.POST.get(f'items-{i}-quantity')
+                    unit = request.POST.get(f'items-{i}-unit')
+                    unit_price = request.POST.get(f'items-{i}-unit_price')
+                    if item_name and quantity and unit_price:
+                        try:
+                            q = Decimal(str(quantity))
+                            up = Decimal(str(unit_price))
+                            amount = q * up
+                            InvoiceItem.objects.create(
+                                invoice=invoice,
+                                item=order.item if item_name == order.item.item_name else None,
+                                item_name=item_name,
+                                item_description=item_description or '',
+                                quantity=q,
+                                unit=unit or order.item.unit,
+                                unit_price=up,
+                                amount=amount
+                            )
+                            subtotal += amount
+                        except (ValueError, TypeError):
+                            continue
+                invoice.subtotal = subtotal
+                invoice.tax_amount = invoice.subtotal * (Decimal(str(invoice.tax_rate)) / Decimal('100'))
+                invoice.total_amount = invoice.subtotal + invoice.tax_amount
+                invoice.save()
+                # 監査ログ
+                log_model_change(
+                    user=request.user,
+                    organization=current_organization,
+                    action='invoice_create',
+                    instance=invoice,
+                    request=request
+                )
+                messages.success(request, f'請求書「{invoice.invoice_number}」を作成しました。')
+                return redirect('shift_management:invoice_detail', pk=invoice.pk)
+    else:
+        form = InvoiceForm(organization=current_organization)
+    # プレフィル用明細（数量は発注数量、単価は未設定）
+    prefill_items = [{
+        'item_name': order.item.item_name,
+        'item_description': '',
+        'quantity': str(order.ordered_quantity),
+        'unit': order.item.unit,
+        'unit_price': ''
+    }]
+    return render(request, 'shift_management/invoice_form.html', {
+        'form': form,
+        'current_organization': current_organization,
+        'title': '請求書作成（発注から）',
+        'prefill_items': json.dumps(prefill_items, ensure_ascii=False),
+    })
+
+
+@login_required
+def order_create_delivery_note(request, pk):
+    """発注から納品書作成（下書き）。明細は発注品目を初期入力。"""
+    current_organization = get_current_organization(request)
+    order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
+    # 編集権限
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '納品書を作成する権限がありません。')
+        return redirect('shift_management:order_list')
+
+    if request.method == 'POST':
+        form = DeliveryNoteForm(request.POST, organization=current_organization)
+        if form.is_valid():
+            with db_transaction.atomic():
+                dn = form.save(commit=False)
+                dn.organization = current_organization
+                dn.created_by = request.user
+                dn.order = order
+                dn.save()
+                # 明細処理
+                item_count = int(request.POST.get('item_count', 0))
+                from decimal import Decimal
+                for i in range(item_count):
+                    item_name = request.POST.get(f'items-{i}-item_name')
+                    item_description = request.POST.get(f'items-{i}-item_description')
+                    quantity = request.POST.get(f'items-{i}-quantity')
+                    unit = request.POST.get(f'items-{i}-unit')
+                    delivered_quantity = request.POST.get(f'items-{i}-delivered_quantity')
+                    if item_name and quantity:
+                        try:
+                            q = Decimal(str(quantity))
+                            dq = Decimal(str(delivered_quantity)) if delivered_quantity else Decimal('0')
+                            DeliveryNoteItem.objects.create(
+                                delivery_note=dn,
+                                item=order.item if item_name == order.item.item_name else None,
+                                item_name=item_name,
+                                item_description=item_description or '',
+                                quantity=q,
+                                unit=unit or order.item.unit,
+                                delivered_quantity=dq
+                            )
+                        except (ValueError, TypeError):
+                            continue
+                # 監査ログ
+                log_model_change(
+                    user=request.user,
+                    organization=current_organization,
+                    action='delivery_note_create',
+                    instance=dn,
+                    request=request
+                )
+                messages.success(request, f'納品書「{dn.delivery_number}」を作成しました。')
+                return redirect('shift_management:delivery_note_detail', pk=dn.pk)
+    else:
+        form = DeliveryNoteForm(organization=current_organization)
+    prefill_items = [{
+        'item_name': order.item.item_name,
+        'item_description': '',
+        'quantity': str(order.ordered_quantity),
+        'unit': order.item.unit,
+        'delivered_quantity': ''
+    }]
+    return render(request, 'shift_management/delivery_note_form.html', {
+        'form': form,
+        'current_organization': current_organization,
+        'title': '納品書作成（発注から）',
+        'prefill_items': json.dumps(prefill_items, ensure_ascii=False),
     })
 
 
@@ -4003,114 +4292,203 @@ def invoice_pdf(request, pk):
 def invoice_pdf_weasyprint(request, invoice):
     """WeasyPrint版請求書PDF出力"""
     from django.template.loader import render_to_string
+    organization = get_current_organization(request)
+    # 静的フォントを参照できるように base_url を設定（Pathを文字列へ）
+    _static_root = getattr(settings, 'STATIC_ROOT', None)
+    static_base = str(_static_root) if _static_root else str(os.path.join(settings.BASE_DIR, 'static'))
     
     # HTMLテンプレートをレンダリング
+    issuer = {
+        'name': invoice.issuer_name or (organization.name if organization else ''),
+        'address': invoice.issuer_address or (organization.address if organization else ''),
+        'contact_phone': invoice.issuer_phone or (organization.contact_phone if organization else ''),
+        'contact_email': invoice.issuer_email or (organization.contact_email if organization else ''),
+    }
     html_content = render_to_string('shift_management/invoice_pdf_template.html', {
         'invoice': invoice,
         'items': invoice.items.all(),
+        'organization': organization,
+        'issuer': issuer,
+        'company_logo': organization.company_logo if organization else None,
+        'company_seal': organization.company_seal if organization else None,
     })
     
     # CSSスタイル
     css_content = """
-    @page {
-        size: A4;
-        margin: 2cm;
-    }
-    
-    body {
-        font-family: "Hiragino Sans GB", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-        font-size: 12px;
-        line-height: 1.5;
-        color: #333;
-    }
-    
-    .invoice-header {
-        text-align: center;
-        margin-bottom: 30px;
-    }
-    
-    .invoice-title {
-        font-size: 24px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }
-    
-    .invoice-info {
-        margin-bottom: 20px;
-    }
-    
-    .invoice-info table {
-        margin-left: auto;
-        margin-right: 0;
-    }
-    
-    .invoice-info td {
-        padding: 5px 10px;
-        border: none;
-    }
-    
-    .bill-to {
-        margin-bottom: 30px;
-    }
-    
-    .bill-to h3 {
-        border-bottom: 2px solid #333;
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-    }
-    
-    .items-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-    }
-    
-    .items-table th,
-    .items-table td {
-        border: 1px solid #333;
-        padding: 8px;
-        text-align: center;
-    }
-    
-    .items-table th {
-        background-color: #f0f0f0;
-        font-weight: bold;
-    }
-    
-    .items-table .amount {
-        text-align: right;
-    }
-    
-    .total-section {
-        margin-top: 20px;
-        text-align: right;
-    }
-    
-    .total-section table {
-        margin-left: auto;
-        border-collapse: collapse;
-    }
-    
-    .total-section td {
-        padding: 5px 10px;
-        border: 1px solid #333;
-    }
-    
-    .total-section .total-row {
-        background-color: #f0f0f0;
-        font-weight: bold;
-    }
+    @font-face { font-family: 'WakakusaJP';
+      src: url('fonts/NotoSansJP-Regular.ttf') format('truetype'),
+           url('fonts/NotoSansJP-Regular.otf') format('opentype'),
+           url('fonts/ipaexg.ttf') format('truetype');
+      font-weight: 400; font-style: normal; }
+    @page { size: A4; margin: 18mm; }
+    body { font-family: 'WakakusaJP','Noto Sans CJK JP','Noto Sans JP','IPAGothic','Hiragino Sans','Yu Gothic',Meiryo,sans-serif; color:#222; font-size:12px; }
+    .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .issuer { border: 1px solid #bbb; padding: 10px; border-radius: 6px; position: relative; }
+    .issuer-title { font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+    .logo-container { margin-bottom: 10px; text-align: center; }
+    .company-logo { max-width: 150px; max-height: 60px; object-fit: contain; }
+    .seal-container { position: absolute; top: 10px; right: 10px; }
+    .company-seal { width: 60px; height: 60px; object-fit: contain; opacity: 0.9; }
+    .doc-meta { text-align: right; }
+    .doc-title { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+    .meta-table { margin-left:auto; border-collapse: collapse; }
+    .meta-table td { padding: 3px 6px; }
+    .section-title { font-size: 14px; font-weight: 700; border-left: 4px solid #666; padding-left: 8px; margin: 18px 0 8px; }
+    .to-box { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.items th { background:#f2f4f7; border:1px solid #bbb; padding:6px; font-weight:700; }
+    table.items td { border:1px solid #bbb; padding:6px; }
+    table.items td.num { text-align: right; }
+    .totals { width: 40%; margin-left:auto; border-collapse: collapse; }
+    .totals td { border:1px solid #bbb; padding:6px; }
+    .totals .label { background:#f2f4f7; font-weight:700; }
+    .footer-note { margin-top: 18px; color:#555; font-size: 11px; }
     """
     
     # PDFを生成
-    html_doc = HTML(string=html_content)
-    css_doc = CSS(string=css_content)
-    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc])
+    # ローカルのみ参照するURLフェッチャー（外部HTTPアクセスを遮断してCORS/タイムアウトを回避）
+    def local_url_fetcher(url):
+        parsed = urlparse(url)
+        if parsed.scheme in ('http', 'https'):  # 外部は拒否
+            raise ValueError('External URL blocked for PDF rendering')
+        return CSS.default_url_fetcher(url)
+
+    html_doc = HTML(string=html_content, base_url=static_base, url_fetcher=local_url_fetcher)
+    css_doc = CSS(string=css_content, base_url=static_base, url_fetcher=local_url_fetcher)
+    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc], zoom=1.0)
     
     # レスポンスを作成
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.invoice_number}.pdf"'
     
+    return response
+
+
+@login_required
+def invoice_excel(request, pk):
+    """請求書Excel出力（.xlsx、見やすい帳票レイアウト）"""
+    current_organization = get_current_organization(request)
+    invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '請求書を出力する権限がありません。')
+        return redirect('shift_management:invoice_detail', pk=pk)
+
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '請求書'
+
+    # スタイル
+    title_font = Font(size=16, bold=True)
+    bold = Font(bold=True)
+    center = Alignment(horizontal='center', vertical='center')
+    right = Alignment(horizontal='right')
+    left = Alignment(horizontal='left')
+    thin = Side(style='thin', color='BBBBBB')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill('solid', fgColor='F2F4F7')
+
+    # 列幅
+    widths = [6, 26, 28, 12, 10, 14, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # タイトル
+    ws.merge_cells('A1:G1')
+    ws['A1'] = '請求書'
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center
+
+    # 発行元 & メタ
+    org = current_organization
+    # 上書きがあれば優先
+    issuer_name = invoice.issuer_name or (org.name if org else '')
+    issuer_address = invoice.issuer_address or (org.address if org else '')
+    issuer_phone = invoice.issuer_phone or (org.contact_phone if org else '')
+    issuer_email = invoice.issuer_email or (org.contact_email if org else '')
+    ws['A3'] = '発行元'; ws['A3'].font = bold
+    ws.merge_cells('A4:C4'); ws['A4'] = issuer_name
+    ws.merge_cells('A5:C5'); ws['A5'] = issuer_address
+    ws.merge_cells('A6:C6'); ws['A6'] = (f"TEL: {issuer_phone}" if issuer_phone else '')
+    ws.merge_cells('A7:C7'); ws['A7'] = (f"Email: {issuer_email}" if issuer_email else '')
+    for r in range(4, 8):
+        ws.cell(row=r, column=1).border = border
+        ws.cell(row=r, column=3).border = border
+
+    ws['F3'] = '番号'; ws['G3'] = invoice.invoice_number
+    ws['F4'] = '発行日'; ws['G4'] = invoice.issue_date.strftime('%Y-%m-%d')
+    ws['F5'] = '支払期限'; ws['G5'] = invoice.due_date.strftime('%Y-%m-%d')
+    ws['F6'] = '状態'; ws['G6'] = invoice.get_status_display()
+    if invoice.payment_date:
+        ws['F7'] = '入金日'; ws['G7'] = invoice.payment_date.strftime('%Y-%m-%d')
+    for r in range(3, 8):
+        ws[f'F{r}'].font = bold
+        ws[f'F{r}'].alignment = right
+        ws[f'F{r}'].border = border
+        ws[f'G{r}'].border = border
+
+    # 請求先
+    row = 9
+    ws['A9'] = '請求先'; ws['A9'].font = bold
+    ws.merge_cells(start_row=row+1, start_column=1, end_row=row+1, end_column=3)
+    ws['A10'] = invoice.bill_to_name
+    ws.merge_cells(start_row=row+2, start_column=1, end_row=row+2, end_column=3)
+    ws['A11'] = invoice.bill_to_address
+    ws.merge_cells(start_row=row+3, start_column=1, end_row=row+3, end_column=3)
+    ws['A12'] = (f"担当者: {invoice.bill_to_contact}" if invoice.bill_to_contact else '')
+    ws.merge_cells(start_row=row+4, start_column=1, end_row=row+4, end_column=3)
+    ws['A13'] = (f"TEL: {invoice.bill_to_phone}  Email: {invoice.bill_to_email}" if invoice.bill_to_phone or invoice.bill_to_email else '')
+    for r in range(10, 14):
+        ws.cell(row=r, column=1).border = border
+        ws.cell(row=r, column=3).border = border
+
+    # 明細ヘッダ
+    start = 15
+    headers = ['No.', '品目名', '説明', '数量', '単位', '単価', '金額']
+    for col, h in enumerate(headers, start=1):
+        cell = ws.cell(row=start, column=col, value=h)
+        cell.font = bold
+        cell.alignment = center
+        cell.fill = header_fill
+        cell.border = border
+
+    # 明細行
+    r = start + 1
+    for idx, it in enumerate(invoice.items.all(), start=1):
+        row_values = [idx, it.item_name, (it.item_description or ''), float(it.quantity), it.unit, float(it.unit_price), float(it.amount)]
+        for c, v in enumerate(row_values, start=1):
+            cell = ws.cell(row=r, column=c, value=v)
+            cell.border = border
+            if c in (1,4,6,7):
+                cell.alignment = right if c != 1 else center
+            else:
+                cell.alignment = left
+        r += 1
+
+    # 合計
+    r += 1
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+    ws[f'A{r}'] = '小計'; ws[f'A{r}'].alignment = right; ws[f'A{r}'].font = bold
+    ws[f'G{r}'] = float(invoice.subtotal); ws[f'G{r}'].alignment = right
+    ws[f'A{r}'].border = border; ws[f'G{r}'].border = border
+    r += 1
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+    ws[f'A{r}'] = f'消費税 ({invoice.tax_rate}%)'; ws[f'A{r}'].alignment = right; ws[f'A{r}'].font = bold
+    ws[f'G{r}'] = float(invoice.tax_amount); ws[f'G{r}'].alignment = right
+    ws[f'A{r}'].border = border; ws[f'G{r}'].border = border
+    r += 1
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+    ws[f'A{r}'] = '合計'; ws[f'A{r}'].alignment = right; ws[f'A{r}'].font = bold
+    ws[f'G{r}'] = float(invoice.total_amount); ws[f'G{r}'].alignment = right
+    ws[f'A{r}'].border = border; ws[f'G{r}'].border = border
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f'invoice_{invoice.invoice_number}.xlsx'
+    response['Content-Disposition'] = f"attachment; filename={filename}; filename*=UTF-8''{filename}"
+    wb.save(response)
     return response
 
 
@@ -4228,7 +4606,7 @@ def delivery_note_pdf(request, pk):
         story.append(Paragraph("納品明細:", heading3_style))
         
         # 明細テーブルデータを作成
-        data = [['品目名', '説明', '予定数量', '単位', '実際の納品数量', '差異']]
+        data = [['品目名', '説明', '予定数量', '単位', '実際の納品数量', '差（予定との差）']]
         
         for item in delivery_note.items.all():
             difference = item.delivered_quantity - item.quantity if item.delivered_quantity else -item.quantity
@@ -4291,6 +4669,10 @@ def invoice_change_status(request, pk):
     """請求書ステータス変更"""
     current_organization = get_current_organization(request)
     invoice = get_object_or_404(Invoice, pk=pk, organization=current_organization)
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '請求書ステータスを変更する権限がありません。')
+        return redirect('shift_management:invoice_detail', pk=pk)
     
     new_status = request.POST.get('status')
     if new_status not in dict(Invoice.STATUS_CHOICES):
@@ -4315,6 +4697,15 @@ def invoice_change_status(request, pk):
         messages.success(request, f'請求書「{invoice.invoice_number}」のステータスを更新しました。')
     
     invoice.save()
+    # 監査ログ
+    log_model_change(
+        user=request.user,
+        organization=current_organization,
+        action='invoice_status',
+        instance=invoice,
+        old_values={'status': old_status},
+        request=request
+    )
     return redirect('shift_management:invoice_detail', pk=pk)
 
 
@@ -4324,6 +4715,10 @@ def delivery_note_change_status(request, pk):
     """納品書ステータス変更"""
     current_organization = get_current_organization(request)
     delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    # 編集権限チェック
+    if not has_inventory_permission(request.user, current_organization, 'edit'):
+        messages.error(request, '納品書ステータスを変更する権限がありません。')
+        return redirect('shift_management:delivery_note_detail', pk=pk)
     
     new_status = request.POST.get('status')
     if new_status not in dict(DeliveryNote.STATUS_CHOICES):
@@ -4341,6 +4736,37 @@ def delivery_note_change_status(request, pk):
         # 納品完了時の処理
         if not delivery_note.actual_delivery_date:
             delivery_note.actual_delivery_date = timezone.now().date()
+        # 在庫反映（未反映の場合のみ）
+        if not delivery_note.applied_to_inventory:
+            from decimal import Decimal
+            # 在庫モデルを取得
+            for dn_item in delivery_note.items.all():
+                if dn_item.item is None:
+                    continue  # 品目紐付けがない明細はスキップ
+                # 数量決定（実数量優先）
+                qty_dec = dn_item.delivered_quantity if dn_item.delivered_quantity else dn_item.quantity
+                try:
+                    # 在庫は整数で管理しているため丸め（小数点以下は切り捨て）
+                    qty = int(qty_dec)
+                except Exception:
+                    continue
+                # 入庫トランザクション作成
+                Transaction.objects.create(
+                    item=dn_item.item,
+                    transaction_type='in',
+                    quantity=qty,
+                    user=request.user,
+                    notes=f'納品書({delivery_note.delivery_number})による自動入庫'
+                )
+                # 在庫更新
+                inventory, _ = Inventory.objects.get_or_create(
+                    item=dn_item.item,
+                    defaults={'current_stock': 0}
+                )
+                inventory.current_stock += qty
+                inventory.save()
+            # 二重反映防止
+            delivery_note.applied_to_inventory = True
         messages.success(request, f'納品書「{delivery_note.delivery_number}」の納品を完了しました。')
     elif new_status == 'cancelled':
         messages.warning(request, f'納品書「{delivery_note.delivery_number}」をキャンセルしました。')
@@ -4348,108 +4774,425 @@ def delivery_note_change_status(request, pk):
         messages.success(request, f'納品書「{delivery_note.delivery_number}」のステータスを更新しました。')
     
     delivery_note.save()
+    # 監査ログ
+    log_model_change(
+        user=request.user,
+        organization=current_organization,
+        action='delivery_note_status',
+        instance=delivery_note,
+        old_values={'status': old_status},
+        request=request
+    )
     return redirect('shift_management:delivery_note_detail', pk=pk)
 
 
 def delivery_note_pdf_weasyprint(request, delivery_note):
     """WeasyPrint版納品書PDF出力"""
     from django.template.loader import render_to_string
+    from .utils import get_current_organization
+    organization = get_current_organization(request)
+    _static_root = getattr(settings, 'STATIC_ROOT', None)
+    static_base = str(_static_root) if _static_root else str(os.path.join(settings.BASE_DIR, 'static'))
     
     # HTMLテンプレートをレンダリング
+    issuer = {
+        'name': delivery_note.issuer_name or (organization.name if organization else ''),
+        'address': delivery_note.issuer_address or (organization.address if organization else ''),
+        'contact_phone': delivery_note.issuer_phone or (organization.contact_phone if organization else ''),
+        'contact_email': delivery_note.issuer_email or (organization.contact_email if organization else ''),
+    }
     html_content = render_to_string('shift_management/delivery_note_pdf_template.html', {
         'delivery_note': delivery_note,
         'items': delivery_note.items.all(),
+        'organization': organization,
+        'issuer': issuer,
+        'company_logo': organization.company_logo if organization else None,
+        'company_seal': organization.company_seal if organization else None,
     })
     
     # CSSスタイル
     css_content = """
-    @page {
-        size: A4;
-        margin: 2cm;
-    }
-    
-    body {
-        font-family: "Hiragino Sans GB", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-        font-size: 12px;
-        line-height: 1.5;
-        color: #333;
-    }
-    
-    .delivery-note-header {
-        text-align: center;
-        margin-bottom: 30px;
-    }
-    
-    .delivery-note-title {
-        font-size: 24px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }
-    
-    .delivery-info {
-        margin-bottom: 20px;
-    }
-    
-    .delivery-info table {
-        margin-left: auto;
-        margin-right: 0;
-    }
-    
-    .delivery-info td {
-        padding: 5px 10px;
-        border: none;
-    }
-    
-    .deliver-to {
-        margin-bottom: 30px;
-    }
-    
-    .deliver-to h3 {
-        border-bottom: 2px solid #333;
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-    }
-    
-    .items-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-    }
-    
-    .items-table th,
-    .items-table td {
-        border: 1px solid #333;
-        padding: 8px;
-        text-align: center;
-    }
-    
-    .items-table th {
-        background-color: #f0f0f0;
-        font-weight: bold;
-    }
-    
-    .items-table .amount {
-        text-align: right;
-    }
-    
-    .notes {
-        margin-top: 30px;
-    }
-    
-    .notes h3 {
-        border-bottom: 2px solid #333;
-        padding-bottom: 5px;
-        margin-bottom: 15px;
-    }
+    @font-face { font-family: 'WakakusaJP';
+      src: url('fonts/NotoSansJP-Regular.ttf') format('truetype'),
+           url('fonts/NotoSansJP-Regular.otf') format('opentype'),
+           url('fonts/ipaexg.ttf') format('truetype');
+      font-weight: 400; font-style: normal; }
+    @page { size: A4; margin: 18mm; }
+    body { font-family: 'WakakusaJP','Noto Sans CJK JP','Noto Sans JP','IPAGothic','Hiragino Sans','Yu Gothic',Meiryo,sans-serif; color:#222; font-size:12px; }
+    .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .issuer { border: 1px solid #bbb; padding: 10px; border-radius: 6px; position: relative; }
+    .issuer-title { font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+    .logo-container { margin-bottom: 10px; text-align: center; }
+    .company-logo { max-width: 150px; max-height: 60px; object-fit: contain; }
+    .seal-container { position: absolute; top: 10px; right: 10px; }
+    .company-seal { width: 60px; height: 60px; object-fit: contain; opacity: 0.9; }
+    .doc-meta { text-align: right; }
+    .doc-title { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+    .meta-table { margin-left:auto; border-collapse: collapse; }
+    .meta-table td { padding: 3px 6px; }
+    .section-title { font-size: 14px; font-weight: 700; border-left: 4px solid #666; padding-left: 8px; margin: 18px 0 8px; }
+    .to-box { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.items th { background:#f2f4f7; border:1px solid #bbb; padding:6px; font-weight:700; }
+    table.items td { border:1px solid #bbb; padding:6px; }
+    table.items td.num { text-align: right; }
+    .footer-note { margin-top: 18px; color:#555; font-size: 11px; }
     """
     
     # PDFを生成
-    html_doc = HTML(string=html_content)
-    css_doc = CSS(string=css_content)
-    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc])
+    def local_url_fetcher(url):
+        parsed = urlparse(url)
+        if parsed.scheme in ('http', 'https'):
+            raise ValueError('External URL blocked for PDF rendering')
+        return CSS.default_url_fetcher(url)
+
+    html_doc = HTML(string=html_content, base_url=static_base, url_fetcher=local_url_fetcher)
+    css_doc = CSS(string=css_content, base_url=static_base, url_fetcher=local_url_fetcher)
+    pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc], zoom=1.0)
     
     # レスポンスを作成
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="delivery_note_{delivery_note.delivery_number}.pdf"'
     
+    return response
+
+
+@login_required
+def order_pdf(request, pk):
+    """発注書PDF出力（WeasyPrint優先、なければReportLab）"""
+    current_organization = get_current_organization(request)
+    order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '発注書を出力する権限がありません。')
+        return redirect('shift_management:order_list')
+
+    if WEASYPRINT_AVAILABLE:
+        try:
+            _static_root = getattr(settings, 'STATIC_ROOT', None)
+            static_base = str(_static_root) if _static_root else str(os.path.join(settings.BASE_DIR, 'static'))
+            html_content = render_to_string('shift_management/order_pdf_template.html', {
+                'order': order,
+                'organization': get_current_organization(request),
+            })
+            css_content = """
+            @font-face { font-family: 'WakakusaJP';
+              src: url('fonts/NotoSansJP-Regular.ttf') format('truetype'),
+                   url('fonts/NotoSansJP-Regular.otf') format('opentype'),
+                   url('fonts/ipaexg.ttf') format('truetype');
+              font-weight: 400; font-style: normal; }
+            @page { size: A4; margin: 18mm; }
+            body { font-family: 'WakakusaJP','Noto Sans CJK JP','Yu Gothic','Meiryo',sans-serif; color:#222; font-size:12px; }
+            .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+            .issuer { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+            .issuer-title { font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+            .doc-meta { text-align: right; }
+            .doc-title { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+            .meta-table { margin-left:auto; border-collapse: collapse; }
+            .meta-table td { padding: 3px 6px; }
+            .section-title { font-size: 14px; font-weight: 700; border-left: 4px solid #666; padding-left: 8px; margin: 18px 0 8px; }
+            .to-box { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+            table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+            table.items th { background:#f2f4f7; border:1px solid #bbb; padding:6px; font-weight:700; }
+            table.items td { border:1px solid #bbb; padding:6px; }
+            table.items td.num { text-align: right; }
+            .footer-note { margin-top: 18px; color:#555; font-size: 11px; }
+            """
+            def local_url_fetcher(url):
+                parsed = urlparse(url)
+                if parsed.scheme in ('http', 'https'):
+                    raise ValueError('External URL blocked for PDF rendering')
+                return CSS.default_url_fetcher(url)
+
+            html_doc = HTML(string=html_content, base_url=static_base, url_fetcher=local_url_fetcher)
+            css_doc = CSS(string=css_content, base_url=static_base, url_fetcher=local_url_fetcher)
+            pdf_bytes = html_doc.write_pdf(stylesheets=[css_doc])
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename=order_{order.id}.pdf'
+            return response
+        except Exception:
+            # WeasyPrintの内部エラー（pydyfバージョン相違など）は簡易PDFにフォールバック
+            messages.warning(request, 'PDF生成エンジンでエラーが発生したため、簡易PDFで出力します。')
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+
+    # 日本語フォント登録（static/fonts から取得）
+    try:
+        static_base = settings.STATIC_ROOT if getattr(settings, 'STATIC_ROOT', None) else os.path.join(settings.BASE_DIR, 'static')
+        font_candidates = [
+            os.path.join(static_base, 'fonts', 'ipaexg.ttf'),
+            os.path.join(static_base, 'fonts', 'NotoSansJP-Regular.ttf'),
+        ]
+        font_name = 'Helvetica'
+        for fp in font_candidates:
+            if os.path.exists(fp):
+                try:
+                    pdfmetrics.registerFont(TTFont('WakakusaJP', fp))
+                    font_name = 'WakakusaJP'
+                    break
+                except Exception:
+                    continue
+    except Exception:
+        font_name = 'Helvetica'
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('OrderTitle', parent=styles['Heading1'], fontName=font_name, alignment=TA_CENTER, fontSize=18, spaceAfter=14)
+    normal = ParagraphStyle('OrderNormal', parent=styles['Normal'], fontName=font_name, fontSize=10)
+
+    elems = [Paragraph('発注書', title_style), Spacer(1, 8)]
+    info = [
+        ['品目コード', order.item.item_code],
+        ['品目名', order.item.item_name],
+        ['数量', f"{order.ordered_quantity}{order.item.unit}"],
+        ['発注日時', order.order_date.strftime('%Y-%m-%d %H:%M')],
+        ['状態', order.get_status_display()],
+    ]
+    table = Table(info, colWidths=[100, 350])
+    table.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), font_name),
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('ALIGN', (0,0), (0,-1), 'RIGHT'),
+    ]))
+    elems += [table]
+    if order.supplier_url:
+        elems += [Spacer(1, 6), Paragraph(f"発注先URL: {order.supplier_url}", normal)]
+    if order.notes:
+        elems += [Spacer(1, 6), Paragraph(f"備考: {order.notes}", normal)]
+    doc.build(elems)
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename=order_{order.id}.pdf'
+    return response
+
+
+@login_required
+def order_excel(request, pk):
+    """発注書Excel出力（.xlsx）"""
+    current_organization = get_current_organization(request)
+    order = get_object_or_404(Order, pk=pk, item__organization=current_organization)
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '発注書を出力する権限がありません。')
+        return redirect('shift_management:order_list')
+
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '発注書'
+
+    # 共通スタイル
+    title_font = Font(size=16, bold=True)
+    bold = Font(bold=True)
+    center = Alignment(horizontal='center', vertical='center')
+    right = Alignment(horizontal='right')
+    left = Alignment(horizontal='left')
+    thin = Side(style='thin', color='BBBBBB')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill('solid', fgColor='F2F4F7')
+
+    # 列幅
+    widths = [14, 28, 12, 10, 20, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # タイトル
+    ws.merge_cells('A1:F1')
+    ws['A1'] = '発注書'
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center
+
+    # 発行元（組織）とメタ情報
+    org = get_current_organization(request)
+    iname = delivery_note.issuer_name or (org.name if org else '')
+    iaddr = delivery_note.issuer_address or (org.address if org else '')
+    iphone = delivery_note.issuer_phone or (org.contact_phone if org else '')
+    iemail = delivery_note.issuer_email or (org.contact_email if org else '')
+    ws['A3'] = '発行元'
+    ws['A3'].font = bold
+    ws['A4'] = (org.name if org else '')
+    ws['A5'] = (org.address if org and org.address else '')
+    ws['A6'] = (f"TEL: {org.contact_phone}" if org and org.contact_phone else '')
+    ws['A7'] = (f"Email: {org.contact_email}" if org and org.contact_email else '')
+    for r in range(3, 8):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+        ws.cell(row=r, column=1).border = border
+
+    ws['E3'] = '番号'
+    ws['F3'] = f"#{order.id}"
+    ws['E4'] = '発注日時'
+    ws['F4'] = order.order_date.strftime('%Y-%m-%d %H:%M')
+    ws['E5'] = '状態'
+    ws['F5'] = order.get_status_display()
+    for rr in range(3, 6):
+        ws['E'+str(rr)].font = bold
+        ws['E'+str(rr)].alignment = right
+        ws['E'+str(rr)].border = border
+        ws['F'+str(rr)].border = border
+
+    # 発注先URL・備考
+    row = 9
+    if order.supplier_url:
+        ws[f'A{row}'] = '発注先URL'
+        ws[f'A{row}'].font = bold
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+        ws[f'B{row}'] = order.supplier_url
+        ws[f'B{row}'].border = border
+        row += 2
+    if order.notes:
+        ws[f'A{row}'] = '備考'
+        ws[f'A{row}'].font = bold
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+        ws[f'B{row}'] = order.notes
+        ws[f'B{row}'].border = border
+        row += 2
+
+    # 明細テーブル
+    ws[f'A{row}'] = 'No.'; ws[f'B{row}'] = '品目名'; ws[f'C{row}'] = '数量'; ws[f'D{row}'] = '単位'; ws[f'E{row}'] = '品目コード'; ws[f'F{row}'] = '状態'
+    for c in range(1, 7):
+        cell = ws.cell(row=row, column=c)
+        cell.font = bold
+        cell.alignment = center
+        cell.fill = header_fill
+        cell.border = border
+    row += 1
+
+    ws[f'A{row}'] = 1
+    ws[f'B{row}'] = order.item.item_name
+    ws[f'C{row}'] = order.ordered_quantity
+    ws[f'D{row}'] = order.item.unit
+    ws[f'E{row}'] = order.item.item_code
+    ws[f'F{row}'] = order.get_status_display()
+    for c in range(1, 7):
+        cell = ws.cell(row=row, column=c)
+        cell.border = border
+        if c in (1,3):
+            cell.alignment = right if c == 3 else center
+        else:
+            cell.alignment = left
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f'order_{order.id}.xlsx'
+    response['Content-Disposition'] = f"attachment; filename={filename}; filename*=UTF-8''{filename}"
+    wb.save(response)
+    return response
+
+
+@login_required
+def delivery_note_excel(request, pk):
+    """納品書Excel出力（.xlsx）"""
+    current_organization = get_current_organization(request)
+    delivery_note = get_object_or_404(DeliveryNote, pk=pk, organization=current_organization)
+    if not has_inventory_permission(request.user, current_organization, 'view'):
+        messages.error(request, '納品書を出力する権限がありません。')
+        return redirect('shift_management:delivery_note_detail', pk=pk)
+
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '納品書'
+
+    # スタイル
+    title_font = Font(size=16, bold=True)
+    bold = Font(bold=True)
+    center = Alignment(horizontal='center', vertical='center')
+    right = Alignment(horizontal='right')
+    left = Alignment(horizontal='left')
+    thin = Side(style='thin', color='BBBBBB')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill('solid', fgColor='F2F4F7')
+
+    # 列幅
+    widths = [6, 26, 30, 14, 10, 18, 18]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # タイトル
+    ws.merge_cells('A1:G1')
+    ws['A1'] = '納品書'
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center
+
+    # 発行元（組織）とメタ
+    org = get_current_organization(request)
+    ws['A3'] = '発行元'; ws['A3'].font = bold
+    ws.merge_cells('A4:C4'); ws['A4'] = iname
+    ws.merge_cells('A5:C5'); ws['A5'] = iaddr
+    ws.merge_cells('A6:C6'); ws['A6'] = (f"TEL: {iphone}" if iphone else '')
+    ws.merge_cells('A7:C7'); ws['A7'] = (f"Email: {iemail}" if iemail else '')
+    for r in range(4, 8):
+        ws.cell(row=r, column=1).border = border
+        ws.cell(row=r, column=3).border = border
+
+    ws['F3'] = '番号'; ws['G3'] = delivery_note.delivery_number
+    ws['F4'] = '発行日'; ws['G4'] = delivery_note.issue_date.strftime('%Y-%m-%d')
+    rr = 5
+    if delivery_note.delivery_date:
+        ws[f'F{rr}'] = '納品予定日'; ws[f'G{rr}'] = delivery_note.delivery_date.strftime('%Y-%m-%d'); rr += 1
+    if delivery_note.actual_delivery_date:
+        ws[f'F{rr}'] = '実際の納品日'; ws[f'G{rr}'] = delivery_note.actual_delivery_date.strftime('%Y-%m-%d'); rr += 1
+    for r in range(3, rr):
+        ws[f'F{r}'].font = bold
+        ws[f'F{r}'].alignment = right
+        ws[f'F{r}'].border = border
+        ws[f'G{r}'].border = border
+
+    # 納品先
+    row = 9
+    ws['A9'] = '納品先'; ws['A9'].font = bold
+    ws.merge_cells(start_row=row+1, start_column=1, end_row=row+1, end_column=3)
+    ws['A10'] = delivery_note.deliver_to_name
+    ws.merge_cells(start_row=row+2, start_column=1, end_row=row+2, end_column=3)
+    ws['A11'] = delivery_note.deliver_to_address or ''
+    ws.merge_cells(start_row=row+3, start_column=1, end_row=row+3, end_column=3)
+    ws['A12'] = (f"担当者: {delivery_note.deliver_to_contact}" if delivery_note.deliver_to_contact else '')
+    ws.merge_cells(start_row=row+4, start_column=1, end_row=row+4, end_column=3)
+    ws['A13'] = (f"TEL: {delivery_note.deliver_to_phone}" if delivery_note.deliver_to_phone else '')
+    for r in range(10, 14):
+        ws.cell(row=r, column=1).border = border
+        ws.cell(row=r, column=3).border = border
+
+    # 明細ヘッダ
+    start = 15
+    headers = ['No.', '品目名', '説明', '予定数量', '単位', '実際の納品数量', '差（予定との差）']
+    for col, h in enumerate(headers, start=1):
+        cell = ws.cell(row=start, column=col, value=h)
+        cell.font = bold
+        cell.alignment = center
+        cell.fill = header_fill
+        cell.border = border
+
+    # 明細行
+    r = start + 1
+    for idx, it in enumerate(delivery_note.items.all(), start=1):
+        qty = float(it.quantity) if it.quantity is not None else 0.0
+        dqty = float(it.delivered_quantity) if it.delivered_quantity is not None else 0.0
+        diff = dqty - qty
+        row_values = [idx, it.item_name, (it.item_description or ''), qty, it.unit, dqty, diff]
+        for c, v in enumerate(row_values, start=1):
+            cell = ws.cell(row=r, column=c, value=v)
+            cell.border = border
+            if c in (1,4,6,7):
+                cell.alignment = right if c != 1 else center
+            else:
+                cell.alignment = left
+        r += 1
+
+    # 備考
+    if delivery_note.notes:
+        r += 1
+        ws[f'A{r}'] = '備考'; ws[f'A{r}'].font = bold
+        ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=7)
+        ws[f'B{r}'] = delivery_note.notes
+        ws[f'B{r}'].border = border
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    filename = f'delivery_note_{delivery_note.delivery_number}.xlsx'
+    response['Content-Disposition'] = f"attachment; filename={filename}; filename*=UTF-8''{filename}"
+    wb.save(response)
     return response

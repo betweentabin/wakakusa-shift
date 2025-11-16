@@ -1,4 +1,5 @@
 from django.db import models
+from django.db import IntegrityError
 from django.contrib.auth.models import User
 
 class Organization(models.Model):
@@ -16,7 +17,23 @@ class Organization(models.Model):
     contact_email = models.EmailField(blank=True, null=True, verbose_name="連絡先メール")
     contact_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="連絡先電話")
     address = models.TextField(blank=True, null=True, verbose_name="住所")
-    
+
+    # 請求書・納品書用の画像
+    company_logo = models.ImageField(
+        upload_to='organization/logos/',
+        blank=True,
+        null=True,
+        verbose_name="会社ロゴ",
+        help_text="請求書・納品書に表示される会社ロゴ画像"
+    )
+    company_seal = models.ImageField(
+        upload_to='organization/seals/',
+        blank=True,
+        null=True,
+        verbose_name="会社印",
+        help_text="請求書・納品書に表示される会社印画像"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
     
@@ -598,7 +615,11 @@ class Item(models.Model):
     item_name = models.CharField(max_length=200, verbose_name="品目名")
     unit = models.CharField(max_length=20, default="個", verbose_name="単位")
     order_url = models.URLField(blank=True, null=True, verbose_name="発注先URL")
-    threshold = models.IntegerField(default=10, verbose_name="在庫閾値")
+    threshold = models.IntegerField(
+        default=10,
+        verbose_name="在庫の目安数",
+        help_text="この数を下回ると不足として表示されます"
+    )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name="組織")
     is_active = models.BooleanField(default=True, verbose_name="有効")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
@@ -679,7 +700,7 @@ class Order(models.Model):
     ordered_quantity = models.IntegerField(verbose_name="発注数量")
     order_date = models.DateTimeField(auto_now_add=True, verbose_name="発注日時")
     supplier_url = models.URLField(blank=True, null=True, verbose_name="発注先URL")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ordered', verbose_name="ステータス")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ordered', verbose_name="状態")
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, verbose_name="発注担当者")
     delivery_date = models.DateTimeField(null=True, blank=True, verbose_name="納品日時")
     notes = models.TextField(blank=True, null=True, verbose_name="備考")
@@ -706,6 +727,13 @@ class InventoryAuditLog(models.Model):
         ('order_create', '発注作成'),
         ('order_update', '発注更新'),
         ('order_cancel', '発注キャンセル'),
+        # 請求/納品: 監査用途のアクション（DBスキーマ変更不要）
+        ('invoice_create', '請求書作成'),
+        ('invoice_update', '請求書更新'),
+        ('invoice_status', '請求書ステータス変更'),
+        ('delivery_note_create', '納品書作成'),
+        ('delivery_note_status', '納品書ステータス変更'),
+        # 認証/権限
         ('user_login', 'ログイン'),
         ('user_logout', 'ログアウト'),
         ('permission_change', '権限変更'),
@@ -813,9 +841,15 @@ class Invoice(models.Model):
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="消費税額")
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="合計金額")
     
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="ステータス")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="状態")
     payment_date = models.DateField(null=True, blank=True, verbose_name="入金日")
     notes = models.TextField(blank=True, null=True, verbose_name="備考")
+
+    # 発行元情報（組織情報を上書きしたい場合に使用）
+    issuer_name = models.CharField(max_length=200, blank=True, null=True, verbose_name="発行元名（上書き）")
+    issuer_address = models.TextField(blank=True, null=True, verbose_name="発行元住所（上書き）")
+    issuer_phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="発行元電話（上書き）")
+    issuer_email = models.EmailField(blank=True, null=True, verbose_name="発行元メール（上書き）")
     
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作成者")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
@@ -830,28 +864,39 @@ class Invoice(models.Model):
         return f"{self.invoice_number} - {self.bill_to_name} ({self.get_status_display()})"
     
     def save(self, *args, **kwargs):
-        # 請求書番号の自動生成
-        if not self.invoice_number:
-            from datetime import datetime
-            now = datetime.now()
-            prefix = f"INV{now.strftime('%Y%m')}"
-            last_invoice = Invoice.objects.filter(
-                invoice_number__startswith=prefix
-            ).order_by('-invoice_number').first()
-            
-            if last_invoice:
-                last_num = int(last_invoice.invoice_number[-4:])
-                new_num = last_num + 1
-            else:
-                new_num = 1
-            
-            self.invoice_number = f"{prefix}{new_num:04d}"
-        
-        # 金額計算
+        from datetime import datetime
+        # 金額計算（採番に関わらず毎回更新）
         self.tax_amount = self.subtotal * (self.tax_rate / 100)
         self.total_amount = self.subtotal + self.tax_amount
-        
-        super().save(*args, **kwargs)
+
+        # 請求書番号の同時実行安全な自動生成
+        if not self.invoice_number:
+            now = datetime.now()
+            prefix = f"INV{now.strftime('%Y%m')}"
+            attempts = 0
+            while attempts < 5:
+                last_invoice = Invoice.objects.filter(
+                    invoice_number__startswith=prefix
+                ).order_by('-invoice_number').first()
+                if last_invoice:
+                    try:
+                        last_num = int(last_invoice.invoice_number[-4:])
+                    except ValueError:
+                        last_num = 0
+                else:
+                    last_num = 0
+                candidate = f"{prefix}{last_num + 1:04d}"
+                self.invoice_number = candidate
+                try:
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    attempts += 1
+                    continue
+            # 最終手段：タイムスタンプ含みで一意にして保存
+            self.invoice_number = f"{prefix}{now.strftime('%d%H%M%S')}"
+            return super().save(*args, **kwargs)
+        else:
+            return super().save(*args, **kwargs)
 
 
 class InvoiceItem(models.Model):
@@ -910,8 +955,17 @@ class DeliveryNote(models.Model):
     delivery_date = models.DateField(null=True, blank=True, verbose_name="納品予定日")
     actual_delivery_date = models.DateField(null=True, blank=True, verbose_name="実際の納品日")
     
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="ステータス")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="状態")
     notes = models.TextField(blank=True, null=True, verbose_name="備考")
+
+    # 在庫反映フラグ（納品済み在庫の二重反映防止）
+    applied_to_inventory = models.BooleanField(default=False, verbose_name="在庫反映済み")
+
+    # 発行元情報（組織情報を上書きしたい場合に使用）
+    issuer_name = models.CharField(max_length=200, blank=True, null=True, verbose_name="発行元名（上書き）")
+    issuer_address = models.TextField(blank=True, null=True, verbose_name="発行元住所（上書き）")
+    issuer_phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="発行元電話（上書き）")
+    issuer_email = models.EmailField(blank=True, null=True, verbose_name="発行元メール（上書き）")
     
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作成者")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
@@ -926,24 +980,35 @@ class DeliveryNote(models.Model):
         return f"{self.delivery_number} - {self.deliver_to_name} ({self.get_status_display()})"
     
     def save(self, *args, **kwargs):
-        # 納品書番号の自動生成
+        # 納品書番号の同時実行安全な自動生成
         if not self.delivery_number:
             from datetime import datetime
             now = datetime.now()
             prefix = f"DEL{now.strftime('%Y%m')}"
-            last_delivery = DeliveryNote.objects.filter(
-                delivery_number__startswith=prefix
-            ).order_by('-delivery_number').first()
-            
-            if last_delivery:
-                last_num = int(last_delivery.delivery_number[-4:])
-                new_num = last_num + 1
-            else:
-                new_num = 1
-            
-            self.delivery_number = f"{prefix}{new_num:04d}"
-        
-        super().save(*args, **kwargs)
+            attempts = 0
+            while attempts < 5:
+                last_delivery = DeliveryNote.objects.filter(
+                    delivery_number__startswith=prefix
+                ).order_by('-delivery_number').first()
+                if last_delivery:
+                    try:
+                        last_num = int(last_delivery.delivery_number[-4:])
+                    except ValueError:
+                        last_num = 0
+                else:
+                    last_num = 0
+                candidate = f"{prefix}{last_num + 1:04d}"
+                self.delivery_number = candidate
+                try:
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    attempts += 1
+                    continue
+            # 最終手段：タイムスタンプ含みで一意にして保存
+            self.delivery_number = f"{prefix}{now.strftime('%d%H%M%S')}"
+            return super().save(*args, **kwargs)
+        else:
+            return super().save(*args, **kwargs)
 
 
 class DeliveryNoteItem(models.Model):

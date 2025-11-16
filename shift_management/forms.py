@@ -316,13 +316,15 @@ class AdvancedBulkShiftForm(forms.Form):
 class OrganizationForm(forms.ModelForm):
     class Meta:
         model = Organization
-        fields = ['name', 'address', 'contact_phone', 'contact_email', 'description']
+        fields = ['name', 'address', 'contact_phone', 'contact_email', 'description', 'company_logo', 'company_seal']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'contact_phone': forms.TextInput(attrs={'class': 'form-control'}),
             'contact_email': forms.EmailInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'company_logo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'company_seal': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
         }
         labels = {
             'name': '組織名',
@@ -330,6 +332,8 @@ class OrganizationForm(forms.ModelForm):
             'contact_phone': '電話番号',
             'contact_email': 'メールアドレス',
             'description': '説明',
+            'company_logo': '会社ロゴ',
+            'company_seal': '会社印',
         }
 
 class OrganizationSelectForm(forms.Form):
@@ -1083,13 +1087,18 @@ class ShiftExportForm(forms.Form):
         organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         
-        # 組織に所属するスタッフを取得
+        # シフト出力対象スタッフの設定
         if organization:
-            # 組織に所属するスタッフのみ表示
-            queryset = Staff.objects.filter(organization=organization).order_by('name')
+            queryset = Staff.objects.filter(
+                organization=organization,
+                is_active=True,
+                approval_status='approved'
+            ).order_by('name')
         else:
-            # 組織が指定されていない場合は全スタッフ
-            queryset = Staff.objects.all().order_by('name')
+            queryset = Staff.objects.filter(
+                is_active=True,
+                approval_status='approved'
+            ).order_by('name')
         
         self.fields['staff'].queryset = queryset
 
@@ -1237,7 +1246,7 @@ class OrderStatusForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
         labels = {
-            'status': 'ステータス',
+            'status': '状態',
             'delivery_date': '納品日時',
             'notes': '備考',
         }
@@ -1253,7 +1262,8 @@ class InvoiceForm(forms.ModelForm):
         fields = [
             'bill_to_name', 'bill_to_address', 'bill_to_contact', 
             'bill_to_phone', 'bill_to_email', 'issue_date', 'due_date',
-            'tax_rate', 'notes'
+            'tax_rate', 'notes',
+            'issuer_name', 'issuer_address', 'issuer_phone', 'issuer_email'
         ]
         widgets = {
             'bill_to_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '請求先名'}),
@@ -1265,6 +1275,10 @@ class InvoiceForm(forms.ModelForm):
             'due_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0', 'max': '100'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考'}),
+            'issuer_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '発行元名（未入力なら組織名）'}),
+            'issuer_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '発行元住所'}),
+            'issuer_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '発行元電話'}),
+            'issuer_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': '発行元メール'}),
         }
         labels = {
             'bill_to_name': '請求先名',
@@ -1276,6 +1290,10 @@ class InvoiceForm(forms.ModelForm):
             'due_date': '支払期限',
             'tax_rate': '消費税率(%)',
             'notes': '備考',
+            'issuer_name': '発行元名（上書き）',
+            'issuer_address': '発行元住所（上書き）',
+            'issuer_phone': '発行元電話（上書き）',
+            'issuer_email': '発行元メール（上書き）',
         }
     
     def __init__(self, *args, **kwargs):
@@ -1288,6 +1306,11 @@ class InvoiceForm(forms.ModelForm):
             self.fields['issue_date'].initial = date.today()
             self.fields['due_date'].initial = date.today() + timedelta(days=30)
             self.fields['tax_rate'].initial = 10.0
+            if organization:
+                self.fields['issuer_name'].initial = organization.name
+                self.fields['issuer_address'].initial = organization.address
+                self.fields['issuer_phone'].initial = organization.contact_phone
+                self.fields['issuer_email'].initial = organization.contact_email
 
 
 class InvoiceItemForm(forms.ModelForm):
@@ -1324,7 +1347,7 @@ class InvoiceStatusForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
         labels = {
-            'status': 'ステータス',
+            'status': '状態',
             'payment_date': '入金日',
             'notes': '備考',
         }
@@ -1337,7 +1360,8 @@ class DeliveryNoteForm(forms.ModelForm):
         model = DeliveryNote
         fields = [
             'deliver_to_name', 'deliver_to_address', 'deliver_to_contact',
-            'deliver_to_phone', 'issue_date', 'delivery_date', 'notes'
+            'deliver_to_phone', 'issue_date', 'delivery_date', 'notes',
+            'issuer_name', 'issuer_address', 'issuer_phone', 'issuer_email'
         ]
         widgets = {
             'deliver_to_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '納品先名'}),
@@ -1347,6 +1371,10 @@ class DeliveryNoteForm(forms.ModelForm):
             'issue_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'delivery_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '備考'}),
+            'issuer_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '発行元名（未入力なら組織名）'}),
+            'issuer_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': '発行元住所'}),
+            'issuer_phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '発行元電話'}),
+            'issuer_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': '発行元メール'}),
         }
         labels = {
             'deliver_to_name': '納品先名',
@@ -1356,6 +1384,10 @@ class DeliveryNoteForm(forms.ModelForm):
             'issue_date': '発行日',
             'delivery_date': '納品予定日',
             'notes': '備考',
+            'issuer_name': '発行元名（上書き）',
+            'issuer_address': '発行元住所（上書き）',
+            'issuer_phone': '発行元電話（上書き）',
+            'issuer_email': '発行元メール（上書き）',
         }
     
     def __init__(self, *args, **kwargs):
@@ -1367,6 +1399,11 @@ class DeliveryNoteForm(forms.ModelForm):
             from datetime import date, timedelta
             self.fields['issue_date'].initial = date.today()
             self.fields['delivery_date'].initial = date.today() + timedelta(days=7)
+            if organization:
+                self.fields['issuer_name'].initial = organization.name
+                self.fields['issuer_address'].initial = organization.address
+                self.fields['issuer_phone'].initial = organization.contact_phone
+                self.fields['issuer_email'].initial = organization.contact_email
 
 
 class DeliveryNoteItemForm(forms.ModelForm):
@@ -1403,7 +1440,7 @@ class DeliveryNoteStatusForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
         labels = {
-            'status': 'ステータス',
+            'status': '状態',
             'actual_delivery_date': '実際の納品日',
             'notes': '備考',
         }
