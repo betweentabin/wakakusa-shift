@@ -10,6 +10,8 @@
     border: none;
     border-radius: 15px;
     overflow: hidden;
+    background: transparent !important;
+    color: #000 !important;
 }
 
 .inventory-card:hover {
@@ -18,32 +20,34 @@
 }
 
 .inventory-header {
-    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-    color: white;
+    background: transparent !important;
+    color: #000 !important;
     padding: 1.2rem;
 }
 
 .inventory-body {
     padding: 1.2rem;
+    background: transparent !important;
+    color: #000 !important;
 }
 
 .low-stock-card .inventory-header {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    background: transparent !important;
 }
 
 .stock-number {
     font-size: 2rem;
     font-weight: bold;
-    color: #4CAF50;
+    color: #000 !important;
 }
 
 .low-stock-number {
-    color: #ff6b6b;
+    color: #000 !important;
 }
 
 .threshold-info {
     font-size: 0.9rem;
-    color: #6c757d;
+    color: #000 !important;
 }
 
 .btn-action {
@@ -87,7 +91,7 @@
                     <div>
                         <h5 class="mb-1">在庫不足アラート</h5>
                         <p class="mb-0">
-                            {{ low_stock_items|length }}品目が在庫閾値を下回っています。発注をご検討ください。
+                            {{ low_stock_items|length }}品目が在庫の目安数を下回っています。発注をご検討ください。
                         </p>
                     </div>
                 </div>
@@ -115,6 +119,18 @@
                 <a href="{% url 'shift_management:transaction_history' %}" class="btn btn-info btn-action">
                     <i class="fas fa-history me-1"></i>
                     履歴確認
+                </a>
+                <a href="{% url 'shift_management:invoice_list' %}" class="btn btn-outline-primary btn-action">
+                    <i class="fas fa-file-invoice me-1"></i>
+                    請求書一覧
+                </a>
+                <a href="{% url 'shift_management:delivery_note_list' %}" class="btn btn-outline-secondary btn-action">
+                    <i class="fas fa-truck me-1"></i>
+                    納品書一覧
+                </a>
+                <a href="{% url 'shift_management:organization_edit' current_organization.pk %}" class="btn btn-outline-dark btn-action">
+                    <i class="fas fa-cog me-1"></i>
+                    組織設定（ロゴ・印）
                 </a>
             </div>
         </div>
@@ -148,7 +164,7 @@
                     </div>
                     
                     <div class="threshold-info text-center mb-3">
-                        閾値: {{ data.item.threshold }}{{ data.item.unit }}
+                        目安数: {{ data.item.threshold }}{{ data.item.unit }}
                     </div>
                     
                     <!-- 発注先URL -->

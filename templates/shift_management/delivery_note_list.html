@@ -11,6 +11,24 @@
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 1rem;
+    background: transparent !important;
+    color: #000 !important;
+}
+
+/* ヘッダー/フッターの背景と文字色をフラット化 */
+.delivery-card .card-header,
+.delivery-card .card-footer {
+    background: transparent !important;
+    color: #000 !important;
+    border-color: transparent !important;
+}
+.delivery-card .card-header *,
+.delivery-card .card-footer * {
+    color: #000 !important;
+}
+.delivery-card .card-body {
+    background: transparent !important;
+    color: #000 !important;
 }
 
 .delivery-card:hover {
@@ -18,20 +36,12 @@
     box-shadow: 0 6px 20px rgba(0,0,0,0.1);
 }
 
-.delivery-status-draft {
-    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
-}
-
-.delivery-status-issued {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-}
-
-.delivery-status-delivered {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-}
-
+.delivery-status-draft,
+.delivery-status-issued,
+.delivery-status-delivered,
 .delivery-status-cancelled {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    background: transparent !important;
+    color: #000 !important;
 }
 
 .search-section {
@@ -83,6 +93,10 @@
                 <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-info">
                     <i class="fas fa-warehouse me-1"></i>
                     在庫ダッシュボード
+                </a>
+                <a href="{% url 'shift_management:organization_edit' current_organization.pk %}" class="btn btn-outline-dark">
+                    <i class="fas fa-cog me-1"></i>
+                    組織設定（ロゴ・印）
                 </a>
             </div>
         </div>
