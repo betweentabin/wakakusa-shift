@@ -75,21 +75,47 @@
         </div>
     </div>
 
-    <!-- ナビゲーション -->
-    <div class="row mb-4">
+    <!-- メインナビゲーション -->
+    <div class="row mb-3">
         <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bars me-2"></i>メインメニュー</h5>
             <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    シフト管理
+                </a>
+                <a href="{% url 'shift_management:staff_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-users me-1"></i>
+                    スタッフ一覧
+                </a>
                 <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-primary">
                     <i class="fas fa-warehouse me-1"></i>
                     在庫ダッシュボード
                 </a>
-                <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-outline-success">
+            </div>
+        </div>
+    </div>
+
+    <!-- クイックアクション -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bolt me-2"></i>クイックアクション</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:item_create' %}" class="btn btn-success">
+                    <i class="fas fa-plus me-1"></i>
+                    品目登録
+                </a>
+                <a href="{% url 'shift_management:transaction_create' %}" class="btn btn-primary">
                     <i class="fas fa-exchange-alt me-1"></i>
                     入出庫処理
                 </a>
-                <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-warning">
-                    <i class="fas fa-clipboard-list me-1"></i>
-                    発注履歴
+                <a href="{% url 'shift_management:order_create' %}" class="btn btn-warning">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    発注登録
+                </a>
+                <a href="{% url 'shift_management:invoice_create' %}" class="btn btn-info">
+                    <i class="fas fa-file-invoice me-1"></i>
+                    新規請求書
                 </a>
             </div>
         </div>
@@ -127,7 +153,7 @@
                                 </span>
                             </div>
                             <div class="col-6">
-                                <strong>在庫閾値:</strong><br>
+                                <strong>在庫の目安数:</strong><br>
                                 <span class="text-muted">{{ item.threshold }}{{ item.unit }}</span>
                             </div>
                         </div>

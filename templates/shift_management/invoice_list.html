@@ -85,9 +85,60 @@
         </div>
     </div>
 
-    <!-- ナビゲーション -->
+    <!-- メインナビゲーション -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bars me-2"></i>メインメニュー</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    シフト管理
+                </a>
+                <a href="{% url 'shift_management:staff_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-users me-1"></i>
+                    スタッフ一覧
+                </a>
+                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-info">
+                    <i class="fas fa-warehouse me-1"></i>
+                    在庫ダッシュボード
+                </a>
+                <a href="{% url 'shift_management:item_list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-list me-1"></i>
+                    品目一覧
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- クイックアクション -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bolt me-2"></i>クイックアクション</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:invoice_create' %}" class="btn btn-success">
+                    <i class="fas fa-plus me-1"></i>
+                    新規請求書
+                </a>
+                <a href="{% url 'shift_management:delivery_note_create' %}" class="btn btn-primary">
+                    <i class="fas fa-file-alt me-1"></i>
+                    新規納品書
+                </a>
+                <a href="{% url 'shift_management:order_create' %}" class="btn btn-warning">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    発注登録
+                </a>
+                <a href="{% url 'shift_management:item_create' %}" class="btn btn-info">
+                    <i class="fas fa-box me-1"></i>
+                    品目登録
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- サブナビゲーション -->
     <div class="row mb-4">
         <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-file-invoice me-2"></i>発注・請求・納品管理</h5>
             <div class="d-flex gap-2 flex-wrap">
                 <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-primary">
                     <i class="fas fa-clipboard-list me-1"></i>
@@ -96,10 +147,6 @@
                 <a href="{% url 'shift_management:delivery_note_list' %}" class="btn btn-outline-secondary">
                     <i class="fas fa-truck me-1"></i>
                     納品書管理
-                </a>
-                <a href="{% url 'shift_management:inventory_dashboard' %}" class="btn btn-outline-info">
-                    <i class="fas fa-warehouse me-1"></i>
-                    在庫ダッシュボード
                 </a>
                 <a href="{% url 'shift_management:organization_edit' current_organization.pk %}" class="btn btn-outline-dark">
                     <i class="fas fa-cog me-1"></i>
