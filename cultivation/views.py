@@ -77,8 +77,14 @@ def cultivation_top(request):
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
 
-    layouts = CultivationLayout.objects.all()
-    layouts = filter_by_organization(layouts, request.user, org_field='organization')
+    # 組織フィルタリング
+    if is_global_admin(request.user):
+        layouts = CultivationLayout.objects.all()
+    elif current_organization:
+        layouts = CultivationLayout.objects.filter(organization=current_organization)
+    else:
+        layouts = CultivationLayout.objects.none()
+
     layouts = layouts.order_by('-created_at')
     
     # 全体統計を計算
@@ -174,8 +180,14 @@ def layout_list(request):
         messages.info(request, '組織を選択してください。')
         return redirect('shift_management:organization_select')
 
-    layouts = CultivationLayout.objects.all()
-    layouts = filter_by_organization(layouts, request.user, org_field='organization')
+    # 組織フィルタリング
+    if is_global_admin(request.user):
+        layouts = CultivationLayout.objects.all()
+    elif current_organization:
+        layouts = CultivationLayout.objects.filter(organization=current_organization)
+    else:
+        layouts = CultivationLayout.objects.none()
+
     layouts = layouts.order_by('-created_at')
     
     # 各レイアウトの統計も計算
@@ -501,28 +513,36 @@ def plot_management(request):
         # 未分類の棚を表示（組織フィルタ適用）
         selected_layout = 'none'
         plots = Plot.objects.filter(layout__isnull=True)
-        plots = filter_by_organization(plots, request.user, org_field='organization')
+        if not is_global_admin(request.user) and current_organization:
+            plots = plots.filter(organization=current_organization)
         plots = plots.order_by('shelf_number')
     elif layout_id:
         try:
             selected_layout = CultivationLayout.objects.get(id=layout_id)
             plots = Plot.objects.filter(layout=selected_layout)
-            plots = filter_by_organization(plots, request.user, org_field='organization')
+            if not is_global_admin(request.user) and current_organization:
+                plots = plots.filter(organization=current_organization)
             plots = plots.order_by('shelf_number')
         except CultivationLayout.DoesNotExist:
             selected_layout = None
             plots = Plot.objects.all()
-            plots = filter_by_organization(plots, request.user, org_field='organization')
+            if not is_global_admin(request.user) and current_organization:
+                plots = plots.filter(organization=current_organization)
             plots = plots.order_by('shelf_number')
     else:
         selected_layout = None
         plots = Plot.objects.all()
-        plots = filter_by_organization(plots, request.user, org_field='organization')
+        if not is_global_admin(request.user) and current_organization:
+            plots = plots.filter(organization=current_organization)
         plots = plots.order_by('shelf_number')
 
     # 全レイアウトの取得（組織フィルタ適用）
-    all_layouts = CultivationLayout.objects.all()
-    all_layouts = filter_by_organization(all_layouts, request.user, org_field='organization')
+    if is_global_admin(request.user):
+        all_layouts = CultivationLayout.objects.all()
+    elif current_organization:
+        all_layouts = CultivationLayout.objects.filter(organization=current_organization)
+    else:
+        all_layouts = CultivationLayout.objects.none()
     
     # レイアウト別の棚集計
     layouts_with_plots = defaultdict(list)
