@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.decorators import user_passes_test, login_required
 from django.db import models
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -8,6 +8,8 @@ import json
 from .models import CultivationLayout, CultivationSection, CultivationPlan, CultivationLog, Crop, Plot, ShelfCrop
 from .forms import CultivationLayoutForm, CultivationPlanForm, CultivationLogForm, PlotForm, ShelfCropForm, CultivationSectionForm, CropImageForm, CropForm
 from .utils import process_import_file
+from shift_management.views import get_current_organization
+from shift_management.utils import filter_by_organization, is_global_admin
 
 def get_plot_level_details(plot):
     """棚の各レベルの詳細情報を取得する共通ヘルパー関数"""
@@ -68,7 +70,16 @@ def is_admin_user(user):
 
 def cultivation_top(request):
     """栽培計画トップページ"""
-    layouts = CultivationLayout.objects.all().order_by('-created_at')
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    layouts = CultivationLayout.objects.all()
+    layouts = filter_by_organization(layouts, request.user, org_field='organization')
+    layouts = layouts.order_by('-created_at')
     
     # 全体統計を計算
     total_layouts = layouts.count()
@@ -156,7 +167,16 @@ def cultivation_top(request):
 
 def layout_list(request):
     """栽培レイアウト一覧ページ"""
-    layouts = CultivationLayout.objects.all().order_by('-created_at')
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    layouts = CultivationLayout.objects.all()
+    layouts = filter_by_organization(layouts, request.user, org_field='organization')
+    layouts = layouts.order_by('-created_at')
     
     # 各レイアウトの統計も計算
     for layout in layouts:
@@ -232,10 +252,18 @@ def layout_list(request):
 
 def layout_create(request):
     """改良されたレイアウト作成"""
+    current_organization = get_current_organization(request)
+
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
     if request.method == 'POST':
         form = CultivationLayoutForm(request.POST, request.FILES)
         if form.is_valid():
-            layout = form.save()
+            layout = form.save(commit=False)
+            layout.organization = current_organization  # 組織を自動設定
+            layout.save()
             
             # 共通変数を初期化
             ocr_processed = False
@@ -459,26 +487,42 @@ def plot_management(request):
     """棚区画管理の一元化ページ"""
     from .models import Plot, CultivationLayout
     from collections import defaultdict
-    
+
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
     # レイアウトごとに棚を分類
     layout_id = request.GET.get('layout_id')
     if layout_id == 'none':
-        # 未分類の棚を表示
+        # 未分類の棚を表示（組織フィルタ適用）
         selected_layout = 'none'
-        plots = Plot.objects.filter(layout__isnull=True).order_by('shelf_number')
+        plots = Plot.objects.filter(layout__isnull=True)
+        plots = filter_by_organization(plots, request.user, org_field='organization')
+        plots = plots.order_by('shelf_number')
     elif layout_id:
         try:
             selected_layout = CultivationLayout.objects.get(id=layout_id)
-            plots = Plot.objects.filter(layout=selected_layout).order_by('shelf_number')
+            plots = Plot.objects.filter(layout=selected_layout)
+            plots = filter_by_organization(plots, request.user, org_field='organization')
+            plots = plots.order_by('shelf_number')
         except CultivationLayout.DoesNotExist:
             selected_layout = None
-            plots = Plot.objects.all().order_by('shelf_number')
+            plots = Plot.objects.all()
+            plots = filter_by_organization(plots, request.user, org_field='organization')
+            plots = plots.order_by('shelf_number')
     else:
         selected_layout = None
-        plots = Plot.objects.all().order_by('shelf_number')
-    
-    # 全レイアウトの取得
+        plots = Plot.objects.all()
+        plots = filter_by_organization(plots, request.user, org_field='organization')
+        plots = plots.order_by('shelf_number')
+
+    # 全レイアウトの取得（組織フィルタ適用）
     all_layouts = CultivationLayout.objects.all()
+    all_layouts = filter_by_organization(all_layouts, request.user, org_field='organization')
     
     # レイアウト別の棚集計
     layouts_with_plots = defaultdict(list)
@@ -1243,7 +1287,7 @@ def bulk_section_create(request, layout_id):
     }
     return render(request, 'cultivation/bulk_section_create.html', context)
 
-@user_passes_test(is_admin_user, login_url='/login/')
+@login_required(login_url='/login/')
 def plot_grid_view(request):
     """棚区画のグリッド表示"""
     from .models import Plot, CultivationSection
@@ -1786,19 +1830,29 @@ def crop_image_upload_view(request, crop_id):
 def plot_create(request):
     """棚区画の新規作成"""
     from .models import Plot, CultivationLayout
+
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
     if request.method == 'POST':
         form = PlotForm(request.POST)
         if form.is_valid():
             plot = form.save(commit=False)
-            
+            plot.organization = current_organization  # 組織を自動設定
+
             # レイアウトが指定されていない場合、デフォルトレイアウトに割り当て
             if not plot.layout:
                 default_layout, created = CultivationLayout.objects.get_or_create(
                     name="デフォルトレイアウト",
+                    organization=current_organization,
                     defaults={'description': '棚区画管理で作成された棚の既定レイアウト'}
                 )
                 plot.layout = default_layout
-            
+
             plot.save()
             messages.success(request, f'棚区画「{plot.shelf_number}」を作成しました')
             return redirect('cultivation:plot_management')
@@ -1941,12 +1995,15 @@ def crop_create(request, plot_id):
     """作物の新規作成"""
     from .models import Plot, ShelfCrop
     plot = get_object_or_404(Plot, id=plot_id)
-    
+
+    current_organization = get_current_organization(request)
+
     if request.method == 'POST':
         form = ShelfCropForm(request.POST)
         if form.is_valid():
             crop = form.save(commit=False)
             crop.plot = plot
+            crop.organization = current_organization or plot.organization  # 組織を自動設定
             crop.save()
             messages.success(request, f'作物「{crop.variety}」を棚「{plot.shelf_number}」に追加しました')
             return redirect('cultivation:plot_detail', plot_id=plot.id)
@@ -2789,10 +2846,12 @@ def crop_create_for_level(request, plot_id, level):
                 # 作物名は登録済み作物から自動取得
                 variety = selected_crop.name
                 
+                current_organization = get_current_organization(request)
                 ShelfCrop.objects.create(
                     plot=plot,
                     level=level,
                     variety=variety,
+                    organization=current_organization or plot.organization,  # 組織を自動設定
                     planting_date=planting_date,
                     expected_harvest_date=expected_harvest_date,
                     notes=notes
@@ -2835,3 +2894,297 @@ def crop_delete_from_level(request, crop_id):
         'crop': crop,
     }
     return render(request, 'cultivation/crop_confirm_delete.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def schedule_view(request):
+    """栽培スケジュール管理画面（全体）"""
+    from .models import ShelfCrop, CultivationSchedule, CropProcess, CultivationLayout, Plot
+    from datetime import datetime, timedelta
+
+    # クエリパラメータから日付範囲を取得（デフォルトは今日から60日間）
+    today = datetime.now().date()
+    start_date = request.GET.get('start_date', today.strftime('%Y-%m-%d'))
+    end_date = request.GET.get('end_date', (today + timedelta(days=60)).strftime('%Y-%m-%d'))
+
+    # レイアウト一覧を取得
+    layouts = CultivationLayout.objects.all()
+
+    # スケジュール一覧を取得（日付範囲でフィルタ）
+    schedules = CultivationSchedule.objects.filter(
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related(
+        'shelf_crop', 'shelf_crop__plot', 'process'
+    )
+
+    # 追加フィルタを適用
+    plot_id = request.GET.get('plot_id')
+    crop_name = request.GET.get('crop_name')
+    process_id = request.GET.get('process_id')
+
+    if plot_id:
+        schedules = schedules.filter(shelf_crop__plot_id=plot_id)
+    if crop_name:
+        schedules = schedules.filter(shelf_crop__variety__icontains=crop_name)
+    if process_id:
+        schedules = schedules.filter(process_id=process_id)
+
+    schedules = schedules.order_by('shelf_crop__plot__shelf_number', 'shelf_crop__level', 'start_date')
+
+    # 工程マスターを取得
+    processes = CropProcess.objects.all().order_by('display_order')
+
+    # 棚作物一覧を取得（収穫済みでないもの）
+    shelf_crops = ShelfCrop.objects.filter(
+        harvest_date__isnull=True
+    ).select_related('plot').order_by('plot__shelf_number', 'level')
+
+    # フィルタ用の棚リストを取得（重複なし）
+    plots = Plot.objects.filter(
+        shelf_crops__harvest_date__isnull=True
+    ).distinct().order_by('shelf_number')
+
+    context = {
+        'layouts': layouts,
+        'schedules': schedules,
+        'processes': processes,
+        'shelf_crops': shelf_crops,
+        'plots': plots,
+        'start_date': start_date,
+        'end_date': end_date,
+        'filter_type': 'all',
+    }
+    return render(request, 'cultivation/schedule_view.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def schedule_view_layout(request, layout_id):
+    """栽培スケジュール管理画面（レイアウト別）"""
+    from .models import ShelfCrop, CultivationSchedule, CropProcess, CultivationLayout, Plot
+    from datetime import datetime, timedelta
+
+    layout = get_object_or_404(CultivationLayout, id=layout_id)
+
+    # クエリパラメータから日付範囲を取得
+    today = datetime.now().date()
+    start_date = request.GET.get('start_date', today.strftime('%Y-%m-%d'))
+    end_date = request.GET.get('end_date', (today + timedelta(days=60)).strftime('%Y-%m-%d'))
+
+    # レイアウト一覧を取得（フィルタ用）
+    layouts = CultivationLayout.objects.all()
+
+    # このレイアウトのスケジュールを取得
+    schedules = CultivationSchedule.objects.filter(
+        shelf_crop__plot__layout=layout,
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related(
+        'shelf_crop', 'shelf_crop__plot', 'process'
+    )
+
+    # 追加フィルタを適用
+    plot_id = request.GET.get('plot_id')
+    crop_name = request.GET.get('crop_name')
+    process_id = request.GET.get('process_id')
+
+    if plot_id:
+        schedules = schedules.filter(shelf_crop__plot_id=plot_id)
+    if crop_name:
+        schedules = schedules.filter(shelf_crop__variety__icontains=crop_name)
+    if process_id:
+        schedules = schedules.filter(process_id=process_id)
+
+    schedules = schedules.order_by('shelf_crop__plot__shelf_number', 'shelf_crop__level', 'start_date')
+
+    # 工程マスターを取得
+    processes = CropProcess.objects.all().order_by('display_order')
+
+    # このレイアウトの棚作物一覧を取得
+    shelf_crops = ShelfCrop.objects.filter(
+        plot__layout=layout,
+        harvest_date__isnull=True
+    ).select_related('plot').order_by('plot__shelf_number', 'level')
+
+    # フィルタ用の棚リストを取得（重複なし）
+    plots = Plot.objects.filter(
+        layout=layout,
+        shelf_crops__harvest_date__isnull=True
+    ).distinct().order_by('shelf_number')
+
+    context = {
+        'layouts': layouts,
+        'current_layout': layout,
+        'schedules': schedules,
+        'processes': processes,
+        'shelf_crops': shelf_crops,
+        'plots': plots,
+        'start_date': start_date,
+        'end_date': end_date,
+        'filter_type': 'layout',
+    }
+    return render(request, 'cultivation/schedule_view.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def schedule_view_plot(request, plot_id):
+    """栽培スケジュール管理画面（棚別）"""
+    from .models import ShelfCrop, CultivationSchedule, CropProcess, Plot, CultivationLayout
+    from datetime import datetime, timedelta
+
+    plot = get_object_or_404(Plot, id=plot_id)
+
+    # クエリパラメータから日付範囲を取得
+    today = datetime.now().date()
+    start_date = request.GET.get('start_date', today.strftime('%Y-%m-%d'))
+    end_date = request.GET.get('end_date', (today + timedelta(days=60)).strftime('%Y-%m-%d'))
+
+    # レイアウト一覧を取得（フィルタ用）
+    layouts = CultivationLayout.objects.all()
+
+    # この棚のスケジュールを取得
+    schedules = CultivationSchedule.objects.filter(
+        shelf_crop__plot=plot,
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related(
+        'shelf_crop', 'shelf_crop__plot', 'process'
+    )
+
+    # 追加フィルタを適用
+    crop_name = request.GET.get('crop_name')
+    process_id = request.GET.get('process_id')
+
+    if crop_name:
+        schedules = schedules.filter(shelf_crop__variety__icontains=crop_name)
+    if process_id:
+        schedules = schedules.filter(process_id=process_id)
+
+    schedules = schedules.order_by('shelf_crop__level', 'start_date')
+
+    # 工程マスターを取得
+    processes = CropProcess.objects.all().order_by('display_order')
+
+    # この棚の作物一覧を取得
+    shelf_crops = ShelfCrop.objects.filter(
+        plot=plot,
+        harvest_date__isnull=True
+    ).select_related('plot').order_by('level')
+
+    # フィルタ用の棚リストを取得（この棚のみ）
+    plots = [plot]
+
+    context = {
+        'layouts': layouts,
+        'current_plot': plot,
+        'schedules': schedules,
+        'processes': processes,
+        'shelf_crops': shelf_crops,
+        'plots': plots,
+        'start_date': start_date,
+        'end_date': end_date,
+        'filter_type': 'plot',
+    }
+    return render(request, 'cultivation/schedule_view.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def schedule_templates(request):
+    """栽培テンプレート管理画面"""
+    from .models import CropTemplate, Crop, CropProcess
+
+    # すべてのテンプレートを取得
+    templates = CropTemplate.objects.all().prefetch_related(
+        'processes', 'processes__process'
+    ).select_related('crop').order_by('crop__name', 'name')
+
+    # 作物マスターを取得（テンプレート作成用）
+    crops = Crop.objects.all().order_by('name')
+
+    # 工程マスターを取得（テンプレート作成用）
+    processes = CropProcess.objects.all().order_by('display_order')
+
+    context = {
+        'templates': templates,
+        'crops': crops,
+        'processes': processes,
+    }
+    return render(request, 'cultivation/schedule_templates.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def schedule_export_pdf(request):
+    """スケジュールをPDFでエクスポート"""
+    from django.http import HttpResponse
+    from django.template.loader import render_to_string
+    from weasyprint import HTML
+    from .models import ShelfCrop, CultivationSchedule, CropProcess, CultivationLayout
+    from datetime import datetime, timedelta
+    import tempfile
+
+    # クエリパラメータから日付範囲を取得
+    today = datetime.now().date()
+    start_date = request.GET.get('start_date', today.strftime('%Y-%m-%d'))
+    end_date = request.GET.get('end_date', (today + timedelta(days=60)).strftime('%Y-%m-%d'))
+    layout_id = request.GET.get('layout_id')
+    plot_id = request.GET.get('plot_id')
+
+    # スケジュール一覧を取得
+    schedules = CultivationSchedule.objects.filter(
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related('shelf_crop', 'shelf_crop__plot', 'process')
+
+    # フィルタを適用
+    if layout_id:
+        schedules = schedules.filter(shelf_crop__plot__layout_id=layout_id)
+    if plot_id:
+        schedules = schedules.filter(shelf_crop__plot_id=plot_id)
+
+    schedules = schedules.order_by('shelf_crop__plot__shelf_number', 'shelf_crop__level', 'start_date')
+
+    # 工程マスターを取得
+    processes = CropProcess.objects.all().order_by('display_order')
+
+    # 棚作物一覧を取得
+    shelf_crops = ShelfCrop.objects.filter(
+        harvest_date__isnull=True
+    ).select_related('plot').order_by('plot__shelf_number', 'level')
+
+    if layout_id:
+        shelf_crops = shelf_crops.filter(plot__layout_id=layout_id)
+    if plot_id:
+        shelf_crops = shelf_crops.filter(plot_id=plot_id)
+
+    # PDFタイトル
+    title = "栽培スケジュール"
+    if layout_id:
+        layout = CultivationLayout.objects.get(id=layout_id)
+        title += f" - {layout.name}"
+    elif plot_id:
+        from .models import Plot
+        plot = Plot.objects.get(id=plot_id)
+        title += f" - {plot.shelf_number}"
+
+    # HTMLテンプレートをレンダリング
+    context = {
+        'title': title,
+        'start_date': start_date,
+        'end_date': end_date,
+        'schedules': schedules,
+        'processes': processes,
+        'shelf_crops': shelf_crops,
+        'export_date': today.strftime('%Y年%m月%d日'),
+    }
+
+    html_string = render_to_string('cultivation/schedule_pdf_template.html', context)
+
+    # PDFを生成
+    html = HTML(string=html_string)
+    pdf_file = html.write_pdf()
+
+    # HTTPレスポンスとして返す
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="schedule_{today.strftime("%Y%m%d")}.pdf"'
+
+    return response
