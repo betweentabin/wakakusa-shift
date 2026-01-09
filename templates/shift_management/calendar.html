@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
+{% load chart_filters %}
 
 {% block title %}シフトカレンダー{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
 <link rel="stylesheet" href="{% static 'css/calendar_mobile.css' %}">
+<link href="{% static 'css/pending-shift.css' %}" rel="stylesheet">
 <style>
   .calendar-container {
     margin-bottom: 15px;
@@ -88,11 +90,11 @@
   }
   
   .compact-filter {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
     padding: 15px;
     margin-bottom: 20px;
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    border: 1px solid #dee2e6;
   }
   
   .filter-toggle {
@@ -102,6 +104,106 @@
   
   .filter-content {
     margin-top: 15px;
+  }
+
+  /* 承認パネルのスタイル */
+  .approval-panel {
+    background: #495057;
+    border-radius: 8px;
+    color: white;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+  }
+  
+  .approval-header {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .approval-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+  }
+  
+  .stat-item {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 15px 20px;
+    border-radius: 8px;
+    text-align: center;
+    min-width: 120px;
+    backdrop-filter: blur(10px);
+  }
+  
+  .stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+  }
+  
+  .stat-label {
+    font-size: 14px;
+    opacity: 0.9;
+  }
+  
+  .approval-content {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .pending-shift-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-left: 4px solid #ffc107;
+  }
+  
+  .shift-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .shift-details {
+    flex: 1;
+  }
+  
+  .shift-actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .btn-approve {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+  }
+  
+  .btn-reject {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+  }
+  
+  .bulk-actions {
+    padding: 15px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  .no-pending-shifts {
+    text-align: center;
+    padding: 40px 20px;
+    opacity: 0.8;
   }
   
   @media (max-width: 768px) {
@@ -126,13 +228,13 @@
     }
     
     .calendar-header-mobile {
-      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+      background: #6c757d;
       color: white;
       padding: 12px 16px;
       border-radius: 8px;
       margin-bottom: 16px;
       text-align: center;
-      box-shadow: 0 2px 8px rgba(108, 117, 125, 0.15);
+      border: 1px solid #dee2e6;
     }
     
     .calendar-header-mobile h3 {
@@ -154,6 +256,68 @@
     .filter-content {
       margin-top: 12px;
     }
+    
+    .approval-panel {
+      margin-bottom: 15px;
+    }
+    
+    .approval-header {
+      padding: 15px;
+    }
+    
+    .approval-content {
+      padding: 15px;
+      max-height: 300px;
+    }
+    
+    .approval-stats {
+      gap: 10px;
+    }
+    
+    .stat-item {
+      min-width: 100px;
+      padding: 10px 15px;
+    }
+    
+    .stat-number {
+      font-size: 20px;
+    }
+    
+    .shift-info {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    
+    .shift-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+  
+  /* 承認待ちシフトのスタイル */
+  .fc-event.pending-shift {
+    border-style: dashed !important;
+    border-width: 2px !important;
+    opacity: 0.8;
+    background-color: #fff3cd !important;
+    border-color: #ffc107 !important;
+    color: #856404 !important;
+  }
+  
+  .fc-event.pending-shift .fc-event-title {
+    font-weight: bold;
+  }
+  
+  .fc-event.pending-shift:hover {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  
+  /* 承認済みシフトのスタイル */
+  .fc-event.approved-shift {
+    border-style: solid !important;
+    border-width: 1px !important;
   }
 
   /* モバイル向けカレンダー調整 */
@@ -204,14 +368,18 @@
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
       display: flex !important;
       flex-direction: row !important;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: center;
-      gap: 4px;
+      gap: 2px;
     }
 
-    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
-      flex: 0 0 auto;
-      min-width: 60px;
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group .fc-button {
+      flex: 0 0 auto !important;
+      min-width: 30px !important;
+      max-width: 30px !important;
+      font-size: 0.8rem !important;
+      padding: 6px 4px !important;
+      width: 30px !important;
     }
 
     .fc-button {
@@ -278,13 +446,13 @@
   /* 超小型画面向け調整 */
   @media (max-width: 480px) {
     .fc-header-toolbar .fc-toolbar-title {
-      font-size: 1.1rem;
+      font-size: 1rem;
     }
 
     .fc-button {
       font-size: 0.75rem;
       padding: 6px 8px;
-      min-height: 32px;
+      min-height: 36px;
       min-width: 50px;
     }
 
@@ -292,15 +460,105 @@
     .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group {
       display: flex !important;
       flex-direction: row !important;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: center;
-      gap: 2px;
+      gap: 1px;
     }
 
-    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button {
-      flex: 0 0 auto;
-      font-size: 0.7rem;
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group .fc-button {
+      flex: 0 0 auto !important;
+      font-size: 0.7rem !important;
+      padding: 5px 3px !important;
+      min-width: 26px !important;
+      max-width: 26px !important;
+      width: 26px !important;
+    }
+    
+    /* カードのパディング調整 */
+    .card-body {
+      padding: 10px;
+    }
+    
+    .card-header {
+      padding: 8px 10px;
+    }
+    
+    /* フォーム要素の調整 */
+    .form-control {
+      font-size: 14px;
+      padding: 6px 8px;
+    }
+    
+    .btn {
+      font-size: 0.8rem;
+      padding: 6px 10px;
+    }
+    
+    /* シフト凡例の調整 */
+    .shift-legend {
+      margin-bottom: 15px;
+    }
+    
+    .shift-type-item {
+      margin-right: 10px;
+      margin-bottom: 8px;
+      font-size: 0.8rem;
+    }
+    
+    .shift-type-color {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  
+  /* 極小画面（400px以下）向け調整 */
+  @media (max-width: 400px) {
+    .fc-header-toolbar .fc-toolbar-title {
+      font-size: 0.9rem;
+    }
+    
+    .fc-header-toolbar .fc-toolbar-chunk:last-child .fc-button-group .fc-button {
+      font-size: 0.65rem !important;
+      padding: 4px 3px !important;
+      min-height: 32px !important;
+      min-width: 24px !important;
+      max-width: 24px !important;
+      width: 24px !important;
+    }
+    
+    .card-body {
+      padding: 8px;
+    }
+    
+    .card-header {
+      padding: 6px 8px;
+    }
+    
+    .form-control {
+      font-size: 13px;
       padding: 5px 6px;
+    }
+    
+    .btn {
+      font-size: 0.75rem;
+      padding: 5px 8px;
+    }
+    
+    .shift-type-item {
+      font-size: 0.75rem;
+      margin-right: 8px;
+      margin-bottom: 6px;
+    }
+    
+    .shift-type-color {
+      width: 14px;
+      height: 14px;
+    }
+    
+    .quick-action-fab {
+      width: 48px;
+      height: 48px;
+      font-size: 1rem;
     }
   }
 
@@ -322,19 +580,24 @@
       order: 1;
     }
 
-    /* カレンダー: order 3 */
+    /* 承認パネル: order 2 */
     .main-content-container > .row:nth-child(2) {
-      order: 3;
-    }
-
-    /* フィルター: order 2 */
-    .main-content-container > .row:nth-child(3) {
       order: 2;
     }
 
-    /* アクションボタン: order 4 */
+    /* カレンダー: order 3 */
+    .main-content-container > .row:nth-child(3) {
+      order: 3;
+    }
+
+    /* フィルター: order 4 */
     .main-content-container > .row:nth-child(4) {
       order: 4;
+    }
+
+    /* アクションボタン: order 5 */
+    .main-content-container > .row:nth-child(5) {
+      order: 5;
     }
   }
 </style>
@@ -415,6 +678,107 @@
       </div>
     </div>
   </div>
+
+  <!-- 権限情報パネル -->
+  {% if current_staff %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="alert alert-info border-0 shadow-sm">
+        <div class="d-flex align-items-center">
+          <div class="me-3">
+            <i class="fas fa-info-circle fa-2x text-info"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h6 class="alert-heading mb-1">
+              <i class="fas fa-shield-alt me-2"></i>
+              アクセス権限情報
+            </h6>
+            <div class="mb-2">
+              <strong>{{ current_staff.name }}</strong> として
+              <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2">
+                {{ current_staff.get_role_display_with_icon }}
+              </span>
+              でログイン中
+            </div>
+            <div class="small text-muted">
+              {% if user_role == 'manager' %}
+                <i class="fas fa-check-circle text-success me-1"></i>全スタッフのシフト表示・編集・承認が可能です
+              {% elif user_role == 'staff' %}
+                <i class="fas fa-users text-info me-1"></i>職員・アルバイトのシフト表示が可能です
+              {% elif user_role == 'part_time' %}
+                <i class="fas fa-user-friends text-warning me-1"></i>アルバイトスタッフのシフト表示が可能です
+              {% elif user_role == 'user' %}
+                <i class="fas fa-user text-secondary me-1"></i>自分のシフトのみ表示・編集が可能です
+              {% else %}
+                <i class="fas fa-exclamation-triangle text-danger me-1"></i>権限が設定されていません
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 承認パネル（管理者のみ表示） -->
+  {% if user.is_superuser or user_role == 'manager' %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="approval-panel">
+        <div class="approval-header">
+          <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+              <i class="fas fa-clipboard-check me-2"></i>
+              シフト承認管理
+            </h5>
+            <button class="btn btn-sm btn-outline-light" id="refreshApprovalPanel">
+              <i class="fas fa-sync-alt"></i>
+            </button>
+          </div>
+          <div class="approval-stats" id="approvalStats">
+            <div class="stat-item">
+              <span class="stat-number" id="pendingCount">-</span>
+              <span class="stat-label">承認待ち</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number" id="approvedCount">-</span>
+              <span class="stat-label">承認済み</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number" id="rejectedCount">-</span>
+              <span class="stat-label">却下</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="approval-content" id="approvalContent">
+          <div class="text-center">
+            <div class="spinner-border text-light" role="status">
+              <span class="visually-hidden">読み込み中...</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bulk-actions" id="bulkActions" style="display: none;">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <input type="checkbox" id="selectAllShifts" class="form-check-input me-2">
+              <label for="selectAllShifts" class="form-check-label">全て選択</label>
+            </div>
+            <div>
+              <button class="btn btn-success btn-sm me-2" id="bulkApproveBtn">
+                <i class="fas fa-check"></i> 一括承認
+              </button>
+              <button class="btn btn-danger btn-sm" id="bulkRejectBtn">
+                <i class="fas fa-times"></i> 一括却下
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- メインカレンダー -->
   <div class="row mb-4">
@@ -504,97 +868,77 @@
                 <i class="fas fa-plus"></i> 新規シフト登録
               </a>
               <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-success">
-                <i class="fas fa-calendar-plus"></i> 複数シフト一括登録
+                <i class="fas fa-layer-group"></i> 一括シフト登録
               </a>
               <a href="{% url 'shift_management:shift_reason_create' %}" class="btn btn-warning">
                 <i class="fas fa-calendar-times"></i> 事由登録
               </a>
-              <a href="{% url 'shift_management:template_list' %}" class="btn btn-info">
-                <i class="fas fa-clipboard-list"></i> テンプレート管理
-              </a>
-              <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary">
+              <a href="{% url 'shift_management:staff_list' %}" class="btn btn-primary">
                 <i class="fas fa-users"></i> スタッフ管理
               </a>
-              <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning">
+              <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-info">
                 <i class="fas fa-tags"></i> シフト種別管理
               </a>
-              <a href="{% url 'shift_management:shift_export' %}" class="btn btn-primary">
-                <i class="fas fa-file-export"></i> シフト表印刷・エクスポート
+              <a href="{% url 'shift_management:template_list' %}" class="btn btn-secondary">
+                <i class="fas fa-copy"></i> テンプレート管理
               </a>
-              <a href="{% url 'shift_management:time_chart' %}" class="btn btn-info">
-                <i class="fas fa-chart-bar"></i> 時間チャートを確認する
+              <a href="{% url 'shift_management:time_chart' %}" class="btn btn-dark">
+                <i class="fas fa-chart-bar"></i> 時間チャート
               </a>
+              <a href="{% url 'shift_management:shift_export' %}" class="btn btn-outline-primary">
+                <i class="fas fa-download"></i> エクスポート
+              </a>
+              <a href="{% url 'shift_management:leave_request_list' %}" class="btn btn-outline-success">
+                <i class="fas fa-user-clock"></i> 休み・通院申請
+              </a>
+              {% if user_role == 'manager' %}
+              <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-outline-info">
+                <i class="fas fa-handshake"></i> シフト打診
+              </a>
+              {% endif %}
             </div>
           </div>
         </div>
       </div>
       
-      <!-- モバイル用簡易アクションボタン -->
-      <div class="extended-action-buttons d-md-none">
-        <div class="card">
-          <div class="card-header">
-            <h6 class="card-title mb-0">
-              <i class="fas fa-tools me-2"></i>
-              クイック操作
-            </h6>
-          </div>
-          <div class="card-body">
-            <div class="row g-2">
-              <div class="col-6">
-                <a href="{% url 'shift_management:shift_create' %}" class="btn btn-success w-100">
-                  <i class="fas fa-plus me-2"></i>
-                  新規登録
+      <!-- モバイル用FABボタン -->
+      <div class="mobile-quick-actions d-md-none">
+        <a href="{% url 'shift_management:shift_create' %}" class="quick-action-fab" title="新規シフト登録">
+          <i class="fas fa-plus"></i>
+                </a>
+        <a href="{% url 'shift_management:staff_list' %}" class="quick-action-fab" title="スタッフ管理">
+          <i class="fas fa-users"></i>
+                </a>
+        <a href="{% url 'shift_management:shift_export' %}" class="quick-action-fab" title="エクスポート">
+          <i class="fas fa-download"></i>
                 </a>
               </div>
-              <div class="col-6">
-                <a href="{% url 'shift_management:bulk_shift_create' %}" class="btn btn-info w-100">
-                  <i class="fas fa-calendar-plus me-2"></i>
-                  一括登録
-                </a>
               </div>
-              <div class="col-6">
-                <a href="{% url 'shift_management:shift_reason_create' %}" class="btn btn-warning w-100">
-                  <i class="fas fa-calendar-times me-2"></i>
-                  事由登録
-                </a>
               </div>
-              <div class="col-6">
-                <a href="{% url 'shift_management:staff_list' %}" class="btn btn-secondary w-100">
-                  <i class="fas fa-users me-2"></i>
-                  スタッフ
-                </a>
+  
+  </div> <!-- main-content-container終了 -->
               </div>
-              <div class="col-6">
-                <a href="{% url 'shift_management:shift_type_list' %}" class="btn btn-warning w-100">
-                  <i class="fas fa-tags me-2"></i>
-                  種別
-                </a>
-              </div>
-              <div class="col-6">
-                <a href="{% url 'shift_management:time_chart' %}" class="btn btn-info w-100">
-                  <i class="fas fa-chart-bar me-2"></i>
-                  時間チャート
-                </a>
-              </div>
+
+<!-- 却下理由入力モーダル -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">シフト却下理由</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="rejectionReason" class="form-label">却下理由（任意）</label>
+          <textarea class="form-control" id="rejectionReason" rows="3" placeholder="却下理由を入力してください..."></textarea>
           </div>
         </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-danger" id="confirmRejectBtn">却下する</button>
       </div>
     </div>
   </div>
-  </div> <!-- main-content-container 閉じタグ -->
-  
-  <!-- モバイル専用フローティングアクションボタン -->
-  <div class="mobile-quick-actions d-md-none">
-    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:time_chart' %}'">
-      <i class="fas fa-chart-bar"></i>
-    </button>
-    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:shift_export' %}'">
-      <i class="fas fa-file-export"></i>
-    </button>
-    <button class="quick-action-fab" onclick="location.href='{% url 'shift_management:template_list' %}'">
-      <i class="fas fa-clipboard-list"></i>
-    </button>
   </div>
   
   <!-- シフト詳細モーダル -->
@@ -641,11 +985,15 @@
             <a href="#" class="btn btn-warning" id="reasonBtn">
               <i class="fas fa-calendar-times"></i> 事由登録
             </a>
+            {% if user_role == 'manager' %}
+            <a href="#" class="btn btn-outline-info" id="proposalBtn">
+              <i class="fas fa-handshake"></i> シフト打診
+            </a>
+            {% endif %}
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-        </div>
       </div>
     </div>
   </div>
@@ -660,13 +1008,12 @@
     const calendarEl = document.getElementById('calendar');
     let calendar;
     
+    // 承認パネル関連の変数
+    let currentRejectShiftId = null;
+    
     // カレンダーインスタンスを初期化
     function initCalendar() {
       let initialView = 'dayGridMonth';
-      // モバイルでも月表示をデフォルトに（横スクロール対応のため）
-      // if (window.innerWidth < 768) {
-      //   initialView = 'listWeek';
-      // }
 
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: initialView,
@@ -683,17 +1030,6 @@
           day: '日',
           list: 'リスト'
         },
-        // windowResize: function(arg) {
-        //   if (window.innerWidth < 768) {
-        //     if (calendar.view.type !== 'listWeek') {
-        //       calendar.changeView('listWeek');
-        //     }
-        //   } else {
-        //     if (calendar.view.type === 'listWeek') {
-        //       calendar.changeView('dayGridMonth');
-        //     }
-        //   }
-        // },
         events: function(info, successCallback, failureCallback) {
           // APIからシフトデータを取得
           fetch(`{% url 'shift_management:api_shifts' %}?start=${info.startStr}&end=${info.endStr}`)
@@ -738,7 +1074,7 @@
           }
           
           // 編集・削除ボタンのリンクを設定
-          document.getElementById('editShiftBtn').href = `/shift-management/shift/${shiftId}/edit/`;
+          document.getElementById('editShiftBtn').href = `/shift/${shiftId}/edit/`;
           document.getElementById('deleteShiftBtn').dataset.shiftId = shiftId;
           
           // モーダルを表示
@@ -762,6 +1098,11 @@
           const reasonBaseUrl = "{% url 'shift_management:shift_reason_create' %}";
           document.getElementById('reasonBtn').href = `${reasonBaseUrl}?date=${info.dateStr}`;
           
+          {% if user_role == 'manager' %}
+          const proposalBaseUrl = "{% url 'shift_management:shift_proposal_create' %}";
+          document.getElementById('proposalBtn').href = `${proposalBaseUrl}?date=${info.dateStr}`;
+          {% endif %}
+          
           // モーダルを表示
           const modal = new bootstrap.Modal(document.getElementById('newShiftModal'));
           modal.show();
@@ -772,6 +1113,15 @@
           hour: '2-digit',
           minute: '2-digit',
           hour12: false
+        },
+        // イベント表示時のスタイル調整
+        eventDidMount: function(info) {
+          // 承認状態に応じてCSSクラスを追加
+          if (info.event.extendedProps.is_pending) {
+            info.el.classList.add('pending-shift');
+          } else if (info.event.extendedProps.approval_status === 'approved') {
+            info.el.classList.add('approved-shift');
+          }
         },
         // ドラッグ＆ドロップ機能（新規追加）
         editable: true,
@@ -823,8 +1173,319 @@
       calendar.render();
     }
     
+    // 承認パネルの初期化
+    function initApprovalPanel() {
+      if (!document.getElementById('approvalContent')) {
+        return; // 承認パネルが存在しない場合（一般ユーザー）
+      }
+      
+      loadPendingShifts();
+      
+      // リフレッシュボタン
+      document.getElementById('refreshApprovalPanel').addEventListener('click', function() {
+        loadPendingShifts();
+      });
+    
+      // 一括承認ボタン
+      document.getElementById('bulkApproveBtn').addEventListener('click', function() {
+        const selectedShifts = getSelectedShifts();
+        if (selectedShifts.length === 0) {
+          alert('承認するシフトを選択してください。');
+          return;
+        }
+        
+        if (confirm(`${selectedShifts.length}件のシフトを一括承認しますか？`)) {
+          bulkApproveShifts(selectedShifts);
+        }
+      });
+      
+      // 一括却下ボタン
+      document.getElementById('bulkRejectBtn').addEventListener('click', function() {
+        const selectedShifts = getSelectedShifts();
+        if (selectedShifts.length === 0) {
+          alert('却下するシフトを選択してください。');
+          return;
+        }
+        
+        // 却下理由モーダルを表示
+        currentRejectShiftId = selectedShifts; // 配列を保存
+        const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+        modal.show();
+      });
+      
+      // 全選択チェックボックス
+      document.getElementById('selectAllShifts').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.shift-checkbox');
+        checkboxes.forEach(checkbox => {
+          checkbox.checked = this.checked;
+        });
+      });
+      
+      // 却下確認ボタン
+      document.getElementById('confirmRejectBtn').addEventListener('click', function() {
+        const reason = document.getElementById('rejectionReason').value;
+        
+        if (Array.isArray(currentRejectShiftId)) {
+          // 一括却下
+          bulkRejectShifts(currentRejectShiftId, reason);
+        } else {
+          // 単一却下
+          rejectShift(currentRejectShiftId, reason);
+        }
+        
+        // モーダルを閉じる
+        const modal = bootstrap.Modal.getInstance(document.getElementById('rejectModal'));
+        modal.hide();
+        
+        // リセット
+        document.getElementById('rejectionReason').value = '';
+        currentRejectShiftId = null;
+      });
+    }
+    
+    // 承認待ちシフトを読み込む
+    function loadPendingShifts() {
+      const content = document.getElementById('approvalContent');
+      const stats = document.getElementById('approvalStats');
+      const bulkActions = document.getElementById('bulkActions');
+      
+      // ローディング表示
+      content.innerHTML = `
+        <div class="text-center">
+          <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">読み込み中...</span>
+          </div>
+        </div>
+      `;
+      
+      fetch('{% url "shift_management:api_pending_shifts" %}')
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          // 統計を更新
+          document.getElementById('pendingCount').textContent = data.count;
+          
+          if (data.shifts.length === 0) {
+            content.innerHTML = `
+              <div class="no-pending-shifts">
+                <i class="fas fa-check-circle fa-3x mb-3"></i>
+                <h6>承認待ちのシフトはありません</h6>
+                <p class="mb-0">全てのシフトが処理済みです</p>
+              </div>
+            `;
+            bulkActions.style.display = 'none';
+          } else {
+            // 承認待ちシフトを表示
+            let html = '';
+            data.shifts.forEach(shift => {
+              html += `
+                <div class="pending-shift-item">
+                  <div class="shift-info">
+                    <div class="shift-details">
+                      <div class="d-flex align-items-center mb-2">
+                        <input type="checkbox" class="form-check-input shift-checkbox me-2" value="${shift.id}">
+                        <strong>${shift.staff_name}</strong>
+                        <span class="badge bg-warning ms-2">${shift.shift_type}</span>
+                      </div>
+                      <div class="text-light">
+                        <small>
+                          <i class="fas fa-calendar me-1"></i>
+                          ${shift.date_display}（${shift.weekday}）
+                          ${shift.start_time ? `${shift.start_time}-${shift.end_time}` : ''}
+                        </small>
+                      </div>
+                      <div class="text-light">
+                        <small>
+                          <i class="fas fa-user me-1"></i>
+                          作成者: ${shift.created_by} | ${shift.created_at}
+                        </small>
+                      </div>
+                      ${shift.notes ? `<div class="text-light mt-1"><small><i class="fas fa-sticky-note me-1"></i>${shift.notes}</small></div>` : ''}
+                    </div>
+                    <div class="shift-actions">
+                      <button class="btn btn-approve" onclick="approveShift(${shift.id})">
+                        <i class="fas fa-check"></i>
+                      </button>
+                      <button class="btn btn-reject" onclick="showRejectModal(${shift.id})">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `;
+            });
+            
+            content.innerHTML = html;
+            bulkActions.style.display = 'block';
+          }
+        })
+        .catch(error => {
+          console.error('Error loading pending shifts:', error);
+          content.innerHTML = `
+            <div class="text-center text-light">
+              <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+              <p>承認待ちシフトの読み込みに失敗しました</p>
+              <button class="btn btn-outline-light btn-sm" onclick="loadPendingShifts()">再試行</button>
+            </div>
+          `;
+        });
+    }
+    
+    // 選択されたシフトIDを取得
+    function getSelectedShifts() {
+      const checkboxes = document.querySelectorAll('.shift-checkbox:checked');
+      return Array.from(checkboxes).map(cb => parseInt(cb.value));
+    }
+    
+    // シフト承認
+    function approveShift(shiftId) {
+      fetch('{% url "shift_management:api_approve_shift" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ shift_id: shiftId })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showMessage(data.message, 'success');
+          loadPendingShifts();
+        if (calendar) {
+          calendar.refetchEvents();
+        }
+        } else {
+          throw new Error(data.error || '承認に失敗しました');
+        }
+      })
+      .catch(error => {
+        console.error('Error approving shift:', error);
+        showMessage('承認に失敗しました: ' + error.message, 'error');
+      });
+    }
+    
+    // シフト却下モーダル表示
+    function showRejectModal(shiftId) {
+      currentRejectShiftId = shiftId;
+      const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+      modal.show();
+    }
+    
+    // シフト却下
+    function rejectShift(shiftId, reason = '') {
+      fetch('{% url "shift_management:api_reject_shift" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ 
+          shift_id: shiftId,
+          rejection_reason: reason
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showMessage(data.message, 'success');
+          loadPendingShifts();
+        } else {
+          throw new Error(data.error || '却下に失敗しました');
+        }
+      })
+      .catch(error => {
+        console.error('Error rejecting shift:', error);
+        showMessage('却下に失敗しました: ' + error.message, 'error');
+      });
+    }
+    
+    // 一括承認
+    function bulkApproveShifts(shiftIds) {
+      fetch('{% url "shift_management:api_bulk_approve_shifts" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ shift_ids: shiftIds })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          showMessage(data.message, 'success');
+          loadPendingShifts();
+          if (calendar) {
+            calendar.refetchEvents();
+          }
+        } else {
+          throw new Error(data.error || '一括承認に失敗しました');
+        }
+      })
+      .catch(error => {
+        console.error('Error bulk approving shifts:', error);
+        showMessage('一括承認に失敗しました: ' + error.message, 'error');
+      });
+    }
+    
+    // 一括却下
+    function bulkRejectShifts(shiftIds, reason = '') {
+      // 個別に却下処理を実行
+      let completed = 0;
+      let errors = 0;
+      
+      shiftIds.forEach(shiftId => {
+        rejectShift(shiftId, reason);
+        completed++;
+      });
+      
+      if (errors === 0) {
+        showMessage(`${completed}件のシフトを一括却下しました`, 'success');
+      } else {
+        showMessage(`${completed - errors}件を却下、${errors}件でエラーが発生しました`, 'warning');
+      }
+    }
+    
+    // メッセージ表示
+    function showMessage(message, type = 'info') {
+      const alertClass = type === 'success' ? 'alert-success' : 
+                        type === 'error' ? 'alert-danger' : 
+                        type === 'warning' ? 'alert-warning' : 'alert-info';
+      
+        const alertDiv = document.createElement('div');
+      alertDiv.className = `alert ${alertClass} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+      // アラートを表示
+           const container = document.querySelector('.container-fluid.py-4');
+           if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+        }
+        
+      // 5秒後に自動削除
+        setTimeout(() => {
+        if (alertDiv.parentNode) {
+          alertDiv.remove();
+          }
+        }, 5000);
+    }
+    
+    // グローバル関数として定義（HTMLから呼び出すため）
+    window.approveShift = approveShift;
+    window.showRejectModal = showRejectModal;
+    window.loadPendingShifts = loadPendingShifts;
+    
     // カレンダーを初期化
     initCalendar();
+    
+    // 承認パネルを初期化
+    initApprovalPanel();
     
     // URLパラメータをチェックして自動更新
     function checkForAutoRefresh() {
@@ -840,33 +1501,7 @@
         window.history.replaceState({}, document.title, newUrl);
         
         // 更新完了メッセージを表示
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
-        alertDiv.setAttribute('role', 'alert');
-        alertDiv.innerHTML = `
-          <strong>更新完了!</strong> カレンダーが最新の情報に更新されました。
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-        
-        // アラートを表示 (h1タグの後に挿入)
-        const mainHeading = document.querySelector('.container-fluid.py-4 > h1');
-        if (mainHeading) {
-          mainHeading.parentNode.insertBefore(alertDiv, mainHeading.nextSibling);
-        } else {
-          // h1が見つからない場合はコンテナの最初に追加
-           const container = document.querySelector('.container-fluid.py-4');
-           if (container) {
-                container.insertBefore(alertDiv, container.firstChild);
-           }
-        }
-        
-        // 5秒後にアラートを自動的に閉じる
-        setTimeout(() => {
-          const bsAlert = bootstrap.Alert.getOrCreateInstance(alertDiv);
-          if (bsAlert) {
-            bsAlert.close();
-          }
-        }, 5000);
+        showMessage('カレンダーが最新の情報に更新されました。', 'success');
       }
     }
     
@@ -930,7 +1565,7 @@
         formData.append('shift_id', shiftId);
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-        fetch(`/api/shift-delete/`, { 
+        fetch(`/shift-management/api/shift-delete/`, { 
           method: 'POST',
           body: formData
         })

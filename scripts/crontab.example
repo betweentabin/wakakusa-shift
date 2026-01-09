@@ -1,0 +1,81 @@
+# わかくさシフト本番環境 cron設定例
+# 使用方法: crontab -e でこの内容を追加
+
+# 環境変数設定
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+DJANGO_SETTINGS_MODULE=core.settings.production
+
+# プロジェクトディレクトリ（実際のパスに変更してください）
+PROJECT_DIR=/path/to/wakakusa-shift-1
+
+# 1. データベースバックアップ（毎日午前2時）
+0 2 * * * cd $PROJECT_DIR && python3 scripts/backup_database.py >> logs/backup.log 2>&1
+
+# 2. システム監視（5分ごと）
+*/5 * * * * cd $PROJECT_DIR && python3 scripts/monitor.py >> logs/monitor.log 2>&1
+
+# 3. ログローテーション（毎日午前3時）
+0 3 * * * cd $PROJECT_DIR && find logs/ -name "*.log" -size +100M -exec gzip {} \; >> logs/logrotate.log 2>&1
+
+# 4. 古いバックアップファイル削除（毎週日曜日午前4時）
+0 4 * * 0 cd $PROJECT_DIR && find backups/ -name "wakakusa_shift_backup_*" -mtime +30 -delete >> logs/cleanup.log 2>&1
+
+# 5. キャッシュクリア（毎日午前1時）
+0 1 * * * cd $PROJECT_DIR && python3 manage_prod.py shell -c "from django.core.cache import cache; cache.clear(); print('Cache cleared')" >> logs/cache.log 2>&1
+
+# 6. データベース最適化（毎週月曜日午前5時）
+0 5 * * 1 cd $PROJECT_DIR && python3 -c "
+import os, django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings.production')
+django.setup()
+from shift_management.utils.cache import DatabaseOptimization
+DatabaseOptimization.optimize_shift_queries()
+print('Database optimized')
+" >> logs/db_optimize.log 2>&1
+
+# 7. 静的ファイル更新チェック（毎日午前6時）
+0 6 * * * cd $PROJECT_DIR && python3 manage_prod.py collectstatic --noinput >> logs/collectstatic.log 2>&1
+
+# 8. セキュリティログ分析（毎日午後11時）
+0 23 * * * cd $PROJECT_DIR && python3 -c "
+import os, django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings.production')
+django.setup()
+# セキュリティログの分析処理
+print('Security log analysis completed')
+" >> logs/security_analysis.log 2>&1
+
+# 9. ヘルスチェック（1分ごと）
+* * * * * curl -f http://localhost:8000/health/ > /dev/null 2>&1 || echo "$(date): Health check failed" >> logs/health_check.log
+
+# 10. ディスク容量チェック（1時間ごと）
+0 * * * * df -h | awk '$5 > 90 {print "$(date): Disk usage warning: " $0}' >> logs/disk_usage.log
+
+# 11. プロセス監視（5分ごと）
+*/5 * * * * pgrep -f "gunicorn.*wakakusa" > /dev/null || echo "$(date): Gunicorn process not found" >> logs/process_monitor.log
+
+# 12. SSL証明書有効期限チェック（毎日午前7時）
+0 7 * * * openssl x509 -in /path/to/ssl/certificate.crt -noout -dates | grep "notAfter" | awk -F= '{print $2}' | xargs -I {} date -d {} +%s | awk '{if ($1 - systime() < 2592000) print "SSL certificate expires within 30 days"}' >> logs/ssl_check.log 2>&1
+
+# 注意事項:
+# 1. PROJECT_DIR を実際のプロジェクトパスに変更してください
+# 2. SSL証明書のパスを実際のパスに変更してください
+# 3. ログファイルが大きくなりすぎないよう定期的にローテーションしてください
+# 4. メール通知が必要な場合は、各コマンドの最後に "|| mail -s 'Error' admin@example.com" を追加してください
+
+# ログローテーション設定例（logrotate）
+# /etc/logrotate.d/wakakusa-shift に以下を追加:
+#
+# /path/to/wakakusa-shift-1/logs/*.log {
+#     daily
+#     missingok
+#     rotate 30
+#     compress
+#     delaycompress
+#     notifempty
+#     create 644 www-data www-data
+#     postrotate
+#         systemctl reload gunicorn-wakakusa-shift
+#     endscript
+# } 

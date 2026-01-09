@@ -1,0 +1,17 @@
+# ~/.ssh/config に追加する設定
+
+# 既存の環境
+Host bpo-taiga
+    HostName 162.43.31.158
+    User taigakuwata
+    Port 22
+    IdentityFile ~/.ssh/id_rsa_BPO_taigakuwata
+    IdentitiesOnly yes
+
+# 新しい環境
+Host wakakusa-01
+    HostName 162.43.31.158
+    User wakakusa-01
+    Port 22
+    IdentityFile ~/.ssh/id_rsa_BPO_taigakuwata
+    IdentitiesOnly yes 

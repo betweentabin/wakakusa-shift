@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block title %}シフト打診回答{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <!-- 打診内容表示 -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-envelope-open"></i> シフト打診内容
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>打診者:</strong></div>
+                        <div class="col-sm-9">{{ proposal.proposed_by.username }}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>打診日時:</strong></div>
+                        <div class="col-sm-9">{{ proposal.created_at|date:"Y年m月d日 H:i" }}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>シフト日:</strong></div>
+                        <div class="col-sm-9">{{ proposal.shift_date|date:"Y年m月d日 (l)" }}</div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>勤務時間:</strong></div>
+                        <div class="col-sm-9">{{ proposal.start_time|time:"H:i" }} 〜 {{ proposal.end_time|time:"H:i" }}</div>
+                    </div>
+                    {% if proposal.shift_type %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>シフト種別:</strong></div>
+                        <div class="col-sm-9">
+                            <span class="badge" style="background-color: {{ proposal.shift_type.color }}">
+                                {{ proposal.shift_type.name }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if proposal.position %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>担当ポジション:</strong></div>
+                        <div class="col-sm-9">{{ proposal.position }}</div>
+                    </div>
+                    {% endif %}
+                    {% if proposal.response_deadline %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>回答期限:</strong></div>
+                        <div class="col-sm-9">
+                            <span class="text-danger">
+                                <i class="fas fa-clock"></i> {{ proposal.response_deadline|date:"Y年m月d日 H:i" }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if proposal.message %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3"><strong>メッセージ:</strong></div>
+                        <div class="col-sm-9">
+                            <div class="alert alert-light border">
+                                {{ proposal.message|linebreaks }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 回答フォーム -->
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-reply"></i> 回答
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label">{{ form.status.label }}</label>
+                            <div class="col-sm-9">
+                                {% for choice in form.status %}
+                                    <div class="form-check">
+                                        {{ choice.tag }}
+                                        <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                            {% if choice.choice_value == 'accepted' %}
+                                                <i class="fas fa-check text-success"></i> {{ choice.choice_label }}
+                                            {% else %}
+                                                <i class="fas fa-times text-danger"></i> {{ choice.choice_label }}
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                                {% if form.status.errors %}
+                                    <div class="text-danger">{{ form.status.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <label for="{{ form.response_message.id_for_label }}" class="col-sm-3 col-form-label">{{ form.response_message.label }}</label>
+                            <div class="col-sm-9">
+                                {{ form.response_message }}
+                                {% if form.response_message.errors %}
+                                    <div class="text-danger">{{ form.response_message.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">回答に関するメッセージがあれば入力してください</small>
+                            </div>
+                        </div>
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-sm-9 offset-sm-3">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> 回答を送信
+                                </button>
+                                <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> 一覧に戻る
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 注意事項 -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-info-circle"></i> 回答について</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li><strong>承諾</strong>した場合、自動的にシフトが作成されます</li>
+                        <li><strong>拒否</strong>した場合、シフトは作成されません</li>
+                        <li>一度回答すると変更できませんので、慎重にお選びください</li>
+                        <li>メッセージは任意ですが、理由があれば記載することをお勧めします</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 承諾選択時にアラートを表示
+document.addEventListener('DOMContentLoaded', function() {
+    const acceptRadio = document.querySelector('input[value="accepted"]');
+    const declineRadio = document.querySelector('input[value="declined"]');
+    
+    if (acceptRadio) {
+        acceptRadio.addEventListener('change', function() {
+            if (this.checked) {
+                const confirmMsg = 'このシフト打診を承諾しますか？\n承諾すると自動的にシフトが作成されます。';
+                if (!confirm(confirmMsg)) {
+                    this.checked = false;
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

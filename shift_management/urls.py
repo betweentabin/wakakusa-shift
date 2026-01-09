@@ -4,8 +4,22 @@ from . import views
 app_name = 'shift_management'
 
 urlpatterns = [
-    # カレンダー表示
-    path('', views.shift_calendar, name='calendar'),
+    # 認証関連
+    path('login/', views.user_login, name='login'),
+    path('logout/', views.user_logout, name='logout'),
+    
+    # ホームページ（権限に応じてリダイレクト）
+    path('', views.home_redirect, name='home'),
+    
+    # カレンダー表示（管理者用）
+    path('calendar/', views.shift_calendar, name='calendar'),
+    
+    # スタッフ用シフト確認・管理
+    path('staff-view/', views.staff_shift_view, name='staff_view'),
+    path('staff-api/shifts/', views.staff_api_shifts, name='staff_api_shifts'),
+    path('staff/shift/create/', views.staff_shift_create, name='staff_shift_create'),
+    path('staff/shift/<int:pk>/edit/', views.staff_shift_edit, name='staff_shift_edit'),
+    path('staff/shift/<int:pk>/delete/', views.staff_shift_delete, name='staff_shift_delete'),
     
     # スタッフ管理
     path('staff/', views.staff_list, name='staff_list'),
@@ -48,6 +62,23 @@ urlpatterns = [
     path('api/shift-update/', views.api_shift_update, name='api_shift_update'),
     path('api/shift-delete/', views.api_shift_delete, name='api_shift_delete'),
     
+    # 承認関連API（新規追加）
+    path('api/pending-shifts/', views.api_pending_shifts, name='api_pending_shifts'),
+    path('api/approve-shift/', views.api_approve_shift, name='api_approve_shift'),
+    path('api/reject-shift/', views.api_reject_shift, name='api_reject_shift'),
+    path('api/bulk-approve-shifts/', views.api_bulk_approve_shifts, name='api_bulk_approve_shifts'),
+    
     # 時間チャート
     path('time-chart/', views.time_chart, name='time_chart'),
+    
+    # 休み・通院申請機能
+    path('leave-request/', views.leave_request_list, name='leave_request_list'),
+    path('leave-request/create/', views.leave_request_create, name='leave_request_create'),
+    path('api/approve-leave-request/', views.api_approve_leave_request, name='api_approve_leave_request'),
+    path('api/reject-leave-request/', views.api_reject_leave_request, name='api_reject_leave_request'),
+    
+    # シフト打診機能
+    path('shift-proposal/', views.shift_proposal_list, name='shift_proposal_list'),
+    path('shift-proposal/create/', views.shift_proposal_create, name='shift_proposal_create'),
+    path('shift-proposal/<int:pk>/respond/', views.shift_proposal_respond, name='shift_proposal_respond'),
 ]

@@ -1,5 +1,9 @@
 from django import forms
-from .models import Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail
+from django.contrib.auth.models import User
+from .models import (
+    Staff, ShiftType, Shift, ShiftTemplate, ShiftTemplateDetail,
+    LeaveRequest, ShiftProposal, StaffCompatibility, Holiday, Event, EventParticipant
+)
 
 # 時間選択肢を生成するヘルパー関数
 def get_time_choices(interval_minutes=30):
@@ -14,16 +18,136 @@ def get_time_choices(interval_minutes=30):
 TIME_CHOICES = get_time_choices(30) # 30分刻みの選択肢
 
 class StaffForm(forms.ModelForm):
+    # ユーザーアカウント作成用フィールド
+    create_user_account = forms.BooleanField(
+        label='ログインアカウントを作成',
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='チェックすると、このスタッフ用のログインアカウントが作成されます'
+    )
+    username = forms.CharField(
+        label='ユーザー名',
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'ログイン時に使用するユーザー名'}),
+        help_text='半角英数字、@/./+/-/_ のみ使用可能'
+    )
+    password = forms.CharField(
+        label='パスワード',
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '8文字以上のパスワード'}),
+        help_text='8文字以上で設定してください'
+    )
+    password_confirm = forms.CharField(
+        label='パスワード（確認）',
+        required=False,
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'パスワードを再入力'}),
+        help_text='確認のため同じパスワードを入力してください'
+    )
+
     class Meta:
         model = Staff
-        fields = ['name', 'phone', 'email', 'position', 'is_active']
+        fields = ['name', 'phone', 'email', 'position', 'role_type', 'is_active']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'position': forms.TextInput(attrs={'class': 'form-control'}),
+            'role_type': forms.Select(attrs={'class': 'form-select'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 編集時はユーザー名を初期値として設定
+        if self.instance and self.instance.pk and self.instance.user:
+            self.fields['username'].initial = self.instance.user.username
+            self.fields['create_user_account'].initial = True
+        
+        # role_typeフィールドを必須にし、デフォルト値を設定
+        self.fields['role_type'].required = True
+        if not self.instance.pk:  # 新規作成時のみ
+            self.fields['role_type'].initial = 'user'
+
+    def clean_username(self):
+        username = self.cleaned_data.get('username')
+        create_user_account = self.cleaned_data.get('create_user_account')
+        
+        if create_user_account and not username:
+            raise forms.ValidationError('ログインアカウントを作成する場合、ユーザー名は必須です。')
+        
+        if username:
+            # 既存ユーザーとの重複チェック（編集時は自分を除く）
+            existing_user = User.objects.filter(username=username).first()
+            if existing_user:
+                if not self.instance.pk or not self.instance.user or existing_user != self.instance.user:
+                    raise forms.ValidationError('このユーザー名は既に使用されています。')
+        
+        return username
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        create_user_account = self.cleaned_data.get('create_user_account')
+        
+        if create_user_account and not password and not self.instance.pk:
+            raise forms.ValidationError('ログインアカウントを作成する場合、パスワードは必須です。')
+        
+        if password and len(password) < 8:
+            raise forms.ValidationError('パスワードは8文字以上で設定してください。')
+        
+        return password
+
+    def clean(self):
+        cleaned_data = super().clean()
+        create_user_account = cleaned_data.get('create_user_account')
+        password = cleaned_data.get('password')
+        password_confirm = cleaned_data.get('password_confirm')
+        
+        if create_user_account and password and password != password_confirm:
+            raise forms.ValidationError('パスワードが一致しません。')
+        
+        return cleaned_data
+
+    def save(self, commit=True):
+        staff = super().save(commit=False)
+        
+        if commit:
+            staff.save()
+            
+            # ユーザーアカウント作成処理
+            create_user_account = self.cleaned_data.get('create_user_account')
+            username = self.cleaned_data.get('username')
+            password = self.cleaned_data.get('password')
+            
+            if create_user_account and username:
+                if staff.user:
+                    # 既存ユーザーの更新
+                    user = staff.user
+                    user.username = username
+                    if password:
+                        user.set_password(password)
+                    user.save()
+                else:
+                    # 新規ユーザー作成
+                    if password:
+                        user = User.objects.create_user(
+                            username=username,
+                            password=password,
+                            email=staff.email or '',
+                            first_name=staff.name.split()[0] if staff.name else '',
+                            last_name=' '.join(staff.name.split()[1:]) if staff.name and len(staff.name.split()) > 1 else ''
+                        )
+                        staff.user = user
+                        staff.save()
+            elif not create_user_account and staff.user:
+                # ユーザーアカウントの削除
+                user = staff.user
+                staff.user = None
+                staff.save()
+                user.delete()
+        
+        return staff
 
 class ShiftTypeForm(forms.ModelForm):
     start_time = forms.ChoiceField(
@@ -106,6 +230,39 @@ class ShiftForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['shift_type'].required = False
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+
+class StaffShiftForm(forms.ModelForm):
+    """スタッフ用シフトフォーム（承認待ちスタッフでも使用可能）"""
+    # 明示的にフィールドを定義して必須属性を制御
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    start_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
+    )
+    end_time = forms.ChoiceField(
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        required=False
+    )
+    
+    class Meta:
+        model = Shift
+        fields = ['staff', 'shift_type', 'date', 'start_time', 'end_time', 'notes']
+        widgets = {
+            'staff': forms.HiddenInput(),  # スタッフフィールドは非表示
+            'shift_type': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['shift_type'].required = False
+        # スタッフフィールドは非表示なので、クエリセット制限は不要
 
 class ShiftReasonForm(forms.ModelForm):
     """事由登録フォーム（公休、有給等）"""
@@ -129,6 +286,8 @@ class ShiftReasonForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['deletion_reason'].required = True
         self.fields['deletion_reason'].empty_label = "選択してください"
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -226,7 +385,7 @@ class BulkShiftForm(forms.Form):
     )
     staff = forms.ModelMultipleChoiceField(
         label='スタッフ（複数選択可）',
-        queryset=Staff.objects.filter(is_active=True),
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
         widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'})
     )
     shift_type = forms.ModelChoiceField(
@@ -355,6 +514,11 @@ class ShiftTemplateDetailForm(forms.ModelForm):
             'weekday': forms.Select(attrs={'class': 'form-select'}),
         }
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 承認済みのアクティブなスタッフのみを選択肢として表示
+        self.fields['staff'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+    
     def clean_start_time(self):
         """開始時間のバリデーションと変換"""
         start_time_str = self.cleaned_data.get('start_time')
@@ -445,7 +609,7 @@ class ShiftExportForm(forms.Form):
     )
     staff = forms.ModelMultipleChoiceField(
         label='スタッフ（複数選択可、未選択の場合は全員）',
-        queryset=Staff.objects.filter(is_active=True),
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
         required=False,
         widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'})
     )
@@ -468,3 +632,244 @@ class ShiftExportForm(forms.Form):
             raise forms.ValidationError('終了日は開始日より後である必要があります。')
         
         return cleaned_data
+
+
+class LeaveRequestForm(forms.ModelForm):
+    """休み・通院申請フォーム"""
+    class Meta:
+        model = LeaveRequest
+        fields = ['request_type', 'start_date', 'end_date', 'reason', 'priority']
+        widgets = {
+            'request_type': forms.Select(attrs={'class': 'form-select'}),
+            'start_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '申請理由を入力してください'}),
+            'priority': forms.Select(attrs={'class': 'form-select'}),
+        }
+        labels = {
+            'request_type': '申請種別',
+            'start_date': '開始日',
+            'end_date': '終了日',
+            'reason': '理由',
+            'priority': '緊急度',
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        end_date = cleaned_data.get('end_date')
+        
+        if start_date and end_date and start_date > end_date:
+            raise forms.ValidationError('終了日は開始日以降である必要があります。')
+        
+        return cleaned_data
+
+
+class ShiftProposalForm(forms.ModelForm):
+    """シフト打診フォーム"""
+    shift_date = forms.DateField(
+        label='シフト日',
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    start_time = forms.ChoiceField(
+        label='開始時間',
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    end_time = forms.ChoiceField(
+        label='終了時間',
+        choices=TIME_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    response_deadline = forms.DateTimeField(
+        label='回答期限',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+        required=False
+    )
+    
+    class Meta:
+        model = ShiftProposal
+        fields = ['proposed_to', 'shift_date', 'start_time', 'end_time', 'shift_type', 'position', 'message', 'response_deadline']
+        widgets = {
+            'proposed_to': forms.Select(attrs={'class': 'form-select'}),
+            'shift_type': forms.Select(attrs={'class': 'form-select'}),
+            'position': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '担当ポジション（任意）'}),
+            'message': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'メッセージ（任意）'}),
+        }
+        labels = {
+            'proposed_to': '打診先スタッフ',
+            'shift_type': 'シフト種別',
+            'position': '担当ポジション',
+            'message': 'メッセージ',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['proposed_to'].queryset = Staff.objects.filter(is_active=True, role_type='user')
+        self.fields['shift_type'].required = False
+        self.fields['position'].required = False
+        self.fields['message'].required = False
+    
+    def clean_start_time(self):
+        start_time_str = self.cleaned_data.get('start_time')
+        if not start_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(start_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+    
+    def clean_end_time(self):
+        end_time_str = self.cleaned_data.get('end_time')
+        if not end_time_str:
+            return None
+        from django.utils.dateparse import parse_time
+        time_obj = parse_time(end_time_str)
+        if not time_obj:
+            raise forms.ValidationError('無効な時間形式です。')
+        return time_obj
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        
+        if start_time and end_time and start_time >= end_time:
+            raise forms.ValidationError('終了時間は開始時間より後である必要があります。')
+        
+        return cleaned_data
+
+
+class ShiftProposalResponseForm(forms.ModelForm):
+    """シフト打診回答フォーム"""
+    class Meta:
+        model = ShiftProposal
+        fields = ['status', 'response_message']
+        widgets = {
+            'status': forms.RadioSelect(attrs={'class': 'form-check-input'}),
+            'response_message': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '回答メッセージ（任意）'}),
+        }
+        labels = {
+            'status': '回答',
+            'response_message': 'メッセージ',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 回答用の選択肢のみに制限
+        self.fields['status'].choices = [
+            ('accepted', '承諾'),
+            ('declined', '拒否'),
+        ]
+        self.fields['response_message'].required = False
+
+
+class StaffCompatibilityForm(forms.ModelForm):
+    """スタッフ間相性設定フォーム"""
+    class Meta:
+        model = StaffCompatibility
+        fields = ['staff1', 'staff2', 'compatibility_level', 'reason']
+        widgets = {
+            'staff1': forms.Select(attrs={'class': 'form-select'}),
+            'staff2': forms.Select(attrs={'class': 'form-select'}),
+            'compatibility_level': forms.RadioSelect(attrs={'class': 'form-check-input'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '設定理由を入力してください（管理者のみ閲覧可能）'}),
+        }
+        labels = {
+            'staff1': 'スタッフ1',
+            'staff2': 'スタッフ2', 
+            'compatibility_level': '相性レベル',
+            'reason': '設定理由',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['staff1'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+        self.fields['staff2'].queryset = Staff.objects.filter(is_active=True, approval_status='approved')
+        self.fields['reason'].required = False
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        staff1 = cleaned_data.get('staff1')
+        staff2 = cleaned_data.get('staff2')
+        
+        if staff1 and staff2 and staff1 == staff2:
+            raise forms.ValidationError('同じスタッフを選択することはできません。')
+        
+        return cleaned_data
+
+
+class HolidayForm(forms.ModelForm):
+    """祝日・休日設定フォーム"""
+    class Meta:
+        model = Holiday
+        fields = ['date', 'name', 'holiday_type', 'is_active']
+        widgets = {
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '祝日名を入力してください'}),
+            'holiday_type': forms.Select(attrs={'class': 'form-select'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'date': '日付',
+            'name': '祝日名',
+            'holiday_type': '祝日種別',
+            'is_active': '有効',
+        }
+
+
+class EventForm(forms.ModelForm):
+    """イベント作成フォーム"""
+    start_datetime = forms.DateTimeField(
+        label='開始日時',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'})
+    )
+    end_datetime = forms.DateTimeField(
+        label='終了日時',
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'})
+    )
+    
+    class Meta:
+        model = Event
+        fields = ['title', 'description', 'event_type', 'start_datetime', 'end_datetime', 'location']
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'イベントタイトルを入力してください'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'イベントの説明を入力してください'}),
+            'event_type': forms.Select(attrs={'class': 'form-select'}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '場所を入力してください（任意）'}),
+        }
+        labels = {
+            'title': 'タイトル',
+            'description': '説明',
+            'event_type': 'イベント種別',
+            'location': '場所',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['description'].required = False
+        self.fields['location'].required = False
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_datetime = cleaned_data.get('start_datetime')
+        end_datetime = cleaned_data.get('end_datetime')
+        
+        if start_datetime and end_datetime and start_datetime >= end_datetime:
+            raise forms.ValidationError('終了日時は開始日時より後である必要があります。')
+        
+        return cleaned_data
+
+
+class EventParticipantForm(forms.ModelForm):
+    """イベント参加者追加フォーム"""
+    participants = forms.ModelMultipleChoiceField(
+        label='参加者（複数選択可）',
+        queryset=Staff.objects.filter(is_active=True, approval_status='approved'),
+        widget=forms.SelectMultiple(attrs={'class': 'form-select', 'size': '8'})
+    )
+    
+    class Meta:
+        model = EventParticipant
+        fields = ['participants']
