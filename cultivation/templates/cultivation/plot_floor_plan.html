@@ -408,8 +408,8 @@
             <rect width="100%" height="100%" fill="url(#backgroundGradient)" />
             <rect width="100%" height="100%" fill="url(#grid)" />
             
-            <!-- 各棚レベルを描画 (sections表示時はplots_floor_plan_dataを使用) -->
-            {% with plot_items=floor_plan_data.plots|default:plots_floor_plan_data.plots %}
+            <!-- 各棚レベルを描画 -->
+            {% with plot_items=floor_plan_data.plots %}
             {% if plot_items %}
                 {% for plot_info in plot_items %}
                 <!-- 棚の表示 -->
@@ -728,10 +728,10 @@
 // Djangoテンプレート変数をJavaScriptに渡す
 {% if floor_plan_data_json %}
 window.floorPlanData = {{ floor_plan_data_json|safe }};
-console.log('Floor plan data loaded successfully');
+console.log('Floor plan data loaded — plots count:', window.floorPlanData && window.floorPlanData.plots ? window.floorPlanData.plots.length : 'no .plots key', '| keys:', window.floorPlanData ? Object.keys(window.floorPlanData) : 'null');
 {% else %}
 window.floorPlanData = null;
-console.log('No floor plan data available');
+console.log('No floor plan data available (template variable empty)');
 {% endif %}
 
 {% if selected_layout %}

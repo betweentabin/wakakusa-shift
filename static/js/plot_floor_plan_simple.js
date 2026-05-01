@@ -53,258 +53,233 @@ function switchView(viewType) {
     }
 }
 
+// ステータス→色マップ（viewのstatus名に合わせる）
+const STATUS_COLOR = {
+    empty:        0xeeeeee,
+    growing:      0xa5d6a7,   // 栽培中（緑）
+    harvest_ready:0xffcc80,   // 収穫可能（オレンジ）
+    overdue:      0xef9a9a,   // 遅延（赤）
+    sowing:       0xd0d8dc,
+    pre_planted:  0xfff59d,
+    planted:      0xa5d6a7,
+    harvested:    0xbdbdbd,
+};
+
 // シンプルな3D初期化
 function initSimple3D() {
     console.log('Initializing simple 3D...');
-    
+
     const container = document.getElementById('three-d-container-scene');
-    if (!container) {
-        console.error('3D container not found');
-        return;
-    }
-    
-    // Three.jsチェック
+    if (!container) { console.error('3D container not found'); return; }
+
     if (typeof THREE === 'undefined') {
-        console.error('Three.js not loaded');
         container.innerHTML = '<div class="alert alert-danger">Three.jsが読み込まれていません</div>';
         return;
     }
-    
+
     try {
-        // 既存のcanvasを削除
         const existingCanvas = container.querySelector('canvas');
-        if (existingCanvas) {
-            existingCanvas.remove();
+        if (existingCanvas) existingCanvas.remove();
+
+        const plots = (window.floorPlanData && window.floorPlanData.plots) || [];
+        console.log('3D init — plots count:', plots.length);
+
+        if (plots.length === 0) {
+            container.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100 text-muted">'
+                + '<div class="text-center"><i class="fas fa-cube fa-3x mb-3 d-block"></i>'
+                + '<p>この画面に表示するレーンデータがありません。<br>2D表示でデータを確認してください。</p></div></div>';
+            return;
         }
-        
-        // 基本的な3Dシーンを作成
+
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        
-        // グローバル変数にシーンを保存（位置更新で使用）
+        scene.background = new THREE.Color(0xd0e8f5);
         window.currentThreeJSScene = scene;
-        
-        const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+
+        const w = container.offsetWidth  || 800;
+        const h = container.offsetHeight || 500;
+        const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 500);
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        
-        renderer.setSize(container.offsetWidth, container.offsetHeight);
+        renderer.setSize(w, h);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
-        
-        // ライト設定
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-        scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(10, 20, 10);
-        directionalLight.castShadow = true;
-        scene.add(directionalLight);
-        
-        // 実際の栽培データがある場合は棚を作成、ない場合はテストキューブ
-        console.log('Floor plan data available:', !!window.floorPlanData);
-        
-        if (window.floorPlanData && window.floorPlanData.plots && window.floorPlanData.plots.length > 0) {
-            console.log('Creating shelves from real data...');
-            createShelvesFromData(scene);
-            
-            // カメラ位置を棚に合わせて調整
-            camera.position.set(10, 8, 10);
-            camera.lookAt(0, 0, 0);
-        } else {
-            console.log('Creating test cube...');
-            // テスト用のキューブを追加
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
-            const cube = new THREE.Mesh(geometry, material);
-            scene.add(cube);
-            
-            camera.position.z = 5;
-        }
-        
-        // OrbitControls (利用可能な場合)
+
+        // 照明
+        scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(12, 20, 8);
+        sun.castShadow = true;
+        scene.add(sun);
+
+        // 床
+        const floorGeo = new THREE.PlaneGeometry(80, 80);
+        const floorMat = new THREE.MeshLambertMaterial({ color: 0xd0cfc8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        createShelvesFromData(scene, plots);
+
+        // カメラをデータ中心に配置
+        camera.position.set(0, 10, 16);
+        camera.lookAt(0, 2, 0);
+
         let controls = null;
         if (typeof THREE.OrbitControls !== 'undefined') {
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
+            controls.target.set(0, 2, 0);
         }
-        
-        // アニメーションループ
+
         function animate() {
             requestAnimationFrame(animate);
-            
-            if (controls) {
-                controls.update();
-            }
-            
+            if (controls) controls.update();
             renderer.render(scene, camera);
         }
         animate();
-        
+
         console.log('Simple 3D initialized successfully');
-        
+
     } catch (error) {
         console.error('Error initializing 3D:', error);
         container.innerHTML = '<div class="alert alert-danger">3D初期化エラー: ' + error.message + '</div>';
     }
 }
 
+// ラック定数
+const LEVEL_H  = 0.50;  // 段の高さ
+const SHELF_T  = 0.05;  // 棚板厚み
+const RACK_W   = 1.6;   // 棚幅
+const RACK_D   = 0.7;   // 棚奥行
+const RACK_GAP = 3.5;   // 棚間隔
+
 // 実際のデータから棚を作成
-function createShelvesFromData(scene) {
-    const plots = window.floorPlanData.plots;
+function createShelvesFromData(scene, plots) {
     console.log(`Creating ${plots.length} shelves from data`);
-    
+
+    // 中心を求めて全体をセンタリング
+    let cx = 0, cz = 0;
+    plots.forEach((p, i) => {
+        cx += (p.threejs_x !== undefined ? p.threejs_x : (i % 5) * RACK_GAP);
+        cz += (p.threejs_z !== undefined ? p.threejs_z : Math.floor(i / 5) * RACK_GAP);
+    });
+    cx /= plots.length; cz /= plots.length;
+
     plots.forEach((plotData, index) => {
-        // 棚の位置を計算 - threejs座標が利用可能ならそれを使用、なければSVG座標から変換
         let x, z;
-        if (plotData.threejs_x !== undefined && plotData.threejs_z !== undefined) {
-            // 保存されている3D座標を使用
-            x = plotData.threejs_x;
-            z = plotData.threejs_z;
-            console.log(`Using saved 3D coordinates for plot ${plotData.id}: (${x.toFixed(2)}, 0, ${z.toFixed(2)})`);
-        } else if (plotData.svg_x !== undefined && plotData.svg_y !== undefined) {
-            // SVG座標を3D座標に変換
-            x = (plotData.svg_x - 400) / 100; // スケール調整
-            z = (plotData.svg_y - 300) / 100;
-            console.log(`Converting SVG to 3D for plot ${plotData.id}: (${x.toFixed(2)}, 0, ${z.toFixed(2)})`);
+        if (plotData.threejs_x !== undefined && plotData.threejs_z !== undefined
+            && !(plotData.threejs_x === 0 && plotData.threejs_z === 0 && index > 0)) {
+            x = plotData.threejs_x - cx;
+            z = plotData.threejs_z - cz;
         } else {
-            // フォールバック: グリッド配置
-            x = (index % 4) * 3 - 4.5;
-            z = Math.floor(index / 4) * 3 - 3;
-            console.log(`Using fallback grid position for plot ${plotData.id}: (${x.toFixed(2)}, 0, ${z.toFixed(2)})`);
+            x = (index % 5) * RACK_GAP - (Math.min(plots.length, 5) - 1) * RACK_GAP / 2;
+            z = Math.floor(index / 5) * RACK_GAP;
         }
-        
-        // 棚グループを作成
+
         const shelfGroup = new THREE.Group();
         shelfGroup.position.set(x, 0, z);
-        shelfGroup.userData = { plotId: plotData.id }; // プロットIDを保存
-        
-        // レベルデータを取得
+        shelfGroup.userData = { plotId: plotData.id };
+
         const levels = plotData.level_details || [];
-        const levelCount = Math.max(levels.length, 3); // 最低3レベル
-        
-        // 棚の支柱を作成
-        createShelfPosts(shelfGroup, levelCount);
-        
-        // 各レベルを作成
+        const levelCount = Math.max(levels.length, 2);
+
+        // 支柱（4本 / 鉄パイプ色）
+        const poleH = levelCount * LEVEL_H + 0.6;
+        const poleMat = new THREE.MeshLambertMaterial({ color: 0x546e7a });
+        [[-RACK_W/2, -RACK_D/2], [RACK_W/2, -RACK_D/2],
+         [-RACK_W/2,  RACK_D/2], [RACK_W/2,  RACK_D/2]].forEach(([px, pz]) => {
+            const pole = new THREE.Mesh(
+                new THREE.BoxGeometry(0.06, poleH, 0.06), poleMat);
+            pole.position.set(px, poleH / 2, pz);
+            pole.castShadow = true;
+            shelfGroup.add(pole);
+        });
+
+        // 各段
         for (let i = 0; i < levelCount; i++) {
             const levelData = levels[i] || { level: i + 1, status: 'empty', crop_name: '空き' };
-            const shelfLevel = createShelfLevel(levelData, i + 1);
-            shelfGroup.add(shelfLevel);
+            const boardY = 0.3 + i * LEVEL_H;
+
+            // 棚板
+            const slotColor = STATUS_COLOR[levelData.status] || STATUS_COLOR.empty;
+            const board = new THREE.Mesh(
+                new THREE.BoxGeometry(RACK_W, SHELF_T, RACK_D),
+                new THREE.MeshLambertMaterial({ color: slotColor })
+            );
+            board.position.set(0, boardY, 0);
+            board.receiveShadow = true;
+            shelfGroup.add(board);
+
+            // 作物
+            if (levelData.status !== 'empty' && levelData.crop_name && levelData.crop_name !== '空き') {
+                addCropObjects(shelfGroup, levelData.status, boardY + SHELF_T);
+            }
         }
-        
+
+        // ビルボードラベル
+        const topY = 0.3 + levelCount * LEVEL_H + 0.25;
+        const lbl = makeBillboard(plotData.shelf_number || ('棚' + (index + 1)));
+        lbl.position.set(0, topY, 0);
+        lbl.scale.set(1.4, 0.55, 1);
+        shelfGroup.add(lbl);
+
         scene.add(shelfGroup);
     });
 }
 
-// 棚の支柱を作成
-function createShelfPosts(shelfGroup, levelCount) {
-    const postHeight = levelCount * 0.6 + 0.5;
-    const postGeometry = new THREE.BoxGeometry(0.05, postHeight, 0.05);
-    const postMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    
-    const postPositions = [
-        [-0.6, postHeight / 2, -0.3],
-        [0.6, postHeight / 2, -0.3],
-        [-0.6, postHeight / 2, 0.3],
-        [0.6, postHeight / 2, 0.3]
-    ];
-    
-    postPositions.forEach(pos => {
-        const post = new THREE.Mesh(postGeometry, postMaterial);
-        post.position.set(pos[0], pos[1], pos[2]);
-        post.castShadow = true;
-        shelfGroup.add(post);
-    });
+// 作物オブジェクトを棚板の上に配置
+function addCropObjects(group, status, baseY) {
+    const cfg = {
+        growing:       { stems: 5, spread: 0.55, sh: 0.28, leafR: 0.10, lc: 0x43a047, sc: 0x2e7d32 },
+        harvest_ready: { stems: 7, spread: 0.58, sh: 0.34, leafR: 0.13, lc: 0x2e7d32, sc: 0x1b5e20 },
+        overdue:       { stems: 7, spread: 0.58, sh: 0.34, leafR: 0.13, lc: 0xe53935, sc: 0xb71c1c },
+        sowing:        { stems: 3, spread: 0.40, sh: 0.14, leafR: 0.06, lc: 0xaed581, sc: 0x558b2f },
+        pre_planted:   { stems: 4, spread: 0.50, sh: 0.20, leafR: 0.08, lc: 0x66bb6a, sc: 0x388e3c },
+        planted:       { stems: 5, spread: 0.55, sh: 0.28, leafR: 0.10, lc: 0x43a047, sc: 0x2e7d32 },
+    };
+    const c = cfg[status] || cfg.growing;
+    const leafMat = new THREE.MeshLambertMaterial({ color: c.lc });
+    const stemMat = new THREE.MeshLambertMaterial({ color: c.sc });
+
+    for (let i = 0; i < c.stems; i++) {
+        const sx = (Math.random() - 0.5) * (RACK_W - 0.2) * c.spread / 0.6;
+        const sz = (Math.random() - 0.5) * (RACK_D - 0.1) * c.spread / 0.7;
+        // 茎
+        const stem = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.015, 0.02, c.sh, 5),
+            stemMat
+        );
+        stem.position.set(sx, baseY + c.sh / 2, sz);
+        group.add(stem);
+        // 葉（楕円球）
+        const leaf = new THREE.Mesh(
+            new THREE.SphereGeometry(c.leafR, 8, 6),
+            leafMat
+        );
+        leaf.scale.set(1.4, 0.7, 1.4);
+        leaf.position.set(sx, baseY + c.sh, sz);
+        group.add(leaf);
+    }
 }
 
-// 棚レベルを作成
-function createShelfLevel(levelData, level) {
-    const levelGroup = new THREE.Group();
-    const y = level * 0.6;
-    levelGroup.position.y = y;
-    
-    // 棚板
-    const shelfGeometry = new THREE.BoxGeometry(1.2, 0.03, 0.6);
-    let shelfColor = 0xDDDDDD; // デフォルト（空き）
-    
-    // ステータスに応じて色を変更
-    if (levelData.status === 'growing') {
-        shelfColor = 0x90EE90; // ライトグリーン
-    } else if (levelData.status === 'harvest_ready') {
-        shelfColor = 0xFFD700; // ゴールド
-    } else if (levelData.status === 'overdue') {
-        shelfColor = 0xFF6B6B; // ライトレッド
-    }
-    
-    const shelfMaterial = new THREE.MeshLambertMaterial({ color: shelfColor });
-    const shelf = new THREE.Mesh(shelfGeometry, shelfMaterial);
-    shelf.castShadow = true;
-    shelf.receiveShadow = true;
-    levelGroup.add(shelf);
-    
-    // 作物がある場合は作物オブジェクトを追加
-    if (levelData.status !== 'empty' && levelData.crop_name && levelData.crop_name !== '空き') {
-        console.log(`Adding crop: ${levelData.crop_name} (status: ${levelData.status})`);
-        
-        // 作物の色を状態に応じて設定
-        let cropColor = 0x228B22; // フォレストグリーン
-        if (levelData.status === 'harvest_ready') {
-            cropColor = 0xFFD700; // ゴールド
-        } else if (levelData.status === 'overdue') {
-            cropColor = 0xFF4500; // 赤橙
-        }
-        
-        // 複数の小さな作物オブジェクトを配置
-        for (let i = 0; i < 8; i++) {
-            const cropGeometry = new THREE.SphereGeometry(0.04, 8, 6);
-            const cropMaterial = new THREE.MeshLambertMaterial({ color: cropColor });
-            const crop = new THREE.Mesh(cropGeometry, cropMaterial);
-            
-            crop.position.set(
-                (Math.random() - 0.5) * 1.0,
-                0.05,
-                (Math.random() - 0.5) * 0.4
-            );
-            crop.castShadow = true;
-            levelGroup.add(crop);
-        }
-        
-        // 作物名ラベル（テキスト）
-        if (levelData.crop_name.length <= 6) { // 短い名前のみ表示
-            createTextLabel(levelGroup, levelData.crop_name, 0, 0.15, 0);
-        }
-    }
-    
-    return levelGroup;
-}
-
-// テキストラベルを作成
-function createTextLabel(parent, text, x, y, z) {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 128;
-    canvas.height = 32;
-    
-    context.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.fillStyle = 'white';
-    context.font = '16px Arial';
-    context.textAlign = 'center';
-    context.fillText(text, canvas.width / 2, canvas.height / 2 + 6);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const labelMaterial = new THREE.MeshBasicMaterial({ 
-        map: texture, 
-        transparent: true,
-        side: THREE.DoubleSide
-    });
-    const labelGeometry = new THREE.PlaneGeometry(0.6, 0.15);
-    const label = new THREE.Mesh(labelGeometry, labelMaterial);
-    label.position.set(x, y, z);
-    parent.add(label);
+// ビルボードラベル（カメラに常に正対）
+function makeBillboard(text) {
+    const cv = document.createElement('canvas');
+    cv.width = 192; cv.height = 64;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = 'rgba(30,30,30,0.82)';
+    ctx.fillRect(2, 2, cv.width - 4, cv.height - 4);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, cv.width / 2, cv.height / 2);
+    const tex = new THREE.CanvasTexture(cv);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    return new THREE.Sprite(mat);
 }
 
 // DOM読み込み完了時の処理

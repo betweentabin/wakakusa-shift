@@ -781,14 +781,29 @@ def plot_floor_plan_with_layout(request, layout_id):
         'overdue_count': overdue_count,
     }
     
-    import json
+    import json, math
+
+    def _clean(obj):
+        """JSON非対応の値（NaN/Inf/Decimal等）を安全な値に変換"""
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return 0.0
+        return obj
+
+    class SafeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            return str(obj)
+        def iterencode(self, o, _one_shot=False):
+            return super().iterencode(o, _one_shot=_one_shot)
+
     # JSONシリアライゼーションを安全に実行
     try:
-        floor_plan_data_json = json.dumps(floor_plan_data)
-    except (TypeError, ValueError) as e:
-        print(f"ERROR in plot_floor_plan_with_layout: Failed to serialize floor_plan_data: {e}")
-        floor_plan_data_json = json.dumps({})
-    
+        floor_plan_data_json = json.dumps(floor_plan_data, cls=SafeEncoder)
+    except Exception as e:
+        import traceback
+        print(f"ERROR in plot_floor_plan_with_layout: Failed to serialize: {e}")
+        print(traceback.format_exc())
+        floor_plan_data_json = '{"plots":[]}'
+
     context = {
         'floor_plan_data': floor_plan_data,
         'floor_plan_data_json': floor_plan_data_json,
@@ -910,14 +925,21 @@ def plot_floor_plan(request):
         'overdue_count': overdue_count,
     }
     
-    import json
+    import json, math
+
+    class SafeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            return str(obj)
+
     # JSONシリアライゼーションを安全に実行
     try:
-        floor_plan_data_json = json.dumps(floor_plan_data)
-    except (TypeError, ValueError) as e:
-        print(f"ERROR in plot_floor_plan: Failed to serialize floor_plan_data: {e}")
-        floor_plan_data_json = json.dumps({})
-    
+        floor_plan_data_json = json.dumps(floor_plan_data, cls=SafeEncoder)
+    except Exception as e:
+        import traceback
+        print(f"ERROR in plot_floor_plan: Failed to serialize: {e}")
+        print(traceback.format_exc())
+        floor_plan_data_json = '{"plots":[]}'
+
     context = {
         'floor_plan_data': floor_plan_data,
         'floor_plan_data_json': floor_plan_data_json,
