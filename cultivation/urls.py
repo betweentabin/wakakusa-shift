@@ -57,4 +57,23 @@ urlpatterns = [
     path('layouts/new/ocr/step3/', views.layout_create_ocr_step3, name='layout_create_ocr_step3'),
     path('api/ocr/process/', views.ocr_process_step3, name='ocr_process_step3'),
     path('api/ocr/create-layout/', views.ocr_create_layout, name='ocr_create_layout'),
+
+    # 栽培スケジュール管理
+    path('schedule/', views.schedule_view, name='schedule_view'),
+    path('schedule/layout/<int:layout_id>/', views.schedule_view_layout, name='schedule_view_layout'),
+    path('schedule/plot/<int:plot_id>/', views.schedule_view_plot, name='schedule_view_plot'),
+    path('schedule/templates/', views.schedule_templates, name='schedule_templates'),
+    path('schedule/export/pdf/', views.schedule_export_pdf, name='schedule_export_pdf'),
+
+    # 栽培ガントチャート（棚ベース）
+    path('gantt/', views.gantt_chart_view, name='gantt_chart'),
+    path('gantt/layout/<int:layout_id>/', views.gantt_chart_view, name='gantt_chart_layout'),
+
+    # 棚割りグリッド
+    path('shelf-grid/', views.shelf_grid_view, name='shelf_grid'),
+    path('shelf-grid/layout/<int:layout_id>/', views.shelf_grid_view, name='shelf_grid_layout'),
+
+    # レーンマスター設定
+    path('settings/lanes/', views.lane_master_settings, name='lane_master_settings'),
+    path('settings/lanes/<int:layout_id>/', views.lane_master_settings, name='lane_master_settings_layout'),
 ] 

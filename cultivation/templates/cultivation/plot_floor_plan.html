@@ -184,7 +184,7 @@
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}">栽培管理</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'cultivation:layout_list' %}">レイアウト一覧</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}">レイアウト一覧</a></li>
             <li class="breadcrumb-item"><a href="{% url 'cultivation:layout_detail' selected_layout.id %}">{{ selected_layout.name }}</a></li>
             <li class="breadcrumb-item active" aria-current="page">棚区画 2D/3D平面図</li>
         </ol>
@@ -408,9 +408,10 @@
             <rect width="100%" height="100%" fill="url(#backgroundGradient)" />
             <rect width="100%" height="100%" fill="url(#grid)" />
             
-            <!-- 各棚レベルを描画 -->
-            {% if floor_plan_data.plots %}
-                {% for plot_info in floor_plan_data.plots %}
+            <!-- 各棚レベルを描画 (sections表示時はplots_floor_plan_dataを使用) -->
+            {% with plot_items=floor_plan_data.plots|default:plots_floor_plan_data.plots %}
+            {% if plot_items %}
+                {% for plot_info in plot_items %}
                 <!-- 棚の表示 -->
                 <g class="plot-group" data-plot-id="{{ plot_info.plot.id }}">
                     <!-- 棚全体の背景 -->
@@ -579,10 +580,11 @@
                 </g>
                 {% endfor %}
             {% endif %}
+            {% endwith %}
         </svg>
         </div>
     </div>
-    
+
     <!-- 3D立体図 -->
     <div id="three-d-container" class="floor-plan-container" style="display: none;">
         <h3 class="mb-3">

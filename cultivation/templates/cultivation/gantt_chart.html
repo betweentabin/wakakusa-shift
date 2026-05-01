@@ -1,0 +1,1834 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}栽培ガントチャート{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #2e7d32, #66bb6a);
+        color: white;
+        padding: 20px 0;
+        border-radius: 15px;
+        margin-bottom: 20px;
+    }
+
+    .filter-card {
+        background: white;
+        border-radius: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .gantt-container {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    /* ガントチャート本体 */
+    .gantt-wrapper {
+        display: flex;
+        overflow-x: auto;
+        min-height: 400px;
+    }
+
+    /* 左側の棚リスト */
+    .gantt-sidebar {
+        min-width: 180px;
+        max-width: 180px;
+        border-right: 2px solid #e0e0e0;
+        background: #f8f9fa;
+        flex-shrink: 0;
+    }
+
+    .gantt-sidebar-header {
+        height: 50px;
+        border-bottom: 2px solid #e0e0e0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        background: linear-gradient(135deg, #2e7d32, #66bb6a);
+        color: white;
+    }
+
+    .gantt-sidebar-row {
+        height: 40px;
+        border-bottom: 1px solid #e0e0e0;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        font-size: 0.9rem;
+        background: white;
+    }
+
+    .gantt-sidebar-row:nth-child(even) {
+        background: #f8f9fa;
+    }
+
+    /* 右側のタイムライン */
+    .gantt-timeline {
+        flex: 1;
+        overflow-x: auto;
+        position: relative;
+    }
+
+    .gantt-timeline-header {
+        height: 50px;
+        border-bottom: 2px solid #e0e0e0;
+        display: flex;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+    }
+
+    .gantt-date-cell {
+        min-width: 40px;
+        max-width: 40px;
+        border-right: 1px solid #e0e0e0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+    }
+
+    .gantt-date-cell.weekend {
+        background: #fff3e0;
+    }
+
+    .gantt-date-cell.today {
+        background: #e3f2fd;
+        font-weight: bold;
+    }
+
+    .gantt-date-cell.holiday {
+        background: #ffebee;
+    }
+
+    .gantt-cell.holiday {
+        background: rgba(255, 235, 238, 0.7);
+    }
+
+    .gantt-timeline-body {
+        position: relative;
+    }
+
+    .gantt-row {
+        height: 40px;
+        border-bottom: 1px solid #e0e0e0;
+        position: relative;
+        display: flex;
+    }
+
+    .gantt-row:nth-child(even) {
+        background: #fafafa;
+    }
+
+    .gantt-cell {
+        min-width: 40px;
+        max-width: 40px;
+        border-right: 1px solid #f0f0f0;
+    }
+
+    .gantt-cell.weekend {
+        background: rgba(255, 243, 224, 0.5);
+    }
+
+    /* ガントバー */
+    .gantt-bar {
+        position: absolute;
+        height: 28px;
+        top: 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        font-size: 0.75rem;
+        color: white;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: transform 0.2s, box-shadow 0.2s;
+        z-index: 5;
+    }
+
+    .gantt-bar:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        z-index: 10;
+    }
+
+    .gantt-bar.dragging {
+        opacity: 0.8;
+        z-index: 100;
+    }
+
+    .gantt-bar.linked {
+        border: 2px dashed rgba(255, 255, 255, 0.7);
+    }
+
+    .gantt-bar.linked-moving {
+        opacity: 0.6;
+        border-color: #FFD700;
+    }
+
+    .gantt-bar.has-children::after {
+        content: '\f0c1';
+        font-family: 'Font Awesome 6 Free';
+        font-weight: 900;
+        position: absolute;
+        right: 4px;
+        font-size: 0.6rem;
+        opacity: 0.8;
+    }
+
+    /* リサイズハンドル */
+    .gantt-bar-resize {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 8px;
+        cursor: ew-resize;
+    }
+
+    .gantt-bar-resize.left {
+        left: 0;
+    }
+
+    .gantt-bar-resize.right {
+        right: 0;
+    }
+
+    /* アクションボタン */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        background: linear-gradient(135deg, #2e7d32, #66bb6a);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(46, 125, 50, 0.3);
+        color: white;
+    }
+
+    .btn-secondary-action {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+    }
+
+    .btn-secondary-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+        color: white;
+    }
+
+    /* ビューモード切り替え */
+    .view-mode-buttons {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
+    .view-mode-buttons .btn {
+        padding: 5px 15px;
+        border-radius: 20px;
+    }
+
+    /* 凡例 */
+    .legend {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.85rem;
+    }
+
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+    }
+
+    /* 今日のライン */
+    .today-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #f44336;
+        z-index: 8;
+        pointer-events: none;
+    }
+
+    /* モーダル */
+    .color-picker-wrapper {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .color-option {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 3px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .color-option:hover {
+        transform: scale(1.1);
+    }
+
+    .color-option.selected {
+        border-color: #333;
+    }
+
+    /* ツールチップ */
+    .gantt-tooltip {
+        position: fixed;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        z-index: 1000;
+        pointer-events: none;
+        max-width: 300px;
+    }
+
+    .gantt-tooltip .tooltip-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .gantt-tooltip .tooltip-info {
+        font-size: 0.8rem;
+        opacity: 0.9;
+    }
+
+    /* 空状態 */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    @media (max-width: 768px) {
+        .gantt-sidebar {
+            min-width: 120px;
+            max-width: 120px;
+        }
+
+        .gantt-date-cell,
+        .gantt-cell {
+            min-width: 30px;
+            max-width: 30px;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .btn-action,
+        .btn-secondary-action {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヒーローセクション -->
+    <div class="hero-section text-center">
+        <h1 class="mb-2">
+            <i class="fas fa-project-diagram"></i> 栽培ガントチャート
+        </h1>
+        <p class="mb-0">棚・場所ベースで栽培計画を視覚的に管理</p>
+    </div>
+
+    <!-- フィルターカード -->
+    <div class="filter-card">
+        <h5 class="mb-3"><i class="fas fa-filter"></i> 表示設定</h5>
+
+        <form method="get" id="filter-form">
+            <div class="row g-3">
+                <!-- レイアウト選択 -->
+                <div class="col-md-3">
+                    <label for="layout-select" class="form-label">レイアウト</label>
+                    <select id="layout-select" name="layout" class="form-select" onchange="changeLayout(this.value)">
+                        <option value="">全体表示</option>
+                        {% for layout in layouts %}
+                        <option value="{{ layout.id }}" {% if current_layout and current_layout.id == layout.id %}selected{% endif %}>
+                            {{ layout.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- 開始日 -->
+                <div class="col-md-3">
+                    <label for="start-date" class="form-label">開始日</label>
+                    <input type="date" id="start-date" name="start_date" value="{{ start_date }}" class="form-control">
+                </div>
+
+                <!-- 終了日 -->
+                <div class="col-md-3">
+                    <label for="end-date" class="form-label">終了日</label>
+                    <input type="date" id="end-date" name="end_date" value="{{ end_date }}" class="form-control">
+                </div>
+
+                <!-- フィルターボタン -->
+                <div class="col-md-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> 適用
+                    </button>
+                    <a href="{% if current_layout %}{% url 'cultivation:gantt_chart_layout' current_layout.id %}{% else %}{% url 'cultivation:gantt_chart' %}{% endif %}" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> リセット
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- アクションボタン -->
+    <div class="action-buttons">
+        <button type="button" class="btn-action" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+            <i class="fas fa-plus-circle"></i> 新規タスク追加
+        </button>
+        <button type="button" class="btn-secondary-action" data-bs-toggle="modal" data-bs-target="#laneSettingsModal">
+            <i class="fas fa-layer-group"></i> レーン設定
+        </button>
+        <button type="button" class="btn-secondary-action" data-bs-toggle="modal" data-bs-target="#holidaySettingsModal">
+            <i class="fas fa-calendar-times"></i> 休日設定
+        </button>
+        <a href="{% url 'cultivation:schedule_view' %}" class="btn-secondary-action">
+            <i class="fas fa-calendar-alt"></i> スケジュール管理へ
+        </a>
+        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-secondary-action">
+            <i class="fas fa-arrow-left"></i> 栽培管理トップへ
+        </a>
+        {% if current_layout %}
+        <a href="{% url 'cultivation:layout_detail' current_layout.id %}" class="btn-secondary-action">
+            <i class="fas fa-info-circle"></i> レイアウト詳細
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- ガントチャート本体 -->
+    <div class="gantt-container">
+        {% if gantt_rows and gantt_rows != '[]' %}
+        <!-- ビューモード切り替え -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="view-mode-buttons">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setViewMode('day')">日</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm active" onclick="setViewMode('week')">週</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setViewMode('month')">月</button>
+            </div>
+            <div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="scrollToToday()">
+                    <i class="fas fa-calendar-day"></i> 今日
+                </button>
+            </div>
+        </div>
+
+        <!-- 凡例 -->
+        <div class="legend">
+            {% for process in processes %}
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: {{ process.color }};"></span>
+                <span>{{ process.name }}</span>
+            </div>
+            {% endfor %}
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: #4CAF50;"></span>
+                <span>作物（栽培期間）</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: #2196F3; border: 2px dashed rgba(255,255,255,0.7);"></span>
+                <span>連携工程</span>
+            </div>
+        </div>
+
+        <!-- ガントチャート -->
+        <div class="gantt-wrapper" id="gantt-wrapper">
+            <!-- 左側: 棚リスト -->
+            <div class="gantt-sidebar" id="gantt-sidebar">
+                <div class="gantt-sidebar-header">棚 / 段</div>
+                <!-- JavaScriptで描画 -->
+            </div>
+
+            <!-- 右側: タイムライン -->
+            <div class="gantt-timeline" id="gantt-timeline">
+                <div class="gantt-timeline-header" id="gantt-header">
+                    <!-- JavaScriptで描画 -->
+                </div>
+                <div class="gantt-timeline-body" id="gantt-body">
+                    <!-- JavaScriptで描画 -->
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- 空の状態 -->
+        <div class="empty-state">
+            <i class="fas fa-project-diagram"></i>
+            <h4>表示するデータがありません</h4>
+            <p class="text-muted">棚を登録して作物を追加してください。</p>
+            <a href="{% url 'cultivation:plot_management' %}" class="btn-action mt-3">
+                <i class="fas fa-plus"></i> 棚管理へ
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- タスク追加モーダル -->
+<div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #2e7d32, #66bb6a); color: white;">
+                <h5 class="modal-title"><i class="fas fa-plus-circle"></i> 新規タスク追加</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm">
+                    <!-- タスクタイプ選択 -->
+                    <div class="mb-3">
+                        <label class="form-label">タスクタイプ</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="add-task-type" id="add-type-crop" value="crop" checked>
+                            <label class="btn btn-outline-success" for="add-type-crop">
+                                <i class="fas fa-seedling"></i> 作物
+                            </label>
+                            <input type="radio" class="btn-check" name="add-task-type" id="add-type-process" value="process-schedule">
+                            <label class="btn btn-outline-primary" for="add-type-process">
+                                <i class="fas fa-tasks"></i> 工程スケジュール
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">棚</label>
+                            <select class="form-select" id="add-plot-select" required>
+                                <option value="">棚を選択...</option>
+                                {% for plot in plots %}
+                                <option value="{{ plot.id }}" data-levels="{{ plot.levels }}">{{ plot.shelf_number }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">段</label>
+                            <select class="form-select" id="add-level-select" required disabled>
+                                <option value="">まず棚を選択...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- 工程選択（工程スケジュール用） -->
+                    <div class="mb-3" id="add-process-group" style="display: none;">
+                        <label class="form-label">工程</label>
+                        <select class="form-select" id="add-process-select">
+                            <option value="">工程を選択...</option>
+                            {% for process in processes %}
+                            <option value="{{ process.id }}" data-color="{{ process.color }}">{{ process.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" id="add-name-label">タスク名 / 作物名</label>
+                        <input type="text" class="form-control" id="add-task-name" required placeholder="例: レタス">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">開始日</label>
+                            <input type="date" class="form-control" id="add-start-date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">終了日</label>
+                            <input type="date" class="form-control" id="add-end-date" required>
+                        </div>
+                    </div>
+                    <!-- 連携設定（工程スケジュール用） -->
+                    <div class="mb-3" id="add-link-group" style="display: none;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="add-is-linked" checked>
+                            <label class="form-check-label" for="add-is-linked">
+                                同一レーン内の他の工程と連携して移動する
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="add-color-group">
+                        <label class="form-label">色</label>
+                        <div class="color-picker-wrapper" id="add-color-picker">
+                            <div class="color-option selected" style="background: #4CAF50;" data-color="#4CAF50"></div>
+                            <div class="color-option" style="background: #2196F3;" data-color="#2196F3"></div>
+                            <div class="color-option" style="background: #FF9800;" data-color="#FF9800"></div>
+                            <div class="color-option" style="background: #9C27B0;" data-color="#9C27B0"></div>
+                            <div class="color-option" style="background: #F44336;" data-color="#F44336"></div>
+                            <div class="color-option" style="background: #00BCD4;" data-color="#00BCD4"></div>
+                            <div class="color-option" style="background: #795548;" data-color="#795548"></div>
+                            <div class="color-option" style="background: #607D8B;" data-color="#607D8B"></div>
+                        </div>
+                        <input type="hidden" id="add-color-value" value="#4CAF50">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-success" onclick="saveNewTask()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- タスク編集モーダル -->
+<div class="modal fade" id="editTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1976D2, #42A5F5); color: white;">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> タスク編集</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editTaskForm">
+                    <input type="hidden" id="edit-task-id">
+                    <input type="hidden" id="edit-task-type">
+                    <div class="mb-3">
+                        <label class="form-label">タスク名</label>
+                        <input type="text" class="form-control" id="edit-task-name" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">棚</label>
+                            <select class="form-select" id="edit-plot-select" required>
+                                {% for plot in plots %}
+                                <option value="{{ plot.id }}" data-levels="{{ plot.levels }}">{{ plot.shelf_number }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">段</label>
+                            <select class="form-select" id="edit-level-select" required>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">開始日</label>
+                            <input type="date" class="form-control" id="edit-start-date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">終了日</label>
+                            <input type="date" class="form-control" id="edit-end-date" required>
+                        </div>
+                    </div>
+                    <!-- 連携設定（工程スケジュールのみ） -->
+                    <div class="mb-3" id="edit-link-group" style="display: none;">
+                        <label class="form-label">連携設定</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="edit-is-linked">
+                            <label class="form-check-label" for="edit-is-linked">
+                                同一レーン内の他の工程と連携して移動する
+                            </label>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted">親スケジュール（連携元）</label>
+                            <select class="form-select form-select-sm" id="edit-parent-schedule">
+                                <option value="">なし（独立）</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="edit-color-group">
+                        <label class="form-label">色</label>
+                        <div class="color-picker-wrapper" id="edit-color-picker">
+                            <div class="color-option" style="background: #4CAF50;" data-color="#4CAF50"></div>
+                            <div class="color-option" style="background: #2196F3;" data-color="#2196F3"></div>
+                            <div class="color-option" style="background: #FF9800;" data-color="#FF9800"></div>
+                            <div class="color-option" style="background: #9C27B0;" data-color="#9C27B0"></div>
+                            <div class="color-option" style="background: #F44336;" data-color="#F44336"></div>
+                            <div class="color-option" style="background: #00BCD4;" data-color="#00BCD4"></div>
+                            <div class="color-option" style="background: #795548;" data-color="#795548"></div>
+                            <div class="color-option" style="background: #607D8B;" data-color="#607D8B"></div>
+                        </div>
+                        <input type="hidden" id="edit-color-value">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="deleteTask()">
+                    <i class="fas fa-trash"></i> 削除
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" onclick="updateTask()">
+                    <i class="fas fa-save"></i> 更新
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ツールチップ -->
+<div class="gantt-tooltip" id="gantt-tooltip" style="display: none;"></div>
+
+<!-- レーン設定モーダル -->
+<div class="modal fade" id="laneSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #6c757d, #5a6268); color: white;">
+                <h5 class="modal-title"><i class="fas fa-layer-group"></i> レーン設定（重ね制限）</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">各レーンで同時に表示できる工程帯の最大数を設定します。</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered" id="lane-settings-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>棚</th>
+                                <th>段</th>
+                                <th>最大重ね数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lane-settings-body">
+                            <!-- JavaScriptで描画 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" onclick="saveLaneSettings()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 休日設定モーダル -->
+<div class="modal fade" id="holidaySettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;">
+                <h5 class="modal-title"><i class="fas fa-calendar-times"></i> 休日設定</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label class="form-label fw-bold">定期休業日</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-sunday">
+                            <label class="form-check-label" for="holiday-sunday">日曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-monday">
+                            <label class="form-check-label" for="holiday-monday">月曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-tuesday">
+                            <label class="form-check-label" for="holiday-tuesday">火曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-wednesday">
+                            <label class="form-check-label" for="holiday-wednesday">水曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-thursday">
+                            <label class="form-check-label" for="holiday-thursday">木曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-friday">
+                            <label class="form-check-label" for="holiday-friday">金曜</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="holiday-saturday">
+                            <label class="form-check-label" for="holiday-saturday">土曜</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="skip-holidays">
+                        <label class="form-check-label" for="skip-holidays">祝日をスキップ</label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">個別休日</label>
+                    <div class="input-group mb-2">
+                        <input type="date" class="form-control" id="add-holiday-date">
+                        <input type="text" class="form-control" id="add-holiday-name" placeholder="名称（任意）">
+                        <button type="button" class="btn btn-outline-primary" onclick="addHolidayToList()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <ul class="list-group" id="holiday-list">
+                        <!-- JavaScriptで描画 -->
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" onclick="saveHolidaySettings()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // CSRFトークン取得
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    // データ
+    const ganttRows = {{ gantt_rows|safe }};
+    const ganttTasks = {{ gantt_tasks|safe }};
+    const startDate = new Date('{{ start_date }}');
+    const endDate = new Date('{{ end_date }}');
+
+    // 設定
+    let cellWidth = 40;
+    let viewMode = 'week';
+
+    // 日付計算ヘルパー
+    function daysBetween(date1, date2) {
+        const oneDay = 24 * 60 * 60 * 1000;
+        return Math.round((date2 - date1) / oneDay);
+    }
+
+    function formatDate(date) {
+        return date.toISOString().split('T')[0];
+    }
+
+    function parseDate(dateStr) {
+        return new Date(dateStr + 'T00:00:00');
+    }
+
+    // ガントチャート描画
+    function renderGantt() {
+        const totalDays = daysBetween(startDate, endDate) + 1;
+
+        // サイドバー描画
+        const sidebar = document.getElementById('gantt-sidebar');
+        let sidebarHTML = '<div class="gantt-sidebar-header">棚 / 段</div>';
+        ganttRows.forEach(row => {
+            sidebarHTML += `<div class="gantt-sidebar-row" data-row-id="${row.id}">${row.name}</div>`;
+        });
+        sidebar.innerHTML = sidebarHTML;
+
+        // ヘッダー（日付）描画
+        const header = document.getElementById('gantt-header');
+        let headerHTML = '';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < totalDays; i++) {
+            const date = new Date(startDate);
+            date.setDate(startDate.getDate() + i);
+            const dayOfWeek = date.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isToday = date.getTime() === today.getTime();
+
+            let cellClass = 'gantt-date-cell';
+            if (isWeekend) cellClass += ' weekend';
+            if (isToday) cellClass += ' today';
+
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+            headerHTML += `
+                <div class="${cellClass}" data-date="${formatDate(date)}">
+                    <span>${date.getDate()}</span>
+                    <span style="font-size: 0.65rem;">${dayNames[dayOfWeek]}</span>
+                </div>
+            `;
+        }
+        header.innerHTML = headerHTML;
+
+        // ボディ（行とバー）描画
+        const body = document.getElementById('gantt-body');
+        let bodyHTML = '';
+
+        ganttRows.forEach((row, rowIndex) => {
+            let rowHTML = `<div class="gantt-row" data-row-id="${row.id}">`;
+            for (let i = 0; i < totalDays; i++) {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + i);
+                const dayOfWeek = date.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                rowHTML += `<div class="gantt-cell${isWeekend ? ' weekend' : ''}" data-date="${formatDate(date)}"></div>`;
+            }
+            rowHTML += '</div>';
+            bodyHTML += rowHTML;
+        });
+        body.innerHTML = bodyHTML;
+
+        // 今日の線を追加
+        const todayOffset = daysBetween(startDate, today);
+        if (todayOffset >= 0 && todayOffset < totalDays) {
+            const todayLine = document.createElement('div');
+            todayLine.className = 'today-line';
+            todayLine.style.left = (todayOffset * cellWidth + cellWidth / 2) + 'px';
+            body.appendChild(todayLine);
+        }
+
+        // タスクバーを描画
+        renderTasks();
+    }
+
+    // タスクバー描画
+    function renderTasks() {
+        // 既存のバーを削除
+        document.querySelectorAll('.gantt-bar').forEach(el => el.remove());
+
+        const body = document.getElementById('gantt-body');
+
+        ganttTasks.forEach(task => {
+            const rowIndex = ganttRows.findIndex(r => r.id === task.row_id);
+            if (rowIndex === -1) return;
+
+            const taskStart = parseDate(task.start);
+            const taskEnd = parseDate(task.end);
+
+            const startOffset = daysBetween(startDate, taskStart);
+            const duration = daysBetween(taskStart, taskEnd) + 1;
+
+            // 表示範囲外はスキップ
+            if (startOffset + duration < 0 || startOffset > daysBetween(startDate, endDate)) return;
+
+            const bar = document.createElement('div');
+            bar.className = 'gantt-bar';
+            bar.id = `bar-${task.id}`;
+            bar.style.left = Math.max(0, startOffset * cellWidth) + 'px';
+            bar.style.width = Math.min(duration * cellWidth, (daysBetween(startDate, endDate) + 1 - startOffset) * cellWidth) + 'px';
+            bar.style.top = (rowIndex * 40 + 6) + 'px';
+            bar.style.backgroundColor = task.color;
+            bar.textContent = task.name;
+            bar.dataset.taskId = task.id;
+            bar.dataset.taskType = task.type;
+
+            // 連携スケジュールのスタイル
+            if (task.type === 'process-schedule') {
+                if (task.is_linked) {
+                    bar.classList.add('linked');
+                }
+                // 子スケジュールを持つかチェック
+                const hasChildren = ganttTasks.some(t =>
+                    t.type === 'process-schedule' &&
+                    t.parent_schedule_id &&
+                    t.parent_schedule_id == task.id.replace('process-schedule-', '')
+                );
+                if (hasChildren) {
+                    bar.classList.add('has-children');
+                }
+            }
+
+            // リサイズハンドル
+            bar.innerHTML = `
+                <div class="gantt-bar-resize left"></div>
+                <span>${task.name}</span>
+                <div class="gantt-bar-resize right"></div>
+            `;
+
+            // イベントリスナー
+            bar.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('gantt-bar-resize')) {
+                    openEditModal(task);
+                }
+            });
+
+            // ドラッグ＆ドロップ
+            makeDraggable(bar, task);
+
+            // ツールチップ
+            bar.addEventListener('mouseenter', (e) => showTooltip(e, task));
+            bar.addEventListener('mouseleave', hideTooltip);
+
+            body.appendChild(bar);
+        });
+    }
+
+    // ドラッグ＆ドロップ
+    function makeDraggable(bar, task) {
+        let isDragging = false;
+        let isResizing = false;
+        let resizeDirection = null;
+        let startX, startLeft, startWidth;
+
+        bar.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('gantt-bar-resize')) {
+                isResizing = true;
+                resizeDirection = e.target.classList.contains('left') ? 'left' : 'right';
+            } else {
+                isDragging = true;
+            }
+
+            startX = e.clientX;
+            startLeft = parseInt(bar.style.left);
+            startWidth = parseInt(bar.style.width);
+            bar.classList.add('dragging');
+
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging && !isResizing) return;
+
+            const deltaX = e.clientX - startX;
+            const daysDelta = Math.round(deltaX / cellWidth);
+
+            if (isDragging) {
+                const newLeft = startLeft + daysDelta * cellWidth;
+                bar.style.left = Math.max(0, newLeft) + 'px';
+            } else if (isResizing) {
+                if (resizeDirection === 'right') {
+                    const newWidth = startWidth + daysDelta * cellWidth;
+                    bar.style.width = Math.max(cellWidth, newWidth) + 'px';
+                } else {
+                    const newLeft = startLeft + daysDelta * cellWidth;
+                    const newWidth = startWidth - daysDelta * cellWidth;
+                    if (newWidth >= cellWidth && newLeft >= 0) {
+                        bar.style.left = newLeft + 'px';
+                        bar.style.width = newWidth + 'px';
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (!isDragging && !isResizing) return;
+
+            bar.classList.remove('dragging');
+
+            const newLeft = parseInt(bar.style.left);
+            const newWidth = parseInt(bar.style.width);
+
+            const newStartOffset = Math.round(newLeft / cellWidth);
+            const newDuration = Math.round(newWidth / cellWidth);
+
+            const newStartDate = new Date(startDate);
+            newStartDate.setDate(startDate.getDate() + newStartOffset);
+
+            const newEndDate = new Date(newStartDate);
+            newEndDate.setDate(newStartDate.getDate() + newDuration - 1);
+
+            // タスクを更新
+            updateTaskDates(task, formatDate(newStartDate), formatDate(newEndDate));
+
+            isDragging = false;
+            isResizing = false;
+        });
+    }
+
+    // ツールチップ
+    function showTooltip(e, task) {
+        const tooltip = document.getElementById('gantt-tooltip');
+        tooltip.innerHTML = `
+            <div class="tooltip-title">${task.name}</div>
+            <div class="tooltip-info">
+                期間: ${task.start} ~ ${task.end}<br>
+                進捗: ${task.progress}%
+            </div>
+        `;
+        tooltip.style.left = (e.clientX + 10) + 'px';
+        tooltip.style.top = (e.clientY + 10) + 'px';
+        tooltip.style.display = 'block';
+    }
+
+    function hideTooltip() {
+        document.getElementById('gantt-tooltip').style.display = 'none';
+    }
+
+    // API呼び出し
+    function updateTaskDates(task, newStart, newEnd, moveLinked = true) {
+        const taskId = task.id;
+        const taskType = task.type;
+
+        let url, data, method;
+
+        if (taskType === 'process-schedule') {
+            // 新しいProcessSchedule API（連携移動対応）
+            const scheduleId = taskId.replace('process-schedule-', '');
+            const originalStart = parseDate(task.start);
+            const newStartDate = parseDate(newStart);
+            const daysOffset = daysBetween(originalStart, newStartDate);
+
+            // 移動API（連携移動）を使用
+            url = `/api/cultivation/gantt/schedules/${scheduleId}/move/`;
+            method = 'POST';
+            data = {
+                days_offset: daysOffset,
+                move_children: moveLinked
+            };
+        } else if (taskType === 'schedule') {
+            const scheduleId = taskId.replace('schedule-', '');
+            url = `/api/cultivation/schedules/${scheduleId}/`;
+            method = 'PATCH';
+            data = {
+                start_date: newStart,
+                end_date: newEnd
+            };
+        } else if (taskType === 'crop') {
+            // 作物の場合は別APIを呼ぶ必要がある
+            const cropId = taskId.replace('crop-', '');
+            url = `/api/cultivation/shelf-crops/${cropId}/`;
+            method = 'PATCH';
+            data = {
+                planting_date: newStart,
+                expected_harvest_date: newEnd
+            };
+        }
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('更新に失敗しました');
+            return response.json();
+        })
+        .then(data => {
+            // ローカルデータを更新
+            const taskIndex = ganttTasks.findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                ganttTasks[taskIndex].start = newStart;
+                ganttTasks[taskIndex].end = newEnd;
+            }
+
+            // 連携移動の場合、子スケジュールも更新（ProcessScheduleの場合）
+            if (taskType === 'process-schedule' && moveLinked) {
+                // ページをリロードして最新データを取得
+                showNotification('スケジュールを更新しました（連携移動）', 'success');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showNotification('スケジュールを更新しました', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('更新に失敗しました', 'danger');
+            renderTasks(); // 元に戻す
+        });
+    }
+
+    // ProcessSchedule用の移動API呼び出し（直接日数指定）
+    function moveProcessSchedule(scheduleId, daysOffset, moveChildren = true) {
+        fetch(`/api/cultivation/gantt/schedules/${scheduleId}/move/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({
+                days_offset: daysOffset,
+                move_children: moveChildren
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('移動に失敗しました');
+            return response.json();
+        })
+        .then(data => {
+            showNotification(`スケジュールを${daysOffset > 0 ? daysOffset + '日後' : Math.abs(daysOffset) + '日前'}に移動しました`, 'success');
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('移動に失敗しました', 'danger');
+        });
+    }
+
+    // 通知
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3`;
+        notification.style.zIndex = '9999';
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 3000);
+    }
+
+    // モーダル
+    function openEditModal(task) {
+        document.getElementById('edit-task-id').value = task.id;
+        document.getElementById('edit-task-type').value = task.type;
+        document.getElementById('edit-task-name').value = task.name;
+        document.getElementById('edit-start-date').value = task.start;
+        document.getElementById('edit-end-date').value = task.end;
+        document.getElementById('edit-color-value').value = task.color;
+
+        // 棚と段を設定
+        document.getElementById('edit-plot-select').value = task.plot_id;
+        updateLevelSelect('edit-plot-select', 'edit-level-select', task.level);
+
+        // 色を選択
+        document.querySelectorAll('#edit-color-picker .color-option').forEach(el => {
+            el.classList.remove('selected');
+            if (el.dataset.color === task.color) {
+                el.classList.add('selected');
+            }
+        });
+
+        // 連携設定（ProcessScheduleのみ）
+        const linkGroup = document.getElementById('edit-link-group');
+        if (task.type === 'process-schedule') {
+            linkGroup.style.display = 'block';
+            document.getElementById('edit-is-linked').checked = task.is_linked !== false;
+
+            // 同じレーンの他のスケジュールを親候補として表示
+            const parentSelect = document.getElementById('edit-parent-schedule');
+            parentSelect.innerHTML = '<option value="">なし（独立）</option>';
+            ganttTasks.filter(t =>
+                t.type === 'process-schedule' &&
+                t.id !== task.id &&
+                t.row_id === task.row_id
+            ).forEach(t => {
+                const option = document.createElement('option');
+                option.value = t.id.replace('process-schedule-', '');
+                option.textContent = t.name;
+                if (task.parent_schedule_id && task.parent_schedule_id == option.value) {
+                    option.selected = true;
+                }
+                parentSelect.appendChild(option);
+            });
+        } else {
+            linkGroup.style.display = 'none';
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+        modal.show();
+    }
+
+    // 色選択
+    document.querySelectorAll('.color-option').forEach(el => {
+        el.addEventListener('click', function() {
+            const parent = this.parentElement;
+            parent.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            this.classList.add('selected');
+
+            const inputId = parent.id.replace('-picker', '-value');
+            document.getElementById(inputId).value = this.dataset.color;
+        });
+    });
+
+    // 棚選択時の段更新
+    document.getElementById('add-plot-select').addEventListener('change', function() {
+        updateLevelSelect('add-plot-select', 'add-level-select');
+    });
+
+    document.getElementById('edit-plot-select').addEventListener('change', function() {
+        updateLevelSelect('edit-plot-select', 'edit-level-select');
+    });
+
+    function updateLevelSelect(plotSelectId, levelSelectId, selectedLevel = 1) {
+        const plotSelect = document.getElementById(plotSelectId);
+        const levelSelect = document.getElementById(levelSelectId);
+        const selectedOption = plotSelect.options[plotSelect.selectedIndex];
+
+        if (!selectedOption || !selectedOption.value) {
+            levelSelect.disabled = true;
+            levelSelect.innerHTML = '<option value="">まず棚を選択...</option>';
+            return;
+        }
+
+        const levels = parseInt(selectedOption.dataset.levels) || 1;
+        levelSelect.disabled = false;
+        levelSelect.innerHTML = '';
+
+        for (let i = 1; i <= levels; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = i + '段目';
+            if (i === selectedLevel) option.selected = true;
+            levelSelect.appendChild(option);
+        }
+    }
+
+    // ビューモード変更
+    function setViewMode(mode) {
+        viewMode = mode;
+        switch (mode) {
+            case 'day':
+                cellWidth = 40;
+                break;
+            case 'week':
+                cellWidth = 40;
+                break;
+            case 'month':
+                cellWidth = 20;
+                break;
+        }
+
+        document.querySelectorAll('.view-mode-buttons .btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+
+        // スタイル更新
+        document.querySelectorAll('.gantt-date-cell, .gantt-cell').forEach(el => {
+            el.style.minWidth = cellWidth + 'px';
+            el.style.maxWidth = cellWidth + 'px';
+        });
+
+        renderTasks();
+    }
+
+    // 今日へスクロール
+    function scrollToToday() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const offset = daysBetween(startDate, today);
+        const timeline = document.getElementById('gantt-timeline');
+        timeline.scrollLeft = Math.max(0, offset * cellWidth - timeline.clientWidth / 2);
+    }
+
+    // レイアウト変更
+    function changeLayout(layoutId) {
+        if (layoutId) {
+            window.location.href = `/cultivation/gantt/layout/${layoutId}/`;
+        } else {
+            window.location.href = '/cultivation/gantt/';
+        }
+    }
+
+    // タスクタイプ切り替え
+    document.querySelectorAll('input[name="add-task-type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const isProcess = this.value === 'process-schedule';
+            document.getElementById('add-process-group').style.display = isProcess ? 'block' : 'none';
+            document.getElementById('add-link-group').style.display = isProcess ? 'block' : 'none';
+            document.getElementById('add-color-group').style.display = isProcess ? 'none' : 'block';
+            document.getElementById('add-name-label').textContent = isProcess ? 'グループ名（任意）' : 'タスク名 / 作物名';
+            document.getElementById('add-task-name').required = !isProcess;
+            document.getElementById('add-task-name').placeholder = isProcess ? '例: 春作レタス' : '例: レタス';
+        });
+    });
+
+    // 工程選択時に色を自動設定
+    document.getElementById('add-process-select').addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption && selectedOption.dataset.color) {
+            document.getElementById('add-color-value').value = selectedOption.dataset.color;
+        }
+    });
+
+    // 新規タスク保存
+    function saveNewTask() {
+        const taskType = document.querySelector('input[name="add-task-type"]:checked').value;
+        const plotId = document.getElementById('add-plot-select').value;
+        const level = document.getElementById('add-level-select').value;
+        const taskName = document.getElementById('add-task-name').value;
+        const startDateValue = document.getElementById('add-start-date').value;
+        const endDateValue = document.getElementById('add-end-date').value;
+        const color = document.getElementById('add-color-value').value;
+
+        if (!plotId || !level || !startDateValue || !endDateValue) {
+            alert('棚、段、開始日、終了日は必須です');
+            return;
+        }
+
+        if (taskType === 'process-schedule') {
+            // ProcessScheduleを作成
+            const processId = document.getElementById('add-process-select').value;
+            const isLinked = document.getElementById('add-is-linked').checked;
+
+            if (!processId) {
+                alert('工程を選択してください');
+                return;
+            }
+
+            fetch('/api/cultivation/gantt/schedules/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({
+                    plot: plotId,
+                    level: level,
+                    process: processId,
+                    group_name: taskName || '',
+                    start_date: startDateValue,
+                    end_date: endDateValue,
+                    is_linked: isLinked
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('作成に失敗しました');
+                return response.json();
+            })
+            .then(data => {
+                showNotification('工程スケジュールを追加しました', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('工程スケジュールの追加に失敗しました');
+            });
+        } else {
+            // ShelfCropを作成（従来の処理）
+            if (!taskName) {
+                alert('作物名を入力してください');
+                return;
+            }
+
+            fetch('/api/cultivation/shelf-crops/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({
+                    plot: plotId,
+                    level: level,
+                    variety: taskName,
+                    planting_date: startDateValue,
+                    expected_harvest_date: endDateValue
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('作成に失敗しました');
+                return response.json();
+            })
+            .then(data => {
+                showNotification('タスクを追加しました', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('タスクの追加に失敗しました');
+            });
+        }
+    }
+
+    // タスク更新
+    function updateTask() {
+        const taskId = document.getElementById('edit-task-id').value;
+        const taskType = document.getElementById('edit-task-type').value;
+        const startDateValue = document.getElementById('edit-start-date').value;
+        const endDateValue = document.getElementById('edit-end-date').value;
+
+        let url, data;
+
+        if (taskType === 'process-schedule') {
+            const scheduleId = taskId.replace('process-schedule-', '');
+            const isLinked = document.getElementById('edit-is-linked').checked;
+            const parentScheduleId = document.getElementById('edit-parent-schedule').value;
+
+            url = `/api/cultivation/gantt/schedules/${scheduleId}/`;
+            data = {
+                start_date: startDateValue,
+                end_date: endDateValue,
+                is_linked: isLinked,
+                parent_schedule: parentScheduleId || null
+            };
+        } else if (taskType === 'schedule') {
+            const scheduleId = taskId.replace('schedule-', '');
+            url = `/api/cultivation/schedules/${scheduleId}/`;
+            data = {
+                start_date: startDateValue,
+                end_date: endDateValue
+            };
+        } else {
+            const cropId = taskId.replace('crop-', '');
+            url = `/api/cultivation/shelf-crops/${cropId}/`;
+            data = {
+                planting_date: startDateValue,
+                expected_harvest_date: endDateValue
+            };
+        }
+
+        fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('更新に失敗しました');
+            return response.json();
+        })
+        .then(data => {
+            showNotification('タスクを更新しました', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('editTaskModal')).hide();
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('更新に失敗しました');
+        });
+    }
+
+    // タスク削除
+    function deleteTask() {
+        if (!confirm('このタスクを削除しますか？')) return;
+
+        const taskId = document.getElementById('edit-task-id').value;
+        const taskType = document.getElementById('edit-task-type').value;
+
+        let url;
+
+        if (taskType === 'process-schedule') {
+            const scheduleId = taskId.replace('process-schedule-', '');
+            url = `/api/cultivation/gantt/schedules/${scheduleId}/`;
+        } else if (taskType === 'schedule') {
+            const scheduleId = taskId.replace('schedule-', '');
+            url = `/api/cultivation/schedules/${scheduleId}/`;
+        } else {
+            const cropId = taskId.replace('crop-', '');
+            url = `/api/cultivation/shelf-crops/${cropId}/`;
+        }
+
+        fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrftoken
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('削除に失敗しました');
+            showNotification('タスクを削除しました', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('editTaskModal')).hide();
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('削除に失敗しました');
+        });
+    }
+
+    // ===============================
+    // レーン設定機能
+    // ===============================
+    let laneConfigs = {};
+
+    // レーン設定モーダルを開く時にデータをロード
+    document.getElementById('laneSettingsModal').addEventListener('show.bs.modal', function() {
+        loadLaneSettings();
+    });
+
+    function loadLaneSettings() {
+        fetch('/api/cultivation/gantt/lane-configs/', {
+            headers: { 'X-CSRFToken': csrftoken }
+        })
+        .then(response => response.json())
+        .then(data => {
+            laneConfigs = {};
+            // ページネーションされたレスポンスと配列の両方に対応
+            const configs = Array.isArray(data) ? data : (data.results || []);
+            configs.forEach(config => {
+                const key = `${config.plot}-${config.level}`;
+                laneConfigs[key] = config;
+            });
+            renderLaneSettingsTable();
+        })
+        .catch(error => {
+            console.error('Error loading lane configs:', error);
+            // エラー時もテーブルを表示（空のconfig設定で）
+            renderLaneSettingsTable();
+        });
+    }
+
+    function renderLaneSettingsTable() {
+        const tbody = document.getElementById('lane-settings-body');
+        tbody.innerHTML = '';
+
+        ganttRows.forEach(row => {
+            const key = `${row.plot_id}-${row.level}`;
+            const config = laneConfigs[key] || { max_overlap: 3 };
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${row.shelf_number || row.name.split(' ')[0]}</td>
+                <td>${row.level}段</td>
+                <td>
+                    <input type="number" class="form-control form-control-sm"
+                           style="width: 80px"
+                           min="1" max="10"
+                           value="${config.max_overlap}"
+                           data-plot-id="${row.plot_id}"
+                           data-level="${row.level}"
+                           data-config-id="${config.id || ''}">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function saveLaneSettings() {
+        const inputs = document.querySelectorAll('#lane-settings-body input[type="number"]');
+        const promises = [];
+
+        inputs.forEach(input => {
+            const plotId = input.dataset.plotId;
+            const level = input.dataset.level;
+            const configId = input.dataset.configId;
+            const maxOverlap = parseInt(input.value);
+
+            if (configId) {
+                // 既存の設定を更新
+                promises.push(
+                    fetch(`/api/cultivation/gantt/lane-configs/${configId}/`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({ max_overlap: maxOverlap })
+                    })
+                );
+            } else {
+                // 新規作成
+                promises.push(
+                    fetch('/api/cultivation/gantt/lane-configs/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({
+                            plot: plotId,
+                            level: level,
+                            max_overlap: maxOverlap
+                        })
+                    })
+                );
+            }
+        });
+
+        Promise.all(promises)
+            .then(() => {
+                showNotification('レーン設定を保存しました', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('laneSettingsModal')).hide();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('保存に失敗しました', 'danger');
+            });
+    }
+
+    // ===============================
+    // 休日設定機能
+    // ===============================
+    let holidayConfig = null;
+    let tempHolidays = [];
+
+    // 休日設定モーダルを開く時にデータをロード
+    document.getElementById('holidaySettingsModal').addEventListener('show.bs.modal', function() {
+        loadHolidaySettings();
+    });
+
+    function loadHolidaySettings() {
+        fetch('/api/cultivation/gantt/holiday-configs/', {
+            headers: { 'X-CSRFToken': csrftoken }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.length > 0) {
+                holidayConfig = data[0];
+                document.getElementById('holiday-sunday').checked = holidayConfig.sunday_off;
+                document.getElementById('holiday-monday').checked = holidayConfig.monday_off;
+                document.getElementById('holiday-tuesday').checked = holidayConfig.tuesday_off;
+                document.getElementById('holiday-wednesday').checked = holidayConfig.wednesday_off;
+                document.getElementById('holiday-thursday').checked = holidayConfig.thursday_off;
+                document.getElementById('holiday-friday').checked = holidayConfig.friday_off;
+                document.getElementById('holiday-saturday').checked = holidayConfig.saturday_off;
+                document.getElementById('skip-holidays').checked = holidayConfig.skip_holidays;
+
+                tempHolidays = holidayConfig.holidays || [];
+            } else {
+                holidayConfig = null;
+                tempHolidays = [];
+            }
+            renderHolidayList();
+        })
+        .catch(error => {
+            console.error('Error loading holiday config:', error);
+        });
+    }
+
+    function renderHolidayList() {
+        const list = document.getElementById('holiday-list');
+        list.innerHTML = '';
+
+        tempHolidays.forEach((holiday, index) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `
+                <span>${holiday.date} ${holiday.name || ''}</span>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeHolidayFromList(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    function addHolidayToList() {
+        const date = document.getElementById('add-holiday-date').value;
+        const name = document.getElementById('add-holiday-name').value;
+
+        if (!date) {
+            alert('日付を選択してください');
+            return;
+        }
+
+        tempHolidays.push({ date: date, name: name });
+        renderHolidayList();
+
+        document.getElementById('add-holiday-date').value = '';
+        document.getElementById('add-holiday-name').value = '';
+    }
+
+    function removeHolidayFromList(index) {
+        tempHolidays.splice(index, 1);
+        renderHolidayList();
+    }
+
+    function saveHolidaySettings() {
+        const configData = {
+            sunday_off: document.getElementById('holiday-sunday').checked,
+            monday_off: document.getElementById('holiday-monday').checked,
+            tuesday_off: document.getElementById('holiday-tuesday').checked,
+            wednesday_off: document.getElementById('holiday-wednesday').checked,
+            thursday_off: document.getElementById('holiday-thursday').checked,
+            friday_off: document.getElementById('holiday-friday').checked,
+            saturday_off: document.getElementById('holiday-saturday').checked,
+            skip_holidays: document.getElementById('skip-holidays').checked
+        };
+
+        let configPromise;
+
+        if (holidayConfig && holidayConfig.id) {
+            // 既存の設定を更新
+            configPromise = fetch(`/api/cultivation/gantt/holiday-configs/${holidayConfig.id}/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify(configData)
+            });
+        } else {
+            // 新規作成
+            configPromise = fetch('/api/cultivation/gantt/holiday-configs/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify(configData)
+            });
+        }
+
+        configPromise
+            .then(response => response.json())
+            .then(config => {
+                // 個別休日を保存
+                const holidayPromises = tempHolidays.map(h => {
+                    if (h.id) {
+                        return Promise.resolve(); // 既存の休日はスキップ
+                    }
+                    return fetch('/api/cultivation/gantt/holidays/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({
+                            holiday_config: config.id,
+                            date: h.date,
+                            name: h.name || ''
+                        })
+                    });
+                });
+
+                return Promise.all(holidayPromises);
+            })
+            .then(() => {
+                showNotification('休日設定を保存しました', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('holidaySettingsModal')).hide();
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('保存に失敗しました', 'danger');
+            });
+    }
+
+    // 初期化
+    document.addEventListener('DOMContentLoaded', function() {
+        if (ganttRows.length > 0) {
+            renderGantt();
+            scrollToToday();
+        }
+    });
+</script>
+{% endblock %}

@@ -9,9 +9,9 @@
     <!-- Header -->
     <div class="header">
         <div class="issuer">
-            {% if company_logo %}
+            {% if company_logo_path %}
             <div class="logo-container">
-                <img src="{{ company_logo.path }}" alt="会社ロゴ" class="company-logo">
+                <img src="file://{{ company_logo_path }}" alt="会社ロゴ" class="company-logo">
             </div>
             {% endif %}
             <div class="issuer-title">発行元 / Issuer</div>
@@ -19,9 +19,9 @@
             {% if issuer.address %}<div>{{ issuer.address|linebreaksbr }}</div>{% endif %}
             {% if issuer.contact_phone %}<div>TEL: {{ issuer.contact_phone }}</div>{% endif %}
             {% if issuer.contact_email %}<div>Email: {{ issuer.contact_email }}</div>{% endif %}
-            {% if company_seal %}
+            {% if company_seal_path %}
             <div class="seal-container">
-                <img src="{{ company_seal.path }}" alt="会社印" class="company-seal">
+                <img src="file://{{ company_seal_path }}" alt="会社印" class="company-seal">
             </div>
             {% endif %}
         </div>

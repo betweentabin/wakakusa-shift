@@ -62,6 +62,7 @@ class Staff(models.Model):
         ('part_time', 'アルバイト'),
         ('staff', '職員'),
         ('manager', '管理者'),
+        ('global_admin', 'グローバル管理者'),
     ]
     
     # 在庫管理権限の選択肢
@@ -136,7 +137,19 @@ class Staff(models.Model):
     def __str__(self):
         org_name = self.organization.name if self.organization else "未設定"
         return f"{self.name} ({org_name})"
-    
+
+    def save(self, *args, **kwargs):
+        """
+        保存時の自動処理
+        - 管理者（manager）とグローバル管理者（global_admin）は在庫管理の全権限を付与
+        """
+        # 管理者とグローバル管理者は自動的に在庫管理の全権限を持つ
+        if self.role_type in ['manager', 'global_admin']:
+            if self.inventory_permission == 'none':
+                self.inventory_permission = 'admin'
+
+        super().save(*args, **kwargs)
+
     def is_approved(self):
         """承認済みかどうかを判定"""
         return self.approval_status == 'approved'
@@ -152,6 +165,7 @@ class Staff(models.Model):
             'part_time': '🎒',
             'staff': '👔',
             'manager': '👑',
+            'global_admin': '🌐',
         }
         icon = role_icons.get(self.role_type, '👤')
         return f"{icon} {self.get_role_type_display()}"
@@ -299,6 +313,13 @@ class ShiftTemplate(models.Model):
     """シフトテンプレートモデル"""
     name = models.CharField(max_length=100, verbose_name="テンプレート名")
     description = models.TextField(blank=True, null=True, verbose_name="説明")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        null=True,
+        blank=True
+    )
     is_active = models.BooleanField(default=True, verbose_name="有効")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
@@ -324,7 +345,7 @@ class ShiftTemplateDetail(models.Model):
     ]
     
     template = models.ForeignKey(ShiftTemplate, on_delete=models.CASCADE, related_name='details', verbose_name="テンプレート")
-    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, verbose_name="スタッフ")
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True, verbose_name="スタッフ")
     shift_type = models.ForeignKey(ShiftType, on_delete=models.CASCADE, verbose_name="シフト種別")
     weekday = models.IntegerField(choices=WEEKDAY_CHOICES, verbose_name="曜日")
     start_time = models.TimeField(verbose_name="開始時間")
@@ -333,10 +354,11 @@ class ShiftTemplateDetail(models.Model):
     class Meta:
         verbose_name = "シフトテンプレート詳細"
         verbose_name_plural = "シフトテンプレート詳細"
-        unique_together = ['template', 'staff', 'weekday']
+        # unique_togetherを削除（staffがnullの場合に複数レコード作成可能にするため）
 
     def __str__(self):
-        return f"{self.template.name} - {self.staff.name} - {self.get_weekday_display()}"
+        staff_name = self.staff.name if self.staff else "スタッフ指定なし"
+        return f"{self.template.name} - {staff_name} - {self.get_weekday_display()}"
 
 
 class LeaveRequest(models.Model):

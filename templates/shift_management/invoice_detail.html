@@ -143,10 +143,14 @@
                             <i class="fas fa-file-pdf me-2"></i>
                             PDF出力
                         </a>
-                        <button class="btn btn-outline-secondary" disabled>
+                        <a href="{% url 'shift_management:invoice_excel' invoice.pk %}" class="btn btn-outline-success">
+                            <i class="fas fa-file-excel me-2"></i>
+                            Excel出力
+                        </a>
+                        <a href="{% url 'shift_management:invoice_print' invoice.pk %}" target="_blank" class="btn btn-outline-secondary">
                             <i class="fas fa-print me-2"></i>
-                            印刷 (未実装)
-                        </button>
+                            印刷
+                        </a>
                         {% if invoice.status == 'draft' %}
                             <form method="post" action="{% url 'shift_management:invoice_change_status' invoice.pk %}" style="display: inline;">
                                 {% csrf_token %}

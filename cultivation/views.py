@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 import json
 from .models import CultivationLayout, CultivationSection, CultivationPlan, CultivationLog, Crop, Plot, ShelfCrop
-from .forms import CultivationLayoutForm, CultivationPlanForm, CultivationLogForm, PlotForm, ShelfCropForm, CultivationSectionForm, CropImageForm, CropForm
+from .forms import CultivationLayoutForm, CultivationPlanForm, CultivationLogForm, PlotForm, ShelfCropForm, CultivationSectionForm, CropImageForm, CropForm, PlotInlineForm, BulkAddLanesForm
 from .utils import process_import_file
 from shift_management.views import get_current_organization
 from shift_management.utils import filter_by_organization, is_global_admin
@@ -15,51 +15,56 @@ def get_plot_level_details(plot):
     """棚の各レベルの詳細情報を取得する共通ヘルパー関数"""
     crops_by_level = plot.get_crops_by_level()
     level_details = []
-    
+
     for level in range(1, plot.levels + 1):
         level_crops = crops_by_level.get(level, [])
         level_info = {
             'level': level,
             'status': 'empty',
             'crop_name': '空き',
+            'crop': None,
             'crop_id': None,
+            'plate_count': 0,
             'days_until_harvest': None,
             'progress_percentage': None,
+            'sowing_date': None,
+            'pre_planting_date': None,
             'planting_date': None,
             'expected_harvest_date': None,
         }
-        
+
         if level_crops:
             crop = level_crops[0]  # 最新の作物
+            growth_status = crop.get_growth_status()
+            level_info['crop'] = crop
             level_info['crop_id'] = crop.id
             level_info['crop_name'] = crop.variety
+            level_info['plate_count'] = crop.plate_count
+            level_info['sowing_date'] = crop.sowing_date.isoformat() if crop.sowing_date else None
+            level_info['pre_planting_date'] = crop.pre_planting_date.isoformat() if crop.pre_planting_date else None
             level_info['planting_date'] = crop.planting_date.isoformat() if crop.planting_date else None
             level_info['expected_harvest_date'] = crop.expected_harvest_date.isoformat() if crop.expected_harvest_date else None
-            
+
+            # get_growth_status() の値をそのまま使用
+            level_info['status'] = growth_status
+
             if crop.days_until_harvest() is not None:
                 level_info['days_until_harvest'] = crop.days_until_harvest()
                 level_info['progress_percentage'] = crop.growth_progress_percentage()
-                
-                if crop.days_overdue() > 0:
-                    level_info['status'] = 'overdue'
-                elif crop.days_until_harvest() <= 0:
-                    level_info['status'] = 'harvest_ready'
-                else:
-                    level_info['status'] = 'growing'
-            else:
-                level_info['status'] = 'growing'
-        
+
         # レベルごとの色を設定
         status_colors = {
-            'empty': '#e8f5e9',
-            'growing': '#e3f2fd',
-            'harvest_ready': '#fff3e0',
-            'overdue': '#ffcdd2'
+            'empty': '#f5f5f5',
+            'sowing': '#eceff1',
+            'pre_planted': '#fff9c4',
+            'planted': '#c8e6c9',
+            'harvest_ready': '#ffe0b2',
+            'harvested': '#eeeeee',
         }
-        level_info['color'] = status_colors[level_info['status']]
-        
+        level_info['color'] = status_colors.get(level_info['status'], '#f5f5f5')
+
         level_details.append(level_info)
-    
+
     return level_details
 
 # Create your views here.
@@ -106,7 +111,6 @@ def cultivation_top(request):
             direct_plots = Plot.objects.filter(layout=layout)
             direct_count = direct_plots.count()
             
-            print(f"DEBUG cultivation_top: Layout '{layout.name}' has {plots_count} plots (reverse FK) vs {direct_count} plots (direct query)")
             
             # 直接クエリの結果を使用
             plots = direct_plots
@@ -115,7 +119,6 @@ def cultivation_top(request):
         except AttributeError:
             plots = []
             plots_count = 0
-            print(f"DEBUG cultivation_top: Layout '{layout.name}' has no plots attribute")
         
         # 作物統計を初期化
         active_crops_count = 0
@@ -124,25 +127,26 @@ def cultivation_top(request):
         levels_count = 0
         overdue_count = 0
         
+        plots_with_details = []
         for plot in plots:
             levels_count += plot.levels
-            print(f"DEBUG: Processing plot {plot.shelf_number} in layout {layout.name}")
-            
+
             # 共通ヘルパー関数を使用してレベル詳細を取得
             level_details = get_plot_level_details(plot)
-            print(f"DEBUG: Plot {plot.shelf_number} level details: {[{l['level']: l['status']} for l in level_details]}")
-            
-            # 統計カウント（棚区画管理ページと同じロジック）
+
+            # プロットに詳細情報を追加（ミニ棚グリッド用）
+            plot.level_details = level_details
+            plots_with_details.append(plot)
+
+            # 統計カウント
             for level_info in level_details:
                 if level_info['status'] == 'empty':
                     empty_levels_count += 1
-                elif level_info['status'] == 'growing':
+                elif level_info['status'] in ('planted', 'pre_planted', 'sowing'):
                     active_crops_count += 1
                 elif level_info['status'] == 'harvest_ready':
                     harvest_ready_count += 1
-                elif level_info['status'] == 'overdue':
-                    overdue_count += 1
-        
+
         # レイアウトに統計情報を追加
         layout.plots_count = plots_count
         layout.total_levels = levels_count
@@ -150,8 +154,7 @@ def cultivation_top(request):
         layout.harvest_ready_count = harvest_ready_count
         layout.empty_levels_count = empty_levels_count
         layout.overdue_count = overdue_count
-        
-        print(f"DEBUG: Layout '{layout.name}' final stats: plots={plots_count}, levels={levels_count}, active={active_crops_count}, harvest_ready={harvest_ready_count}, empty={empty_levels_count}, overdue={overdue_count}")
+        layout.plots_with_details = plots_with_details
         
         # 全体統計に加算
         total_plots += plots_count
@@ -172,7 +175,12 @@ def cultivation_top(request):
     return render(request, 'cultivation/cultivation_top.html', context)
 
 def layout_list(request):
-    """栽培レイアウト一覧ページ"""
+    """栽培レイアウト一覧 → cultivation_top に統合済み"""
+    return redirect('cultivation:cultivation_top')
+
+
+def _layout_list_unused(request):
+    """（参照用）旧レイアウト一覧ビュー"""
     # 組織フィルタリングを適用
     current_organization = get_current_organization(request)
 
@@ -201,7 +209,6 @@ def layout_list(request):
             direct_plots = Plot.objects.filter(layout=layout)
             direct_count = direct_plots.count()
             
-            print(f"DEBUG layout_list: Layout '{layout.name}' has {plots_count} plots (reverse FK) vs {direct_count} plots (direct query)")
             
             # 直接クエリの結果を使用
             plots = direct_plots
@@ -210,7 +217,6 @@ def layout_list(request):
         except AttributeError:
             plots = []
             plots_count = 0
-            print(f"DEBUG layout_list: Layout '{layout.name}' has no plots attribute")
         
         # 作物統計を初期化
         active_crops_count = 0
@@ -224,11 +230,9 @@ def layout_list(request):
         
         for plot in plots:
             total_levels += plot.levels
-            print(f"DEBUG layout_list: Processing plot {plot.shelf_number} in layout {layout.name}")
             
             # 共通ヘルパー関数を使用してレベル詳細を取得
             level_details = get_plot_level_details(plot)
-            print(f"DEBUG layout_list: Plot {plot.shelf_number} level details: {[{l['level']: l['status']} for l in level_details]}")
             
             # プロットに詳細情報を追加
             plot.level_details = level_details
@@ -254,7 +258,6 @@ def layout_list(request):
         layout.overdue_count = overdue_count
         layout.plots_with_details = plots_with_details
         
-        print(f"DEBUG: Layout '{layout.name}' final stats: plots={plots_count}, levels={total_levels}, active={active_crops_count}, harvest_ready={harvest_ready_count}, empty={empty_levels_count}, overdue={overdue_count}")
     
     context = {
         'layouts': layouts,
@@ -441,31 +444,29 @@ def create_sections_from_template(layout, template_type):
     return created_count
 
 def layout_create_simple(request):
-    """シンプルなレイアウト作成（従来版）"""
-    if request.method == 'POST':
-        form = CultivationLayoutForm(request.POST, request.FILES)
-        if form.is_valid():
-            layout = form.save()
-            messages.success(request, f'レイアウト「{layout.name}」を作成しました')
-            return redirect('cultivation:layout_detail', layout_id=layout.id)
-    else:
-        form = CultivationLayoutForm()
-    
-    context = {
-        'form': form,
-    }
-    return render(request, 'cultivation/layout_form.html', context)
+    """シンプルなレイアウト作成 → layout_create に統合済み"""
+    return redirect('cultivation:layout_create')
 
 def layout_detail(request, layout_id):
     """レイアウト詳細表示 - 区画または棚区画2D/3D平面図を表示"""
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
     # layout_idをクエリパラメータとして設定し、plot_grid_viewを呼び出す
     request.GET = request.GET.copy()
     request.GET['layout'] = layout_id
     request.GET['mode'] = 'floor_plan'
-    
+
     # 表示タイプを決定（棚区画を優先）
     try:
         layout = get_object_or_404(CultivationLayout, id=layout_id)
+
+        # 組織チェック：グローバル管理者でない場合、自組織のレイアウトのみ表示可能
+        if not is_global_admin(request.user) and current_organization:
+            if layout.organization != current_organization:
+                messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                return redirect('cultivation:cultivation_top')
+
         plots = Plot.objects.filter(layout=layout)
         sections = layout.sections.all()
         
@@ -544,19 +545,26 @@ def plot_management(request):
     else:
         all_layouts = CultivationLayout.objects.none()
     
-    # レイアウト別の棚集計
+    # レイアウト別の棚集計（組織でフィルタ）
     layouts_with_plots = defaultdict(list)
     uncategorized_plots_count = 0
-    for plot in Plot.objects.select_related('layout').all():
+    plots_for_layout_count = Plot.objects.select_related('layout')
+    if not is_global_admin(request.user) and current_organization:
+        plots_for_layout_count = plots_for_layout_count.filter(organization=current_organization)
+    for plot in plots_for_layout_count:
         if plot.layout:
             layouts_with_plots[plot.layout].append(plot)
         else:
             layouts_with_plots['未分類'].append(plot)
             uncategorized_plots_count += 1
-    
+
     # 統計情報の計算
     total_plots = plots.count()
-    all_plots_count = Plot.objects.count()  # 全棚数（フィルタ無し）
+    # 全棚数（組織でフィルタ）
+    all_plots_qs = Plot.objects.all()
+    if not is_global_admin(request.user) and current_organization:
+        all_plots_qs = all_plots_qs.filter(organization=current_organization)
+    all_plots_count = all_plots_qs.count()
     growing_count = 0
     harvest_ready_count = 0
     empty_count = 0
@@ -575,24 +583,28 @@ def plot_management(request):
         for level_info in level_details:
             if level_info['status'] != 'empty':
                 plot_has_crops = True
-                if level_info['status'] == 'overdue':
-                    overdue_count += 1
-                elif level_info['status'] == 'harvest_ready':
+                if level_info['status'] == 'harvest_ready':
                     harvest_ready_count += 1
-                elif level_info['status'] == 'growing':
+                elif level_info['status'] in ('planted', 'pre_planted', 'sowing'):
                     growing_count += 1
         
         if not plot_has_crops:
             empty_count += 1
         
-        # 棚全体のステータスを決定
-        plot_status = 'empty'
-        if any(level['status'] == 'overdue' for level in level_details):
-            plot_status = 'overdue'
-        elif any(level['status'] == 'harvest_ready' for level in level_details):
+        # 棚全体のステータスを決定（優先度順: harvest_ready > planted > pre_planted > sowing > harvested > empty）
+        statuses = {l['status'] for l in level_details}
+        if 'harvest_ready' in statuses:
             plot_status = 'harvest_ready'
-        elif any(level['status'] == 'growing' for level in level_details):
-            plot_status = 'growing'
+        elif 'planted' in statuses:
+            plot_status = 'planted'
+        elif 'pre_planted' in statuses:
+            plot_status = 'pre_planted'
+        elif 'sowing' in statuses:
+            plot_status = 'sowing'
+        elif 'harvested' in statuses:
+            plot_status = 'harvested'
+        else:
+            plot_status = 'empty'
         
         plots_with_details.append({
             'plot': plot,
@@ -605,6 +617,11 @@ def plot_management(request):
     plots_json_data = []
     for item in plots_with_details:
         plot = item['plot']
+        # level_detailsからDjangoモデルオブジェクト('crop')を除いたJSON安全なコピーを作成
+        safe_level_details = [
+            {k: v for k, v in ld.items() if k != 'crop'}
+            for ld in item['level_details']
+        ]
         plots_json_data.append({
             'plot': {
                 'id': plot.id,
@@ -615,7 +632,7 @@ def plot_management(request):
             },
             'shelf_number': plot.shelf_number,
             'levels': plot.levels,
-            'level_details': item['level_details'],
+            'level_details': safe_level_details,
             'status': item['status'],
             'utilization_rate': item['utilization_rate'],
         })
@@ -677,11 +694,9 @@ def plot_floor_plan_with_layout(request, layout_id):
         if hasattr(plot, 'svg_x') and plot.svg_x is not None and plot.svg_y is not None:
             svg_x = plot.svg_x
             svg_y = plot.svg_y
-            print(f"DEBUG: Using saved position for plot {plot.id}: x={svg_x}, y={svg_y}")
         else:
             svg_x = 50 + (plot.x_position - 1) * 120 
             svg_y = 50 + (plot.y_position - 1) * 80
-            print(f"DEBUG: Using default position for plot {plot.id}: x={svg_x}, y={svg_y}")
             # 初期位置を保存
             plot.svg_x = svg_x
             plot.svg_y = svg_y
@@ -808,11 +823,9 @@ def plot_floor_plan(request):
         if hasattr(plot, 'svg_x') and plot.svg_x is not None and plot.svg_y is not None:
             svg_x = plot.svg_x
             svg_y = plot.svg_y
-            print(f"DEBUG: Using saved position for plot {plot.id}: x={svg_x}, y={svg_y}")
         else:
             svg_x = 50 + (plot.x_position - 1) * 120 
             svg_y = 50 + (plot.y_position - 1) * 80
-            print(f"DEBUG: Using default position for plot {plot.id}: x={svg_x}, y={svg_y}")
             # 初期位置を保存
             plot.svg_x = svg_x
             plot.svg_y = svg_y
@@ -1311,23 +1324,37 @@ def bulk_section_create(request, layout_id):
 def plot_grid_view(request):
     """棚区画のグリッド表示"""
     from .models import Plot, CultivationSection
-    
+
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
     # レイアウトフィルタパラメータを取得
     layout_id = request.GET.get('layout')
     display_param = request.GET.get('display', 'auto')
-    
+
+    # 組織に基づいてプロットをフィルタリングするヘルパー
+    def filter_plots_by_org(plots_qs):
+        if not is_global_admin(request.user) and current_organization:
+            return plots_qs.filter(organization=current_organization)
+        return plots_qs
+
     # display パラメータで表示タイプを決定
     if display_param == 'plots':
         # 強制的に棚区画を表示
         if layout_id:
             try:
                 layout = get_object_or_404(CultivationLayout, id=layout_id)
+                # 組織チェック
+                if not is_global_admin(request.user) and current_organization:
+                    if layout.organization != current_organization:
+                        messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                        return redirect('cultivation:cultivation_top')
                 plots = Plot.objects.filter(layout=layout)
             except Exception as e:
                 layout = None
-                plots = Plot.objects.all()
+                plots = filter_plots_by_org(Plot.objects.all())
         else:
-            plots = Plot.objects.all()
+            plots = filter_plots_by_org(Plot.objects.all())
             layout = None
         display_type = 'plots'
     elif display_param == 'sections' or (layout_id and display_param == 'auto'):
@@ -1335,8 +1362,13 @@ def plot_grid_view(request):
         if layout_id:
             try:
                 layout = get_object_or_404(CultivationLayout, id=layout_id)
+                # 組織チェック
+                if not is_global_admin(request.user) and current_organization:
+                    if layout.organization != current_organization:
+                        messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                        return redirect('cultivation:cultivation_top')
                 sections = layout.sections.all()
-                
+
                 # auto モードの場合、区画がない場合は棚区画を表示
                 if display_param == 'auto' and not sections.exists():
                     plots = Plot.objects.filter(layout=layout)
@@ -1344,11 +1376,11 @@ def plot_grid_view(request):
                 else:
                     display_type = 'sections'
             except:
-                plots = Plot.objects.all()
+                plots = filter_plots_by_org(Plot.objects.all())
                 display_type = 'plots'
                 layout = None
         else:
-            plots = Plot.objects.all()
+            plots = filter_plots_by_org(Plot.objects.all())
             display_type = 'plots'
             layout = None
     else:
@@ -1356,12 +1388,17 @@ def plot_grid_view(request):
         if layout_id:
             try:
                 layout = get_object_or_404(CultivationLayout, id=layout_id)
+                # 組織チェック
+                if not is_global_admin(request.user) and current_organization:
+                    if layout.organization != current_organization:
+                        messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                        return redirect('cultivation:cultivation_top')
                 plots = Plot.objects.filter(layout=layout)
             except:
                 layout = None
-                plots = Plot.objects.all()
+                plots = filter_plots_by_org(Plot.objects.all())
         else:
-            plots = Plot.objects.all()
+            plots = filter_plots_by_org(Plot.objects.all())
             layout = None
         display_type = 'plots'
     
@@ -1584,11 +1621,9 @@ def plot_grid_view(request):
                 if hasattr(plot, 'svg_x') and plot.svg_x is not None and plot.svg_y is not None:
                     svg_x = plot.svg_x
                     svg_y = plot.svg_y
-                    print(f"DEBUG2: Using saved position for plot {plot.id}: x={svg_x}, y={svg_y}")
                 else:
                     svg_x = 50 + plot.x_position * (plot.width * 30 + 15)
                     svg_y = 50 + plot.y_position * (plot.depth * 30 + 15)
-                    print(f"DEBUG2: Using default position for plot {plot.id}: x={svg_x}, y={svg_y}")
                     # 初期位置を保存
                     plot.svg_x = svg_x
                     plot.svg_y = svg_y
@@ -1743,11 +1778,9 @@ def plot_grid_view(request):
             if hasattr(plot, 'svg_x') and plot.svg_x is not None and plot.svg_y is not None:
                 svg_x = plot.svg_x
                 svg_y = plot.svg_y
-                print(f"DEBUG3: Using saved position for plot {plot.id}: x={svg_x}, y={svg_y}")
             else:
                 svg_x = 50 + plot.x_position * (plot.width * 30 + 15)
                 svg_y = 50 + plot.y_position * (plot.depth * 30 + 15)
-                print(f"DEBUG3: Using default position for plot {plot.id}: x={svg_x}, y={svg_y}")
                 # 初期位置を保存
                 plot.svg_x = svg_x
                 plot.svg_y = svg_y
@@ -1792,12 +1825,9 @@ def plot_grid_view(request):
             print(f"ERROR: Failed to serialize plots_floor_plan_data: {e}")
             context['plots_floor_plan_data_json'] = json.dumps({'plots': []})
     
-    # テンプレートを選択
+    # テンプレートを選択（平面図は統合済み）
     if view_mode == 'floor_plan':
-        if display_type == 'sections':
-            template_name = 'cultivation/layout_floor_plan.html'  # 栽培区画専用
-        else:
-            template_name = 'cultivation/plot_floor_plan.html'    # 棚区画専用
+        template_name = 'cultivation/plot_floor_plan.html'
     else:
         template_name = 'cultivation/plot_grid.html'
     
@@ -1807,10 +1837,21 @@ def plot_grid_view(request):
 def plot_detail_view(request, plot_id):
     """棚区画の詳細表示"""
     from .models import Plot
+
+    # 組織フィルタリングを適用
+    current_organization = get_current_organization(request)
+
     plot = get_object_or_404(Plot, id=plot_id)
+
+    # 組織チェック：グローバル管理者でない場合、自組織の棚のみ表示可能
+    if not is_global_admin(request.user) and current_organization:
+        if plot.organization != current_organization:
+            messages.error(request, 'この棚にアクセスする権限がありません。')
+            return redirect('cultivation:cultivation_top')
+
     crops = plot.shelf_crops.all()
     current_crop = crops.first() if crops.exists() else None
-    
+
     context = {
         'plot': plot,
         'crops': crops,
@@ -2515,44 +2556,8 @@ def suggest_layout_from_text(text, sections):
 # ===== 既存のOCRビュー =====
 
 def layout_create_with_ocr(request):
-    """OCR機能付きレイアウト作成"""
-    if request.method == 'POST':
-        form = OCRLayoutForm(request.POST, request.FILES)
-        if form.is_valid():
-            layout = form.save(commit=False)
-            layout.created_by = request.user
-            layout.save()
-            
-            ocr_file = form.cleaned_data.get('ocr_file')
-            auto_generate = form.cleaned_data.get('auto_generate_sections')
-            confidence_threshold = form.cleaned_data.get('ocr_confidence_threshold')
-            
-            if ocr_file and auto_generate:
-                # OCR処理実行
-                result = process_ocr_file(ocr_file, layout, confidence_threshold, request.user)
-                
-                if result['success']:
-                    messages.success(
-                        request, 
-                        f"レイアウトを作成し、{result['sections_count']}個の区画を自動生成しました。"
-                    )
-                else:
-                    messages.warning(
-                        request, 
-                        f"レイアウトは作成されましたが、OCR処理でエラーが発生しました: {result['error']}"
-                    )
-            else:
-                messages.success(request, "レイアウトを作成しました。")
-            
-            return redirect('cultivation:layout_detail', layout_id=layout.id)
-    else:
-        form = OCRLayoutForm()
-    
-    context = {
-        'form': form,
-        'title': 'OCR機能付きレイアウト作成'
-    }
-    return render(request, 'cultivation/layout_create_ocr.html', context)
+    """旧OCR作成 → 新OCRワークフロー(step1)に統合済み"""
+    return redirect('cultivation:layout_create_ocr_step1')
 
 
 def ocr_preview(request):
@@ -2856,42 +2861,54 @@ def crop_create_for_level(request, plot_id, level):
     
     if request.method == 'POST':
         crop_id = request.POST.get('crop_id')
-        planting_date = request.POST.get('planting_date')
-        expected_harvest_date = request.POST.get('expected_harvest_date')
+        sowing_date = request.POST.get('sowing_date') or None
+        pre_planting_date = request.POST.get('pre_planting_date') or None
+        planting_date = request.POST.get('planting_date') or None
+        expected_harvest_date = request.POST.get('expected_harvest_date') or None
+        plate_count = request.POST.get('plate_count') or 0
         notes = request.POST.get('notes', '')
-        
-        if crop_id and planting_date and expected_harvest_date:
+
+        if crop_id:
             try:
                 selected_crop = Crop.objects.get(id=crop_id)
-                # 作物名は登録済み作物から自動取得
                 variety = selected_crop.name
-                
+
                 current_organization = get_current_organization(request)
                 ShelfCrop.objects.create(
                     plot=plot,
                     level=level,
                     variety=variety,
-                    organization=current_organization or plot.organization,  # 組織を自動設定
+                    organization=current_organization or plot.organization,
+                    sowing_date=sowing_date,
+                    pre_planting_date=pre_planting_date,
                     planting_date=planting_date,
                     expected_harvest_date=expected_harvest_date,
-                    notes=notes
+                    plate_count=int(plate_count),
+                    notes=notes,
                 )
-                messages.success(request, f'作物「{variety}」を棚「{plot.shelf_number}」のレベル{level}に追加しました')
+                messages.success(request, f'作物「{variety}」を棚「{plot.shelf_number}」の{level}段に追加しました')
                 return redirect('cultivation:plot_management')
             except Crop.DoesNotExist:
                 messages.error(request, '選択された作物が見つかりません。')
         else:
-            messages.error(request, '必要な項目を入力してください。')
-    
+            messages.error(request, '作物を選択してください。')
+
+        # バリデーション失敗時は入力値を保持して再表示
+        form_data = request.POST
+
+    else:
+        form_data = {}
+
     # 利用可能な作物を取得
     available_crops = Crop.objects.all().order_by('name')
-    
+
     context = {
         'plot': plot,
         'level': level,
-        'title': f'棚「{plot.shelf_number}」のレベル{level}に作物を追加',
+        'title': f'棚「{plot.shelf_number}」の{level}段に作物を追加',
         'is_create': True,
         'available_crops': available_crops,
+        'form_data': form_data,
     }
     return render(request, 'cultivation/crop_form.html', context)
 
@@ -3208,3 +3225,474 @@ def schedule_export_pdf(request):
     response['Content-Disposition'] = f'attachment; filename="schedule_{today.strftime("%Y%m%d")}.pdf"'
 
     return response
+
+
+@login_required
+def gantt_chart_view(request, layout_id=None):
+    """棚ベースのガントチャート表示"""
+    from .models import ShelfCrop, CultivationSchedule, CropProcess, CultivationLayout, Plot, ProcessSchedule
+    from datetime import datetime, timedelta
+    from shift_management.views import get_current_organization
+    from shift_management.utils import is_global_admin
+
+    # 組織フィルタリング
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    # クエリパラメータから日付範囲を取得（デフォルトは今日から90日間）
+    today = datetime.now().date()
+    start_date = request.GET.get('start_date', today.strftime('%Y-%m-%d'))
+    end_date = request.GET.get('end_date', (today + timedelta(days=90)).strftime('%Y-%m-%d'))
+
+    # レイアウト一覧を取得
+    if is_global_admin(request.user):
+        layouts = CultivationLayout.objects.all()
+    elif current_organization:
+        layouts = CultivationLayout.objects.filter(organization=current_organization)
+    else:
+        layouts = CultivationLayout.objects.none()
+
+    current_layout = None
+    if layout_id:
+        current_layout = get_object_or_404(CultivationLayout, id=layout_id)
+        # 組織チェック：グローバル管理者でない場合、自組織のレイアウトのみ表示可能
+        if not is_global_admin(request.user) and current_organization:
+            if current_layout.organization != current_organization:
+                messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                return redirect('cultivation:cultivation_top')
+
+    # 棚一覧を取得（組織またはレイアウトでフィルタ）
+    if current_layout:
+        plots = Plot.objects.filter(layout=current_layout, is_active=True)
+    elif current_organization:
+        plots = Plot.objects.filter(organization=current_organization, is_active=True)
+    else:
+        plots = Plot.objects.filter(is_active=True)
+
+    plots = plots.order_by('shelf_number')
+
+    # 工程マスターを取得（組織でフィルタ）
+    from django.db.models import Q
+    if current_organization:
+        processes = CropProcess.objects.filter(
+            Q(organization=current_organization) | Q(organization__isnull=True)
+        ).order_by('display_order')
+    else:
+        processes = CropProcess.objects.all().order_by('display_order')
+
+    # 棚作物一覧を取得（ガントチャート用のデータ準備）
+    if current_layout:
+        shelf_crops = ShelfCrop.objects.filter(
+            plot__layout=current_layout,
+            harvest_date__isnull=True
+        ).select_related('plot').order_by('plot__shelf_number', 'level')
+    elif current_organization:
+        shelf_crops = ShelfCrop.objects.filter(
+            organization=current_organization,
+            harvest_date__isnull=True
+        ).select_related('plot').order_by('plot__shelf_number', 'level')
+    else:
+        shelf_crops = ShelfCrop.objects.filter(
+            harvest_date__isnull=True
+        ).select_related('plot').order_by('plot__shelf_number', 'level')
+
+    # スケジュール一覧を取得（日付範囲でフィルタ）
+    schedules_qs = CultivationSchedule.objects.filter(
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related('shelf_crop', 'shelf_crop__plot', 'process')
+
+    if current_layout:
+        schedules_qs = schedules_qs.filter(shelf_crop__plot__layout=current_layout)
+    elif current_organization:
+        schedules_qs = schedules_qs.filter(shelf_crop__organization=current_organization)
+
+    schedules = schedules_qs.order_by('shelf_crop__plot__shelf_number', 'shelf_crop__level', 'start_date')
+
+    # ガントチャート用のデータを構築
+    # 縦軸: 棚 + レベル（段）の組み合わせ
+    gantt_rows = []
+    for plot in plots:
+        for level in range(1, plot.levels + 1):
+            row_id = f"plot-{plot.id}-level-{level}"
+            gantt_rows.append({
+                'id': row_id,
+                'plot_id': plot.id,
+                'level': level,
+                'name': f"{plot.shelf_number} {level}段",
+                'shelf_number': plot.shelf_number,
+            })
+
+    # ガントチャート用のタスクデータを構築
+    gantt_tasks = []
+    for crop in shelf_crops:
+        # 作物自体を1つのタスクとして表示
+        row_id = f"plot-{crop.plot.id}-level-{crop.level}"
+        task = {
+            'id': f"crop-{crop.id}",
+            'type': 'crop',
+            'name': crop.variety,
+            'row_id': row_id,
+            'plot_id': crop.plot.id,
+            'level': crop.level,
+            'start': crop.planting_date.strftime('%Y-%m-%d') if crop.planting_date else today.strftime('%Y-%m-%d'),
+            'end': crop.expected_harvest_date.strftime('%Y-%m-%d') if crop.expected_harvest_date else (today + timedelta(days=30)).strftime('%Y-%m-%d'),
+            'color': '#4CAF50',  # デフォルト緑色
+            'progress': crop.growth_progress_percentage() or 0,
+        }
+        gantt_tasks.append(task)
+
+    # スケジュール（工程）をタスクとして追加
+    for schedule in schedules:
+        row_id = f"plot-{schedule.shelf_crop.plot.id}-level-{schedule.shelf_crop.level}"
+        task = {
+            'id': f"schedule-{schedule.id}",
+            'type': 'schedule',
+            'name': f"{schedule.shelf_crop.variety} - {schedule.process.name}",
+            'row_id': row_id,
+            'plot_id': schedule.shelf_crop.plot.id,
+            'level': schedule.shelf_crop.level,
+            'start': schedule.start_date.strftime('%Y-%m-%d'),
+            'end': schedule.end_date.strftime('%Y-%m-%d'),
+            'color': schedule.process.color,
+            'progress': 100 if schedule.is_completed else 50,
+            'process_id': schedule.process.id,
+            'process_name': schedule.process.name,
+            'shelf_crop_id': schedule.shelf_crop.id,
+        }
+        gantt_tasks.append(task)
+
+    # ProcessSchedule（新しい工程スケジュール）をタスクとして追加
+    process_schedules_qs = ProcessSchedule.objects.filter(
+        end_date__gte=start_date,
+        start_date__lte=end_date
+    ).select_related('plot', 'process')
+
+    if current_layout:
+        process_schedules_qs = process_schedules_qs.filter(plot__layout=current_layout)
+    elif current_organization:
+        process_schedules_qs = process_schedules_qs.filter(organization=current_organization)
+
+    process_schedules = process_schedules_qs.order_by('plot__shelf_number', 'level', 'start_date')
+
+    for ps in process_schedules:
+        row_id = f"plot-{ps.plot.id}-level-{ps.level or 1}"
+        task = {
+            'id': f"process-schedule-{ps.id}",
+            'type': 'process-schedule',
+            'name': f"{ps.group_name or ''} {ps.process.name}".strip(),
+            'row_id': row_id,
+            'plot_id': ps.plot.id,
+            'level': ps.level or 1,
+            'start': ps.start_date.strftime('%Y-%m-%d'),
+            'end': ps.end_date.strftime('%Y-%m-%d'),
+            'color': ps.process.color,
+            'progress': 50,
+            'process_id': ps.process.id,
+            'process_name': ps.process.name,
+            'parent_schedule_id': ps.parent_schedule_id,
+            'is_linked': ps.is_linked,
+        }
+        gantt_tasks.append(task)
+
+    context = {
+        'layouts': layouts,
+        'current_layout': current_layout,
+        'plots': plots,
+        'processes': processes,
+        'shelf_crops': shelf_crops,
+        'schedules': schedules,
+        'start_date': start_date,
+        'end_date': end_date,
+        'gantt_rows': json.dumps(gantt_rows, ensure_ascii=False),
+        'gantt_tasks': json.dumps(gantt_tasks, ensure_ascii=False),
+    }
+    return render(request, 'cultivation/gantt_chart.html', context)
+
+
+# ============================================================
+# 棚割りグリッド
+# ============================================================
+
+def _build_shelf_grid(plots, today):
+    """
+    棚割りグリッドのデータ構造を構築する。
+
+    返す構造:
+    {
+      level: [
+        { 'plot': Plot, 'crop': ShelfCrop|None, 'status': str,
+          'is_today': bool, 'today_types': list[str] },
+        ...  # plots の順番に対応
+      ],
+      ...
+    }
+    plot_list: plots と同じ順番のリスト（テンプレートで列ヘッダー用）
+    """
+    from .models import ShelfCrop
+
+    if not plots:
+        return {}, []
+
+    max_levels = max(p.levels for p in plots)
+    plot_list = list(plots)
+    plot_ids = [p.id for p in plot_list]
+
+    # 未収穫のShelfCropを一括取得
+    crops_qs = ShelfCrop.objects.filter(
+        plot_id__in=plot_ids,
+        harvest_date__isnull=True,
+    ).select_related('plot')
+
+    # (plot_id, level) → ShelfCrop のマップを作成
+    crop_map = {}
+    for crop in crops_qs:
+        key = (crop.plot_id, crop.level)
+        # 同じ (plot, level) に複数ある場合は最新を使用
+        if key not in crop_map or crop.created_at > crop_map[key].created_at:
+            crop_map[key] = crop
+
+    grid = {}
+    for level in range(1, max_levels + 1):
+        row = []
+        for plot in plot_list:
+            if level > plot.levels:
+                # この棚はこの段数を持たない
+                row.append({'plot': plot, 'crop': None, 'status': 'no_level',
+                            'is_today': False, 'today_types': []})
+                continue
+
+            crop = crop_map.get((plot.id, level))
+            if crop:
+                status = crop.get_growth_status()
+                today_info = crop.is_today_action()
+                is_today = today_info['any']
+                today_types = [k.replace('is_', '').replace('_today', '')
+                               for k, v in today_info.items() if v and k != 'any']
+            else:
+                status = 'empty'
+                is_today = False
+                today_types = []
+
+            row.append({
+                'plot': plot,
+                'crop': crop,
+                'status': status,
+                'is_today': is_today,
+                'today_types': today_types,
+            })
+        grid[level] = row
+
+    return grid, plot_list
+
+
+def _get_today_actions(plots, today):
+    """今日が作業日の ShelfCrop を収集してリストで返す"""
+    from .models import ShelfCrop
+    from django.db.models import Q
+
+    crops = ShelfCrop.objects.filter(
+        plot__in=plots,
+        harvest_date__isnull=True,
+    ).filter(
+        Q(sowing_date=today) |
+        Q(pre_planting_date=today) |
+        Q(planting_date=today) |
+        Q(expected_harvest_date=today)
+    ).select_related('plot').order_by('plot__shelf_number', 'level')
+
+    actions = []
+    type_labels = {
+        'sowing': '播種日',
+        'pre_planting': '仮植日',
+        'planting': '定植日',
+        'harvest': '収穫予定日',
+    }
+    for crop in crops:
+        for action_type, label in type_labels.items():
+            date_field = {
+                'sowing': crop.sowing_date,
+                'pre_planting': crop.pre_planting_date,
+                'planting': crop.planting_date,
+                'harvest': crop.expected_harvest_date,
+            }[action_type]
+            if date_field == today:
+                actions.append({
+                    'type': action_type,
+                    'label': label,
+                    'crop': crop,
+                    'plot_name': crop.plot.shelf_number,
+                    'level': crop.level,
+                    'variety': crop.variety,
+                    'plate_count': crop.plate_count,
+                })
+    return actions
+
+
+def shelf_grid_view(request, layout_id=None):
+    """棚割りグリッド表示 - タンク別タブ、段×レーンのマス目で状態を一覧表示"""
+    from datetime import date as date_type
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    today = date_type.today()
+
+    # タンク（レイアウト）一覧
+    if is_global_admin(request.user):
+        layouts = CultivationLayout.objects.all().order_by('name')
+    elif current_organization:
+        layouts = CultivationLayout.objects.filter(
+            organization=current_organization
+        ).order_by('name')
+    else:
+        layouts = CultivationLayout.objects.none()
+
+    # 表示するタンクを決定
+    current_layout = None
+    if layout_id:
+        current_layout = get_object_or_404(CultivationLayout, id=layout_id)
+        if not is_global_admin(request.user) and current_organization:
+            if current_layout.organization != current_organization:
+                messages.error(request, 'このレイアウトにアクセスする権限がありません。')
+                return redirect('cultivation:shelf_grid')
+    elif layouts.exists():
+        current_layout = layouts.first()
+
+    # レーン（棚）を取得
+    if current_layout:
+        plots = Plot.objects.filter(
+            layout=current_layout, is_active=True
+        ).order_by('y_position', 'x_position', 'shelf_number')
+    else:
+        plots = Plot.objects.none()
+
+    grid, plot_list = _build_shelf_grid(plots, today)
+    today_actions = _get_today_actions(plots, today)
+
+    max_levels = max((p.levels for p in plot_list), default=0)
+
+    context = {
+        'layouts': layouts,
+        'current_layout': current_layout,
+        'plot_list': plot_list,
+        'grid': grid,
+        'level_range': range(1, max_levels + 1),
+        'today_actions': today_actions,
+        'today': today,
+    }
+    return render(request, 'cultivation/shelf_grid.html', context)
+
+
+@user_passes_test(is_admin_user, login_url='/login/')
+def lane_master_settings(request, layout_id=None):
+    """レーンマスター設定 — レイアウトごとに全レーンを一覧編集・一括追加"""
+    from django.forms import modelformset_factory
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    # レイアウト一覧
+    if is_global_admin(request.user):
+        layouts = CultivationLayout.objects.all().order_by('name')
+    else:
+        layouts = CultivationLayout.objects.filter(organization=current_organization).order_by('name')
+
+    # 選択中レイアウト
+    current_layout = None
+    if layout_id:
+        current_layout = get_object_or_404(CultivationLayout, id=layout_id)
+    elif layouts.exists():
+        current_layout = layouts.first()
+
+    plots = (
+        Plot.objects.filter(layout=current_layout).order_by('shelf_number')
+        if current_layout else Plot.objects.none()
+    )
+
+    PlotFormSet = modelformset_factory(Plot, form=PlotInlineForm, extra=0, can_delete=True)
+
+    formset = PlotFormSet(queryset=plots)
+    bulk_form = BulkAddLanesForm()
+    formset_errors = False
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'update_lanes':
+            formset = PlotFormSet(request.POST, queryset=plots)
+            if formset.is_valid():
+                formset.save()
+                messages.success(request, 'レーン設定を保存しました')
+                if current_layout:
+                    return redirect('cultivation:lane_master_settings_layout', layout_id=current_layout.id)
+                return redirect('cultivation:lane_master_settings')
+            else:
+                formset_errors = True
+
+        elif action == 'bulk_add':
+            bulk_form = BulkAddLanesForm(request.POST)
+            if bulk_form.is_valid() and current_layout:
+                prefix = bulk_form.cleaned_data['prefix_text']
+                start = bulk_form.cleaned_data['start_number']
+                count = bulk_form.cleaned_data['count']
+                levels = bulk_form.cleaned_data['levels']
+                max_plates = bulk_form.cleaned_data['max_plates']
+
+                org = current_organization or current_layout.organization
+                # 既存の最大 x_position を取得して連番で割り当て
+                existing_max_x = Plot.objects.filter(layout=current_layout).aggregate(
+                    mx=models.Max('x_position')
+                )['mx'] or 0
+
+                created = 0
+                skipped = 0
+                next_x = existing_max_x + 1
+                for i in range(start, start + count):
+                    shelf_number = f"{prefix}{i}"
+                    if not Plot.objects.filter(layout=current_layout, shelf_number=shelf_number).exists():
+                        Plot.objects.create(
+                            layout=current_layout,
+                            shelf_number=shelf_number,
+                            levels=levels,
+                            max_plates=max_plates,
+                            organization=org,
+                            x_position=next_x,
+                            y_position=0,
+                        )
+                        next_x += 1
+                        created += 1
+                    else:
+                        skipped += 1
+
+                msg = f'{created}本のレーンを追加しました'
+                if skipped:
+                    msg += f'（{skipped}本はすでに存在するためスキップ）'
+                messages.success(request, msg)
+                return redirect('cultivation:lane_master_settings_layout', layout_id=current_layout.id)
+
+        elif action == 'delete_lane':
+            plot_id = request.POST.get('plot_id')
+            plot = get_object_or_404(Plot, id=plot_id)
+            name = plot.shelf_number
+            plot.delete()
+            messages.success(request, f'レーン「{name}」を削除しました')
+            if current_layout:
+                return redirect('cultivation:lane_master_settings_layout', layout_id=current_layout.id)
+            return redirect('cultivation:lane_master_settings')
+
+    context = {
+        'layouts': layouts,
+        'current_layout': current_layout,
+        'formset': formset,
+        'bulk_form': bulk_form,
+        'formset_errors': formset_errors,
+        'plots_count': plots.count(),
+    }
+    return render(request, 'cultivation/lane_master_settings.html', context)

@@ -229,7 +229,7 @@ class CultivationLogForm(forms.ModelForm):
 class PlotForm(forms.ModelForm):
     class Meta:
         model = Plot
-        fields = ['shelf_number', 'x_position', 'y_position', 'levels']
+        fields = ['shelf_number', 'x_position', 'y_position', 'levels', 'max_plates']
         widgets = {
             'shelf_number': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -250,16 +250,92 @@ class PlotForm(forms.ModelForm):
                 'min': '1',
                 'placeholder': '段数'
             }),
+            'max_plates': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'placeholder': '例: 14 または 8'
+            }),
         }
+        labels = {
+            'max_plates': '最大プレート数',
+        }
+        help_texts = {
+            'max_plates': 'このレーン（棚）に入れられるプレートの上限枚数',
+        }
+
+class PlotInlineForm(forms.ModelForm):
+    """レーンマスター設定用の軽量フォーム（表内インライン編集）"""
+    class Meta:
+        model = Plot
+        fields = ['shelf_number', 'levels', 'max_plates']
+        widgets = {
+            'shelf_number': forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'style': 'width:110px',
+            }),
+            'levels': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'style': 'width:70px',
+                'min': '1', 'max': '20',
+            }),
+            'max_plates': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm',
+                'style': 'width:70px',
+                'min': '1',
+            }),
+        }
+
+
+class BulkAddLanesForm(forms.Form):
+    """レーン一括追加フォーム"""
+    prefix_text = forms.CharField(
+        label='棚番号プレフィックス', max_length=20,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: A-'}),
+    )
+    start_number = forms.IntegerField(
+        label='開始番号', initial=1, min_value=1,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+    count = forms.IntegerField(
+        label='追加本数', min_value=1, max_value=100,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+    levels = forms.IntegerField(
+        label='段数', initial=3, min_value=1, max_value=20,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+    max_plates = forms.IntegerField(
+        label='最大プレート数', initial=14, min_value=1,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+
 
 class ShelfCropForm(forms.ModelForm):
     class Meta:
         model = ShelfCrop
-        fields = ['variety', 'planting_date', 'expected_harvest_date', 'level', 'notes']
+        fields = [
+            'variety',
+            'sowing_date',
+            'pre_planting_date',
+            'planting_date',
+            'expected_harvest_date',
+            'harvest_date',
+            'plate_count',
+            'level',
+            'notes',
+        ]
         widgets = {
             'variety': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': '例: レタス, ほうれん草'
+            }),
+            'sowing_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'pre_planting_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
             }),
             'planting_date': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -268,6 +344,15 @@ class ShelfCropForm(forms.ModelForm):
             'expected_harvest_date': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date'
+            }),
+            'harvest_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'plate_count': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '0',
+                'placeholder': '例: 10'
             }),
             'level': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -281,10 +366,9 @@ class ShelfCropForm(forms.ModelForm):
                 'placeholder': '備考があれば入力してください'
             }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # levelフィールドを非必須にする
         self.fields['level'].required = False
 
 class CropImageForm(forms.ModelForm):

@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}栽培テンプレート管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #ffc107, #ff9800);
+        color: white;
+        padding: 20px 0;
+        border-radius: 15px;
+        margin-bottom: 20px;
+    }
+
+    @media (min-width: 768px) {
+        .hero-section {
+            padding: 40px 0;
+            margin-bottom: 30px;
+        }
+    }
+
+    .template-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .template-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .template-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .template-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .template-crop-badge {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .process-timeline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 15px 0;
+    }
+
+    .process-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #f8f9fa;
+        font-size: 0.9rem;
+    }
+
+    .process-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 8px;
+    }
+
+    .btn-action {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+        color: white;
+    }
+
+    .btn-secondary-action {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-secondary-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+        color: white;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヒーローセクション -->
+    <div class="hero-section text-center">
+        <h1 class="mb-2">
+            <i class="fas fa-clipboard-list"></i> 栽培テンプレート管理
+        </h1>
+        <p class="mb-0">作物ごとの標準栽培工程を管理</p>
+    </div>
+
+    <!-- アクションボタン -->
+    <div class="d-flex gap-2 mb-4 flex-wrap">
+        <button type="button" class="btn-action" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+            <i class="fas fa-plus-circle"></i> 新規テンプレート作成
+        </button>
+        <a href="{% url 'cultivation:schedule_view' %}" class="btn-secondary-action">
+            <i class="fas fa-arrow-left"></i> スケジュール画面へ
+        </a>
+        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-secondary-action">
+            <i class="fas fa-home"></i> 栽培管理トップへ
+        </a>
+    </div>
+
+    <!-- テンプレート一覧 -->
+    {% if templates %}
+    <div class="row">
+        {% for template in templates %}
+        <div class="col-md-6 col-lg-4">
+            <div class="template-card">
+                <div class="template-header">
+                    <h3 class="template-title">{{ template.name }}</h3>
+                    <span class="template-crop-badge">{{ template.crop.name }}</span>
+                </div>
+
+                {% if template.description %}
+                <p class="text-muted mb-3">{{ template.description }}</p>
+                {% endif %}
+
+                <div class="mb-3">
+                    <strong>工程数:</strong> {{ template.processes.count }}工程
+                    {% if template.is_default %}
+                    <span class="badge bg-primary ms-2">デフォルト</span>
+                    {% endif %}
+                </div>
+
+                <div class="process-timeline">
+                    {% for proc in template.processes.all %}
+                    <div class="process-item">
+                        <div class="process-color" style="background-color: {{ proc.process.color }};"></div>
+                        <span>{{ proc.process.name }} ({{ proc.duration_days }}日)</span>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm btn-primary" onclick="editTemplate({{ template.id }})">
+                        <i class="fas fa-edit"></i> 編集
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')">
+                        <i class="fas fa-trash"></i> 削除
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="template-card">
+        <div class="empty-state">
+            <i class="fas fa-clipboard-list"></i>
+            <h4>テンプレートがありません</h4>
+            <p class="text-muted">新しいテンプレートを作成して、栽培工程を標準化しましょう。</p>
+            <button type="button" class="btn-action mt-3" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+                <i class="fas fa-plus-circle"></i> 最初のテンプレートを作成
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- テンプレート作成モーダル -->
+<div class="modal fade" id="createTemplateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #ffc107, #ff9800); color: white;">
+                <h5 class="modal-title"><i class="fas fa-plus-circle"></i> 新規テンプレート作成</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTemplateForm">
+                    <div class="mb-3">
+                        <label class="form-label">テンプレート名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="template-name" required placeholder="例: 春作レタス標準工程">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">対象作物 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="template-crop" required>
+                            <option value="">作物を選択...</option>
+                            {% for crop in crops %}
+                            <option value="{{ crop.id }}">{{ crop.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">説明</label>
+                        <textarea class="form-control" id="template-description" rows="2" placeholder="テンプレートの説明（任意）"></textarea>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="template-is-default">
+                        <label class="form-check-label" for="template-is-default">
+                            この作物のデフォルトテンプレートにする
+                        </label>
+                    </div>
+                    <hr>
+                    <h6><i class="fas fa-tasks"></i> 工程設定</h6>
+                    <p class="text-muted small">テンプレートに含める工程を追加してください。</p>
+                    <div id="process-list">
+                        <!-- 工程が動的に追加される -->
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addProcessRow()">
+                        <i class="fas fa-plus"></i> 工程を追加
+                    </button>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-warning text-white" onclick="saveTemplate()">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 利用可能な工程リスト
+    const availableProcesses = [
+        {% for process in processes %}
+        { id: {{ process.id }}, name: '{{ process.name }}', color: '{{ process.color }}', defaultDuration: {{ process.default_duration }} }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    let processRowCounter = 0;
+
+    function addProcessRow(processId = '', duration = 7, startOffset = 0) {
+        processRowCounter++;
+        const container = document.getElementById('process-list');
+        const row = document.createElement('div');
+        row.className = 'row mb-2 align-items-center process-row';
+        row.id = `process-row-${processRowCounter}`;
+
+        let processOptions = '<option value="">工程を選択...</option>';
+        availableProcesses.forEach(p => {
+            const selected = p.id == processId ? 'selected' : '';
+            processOptions += `<option value="${p.id}" data-duration="${p.defaultDuration}" ${selected}>${p.name}</option>`;
+        });
+
+        row.innerHTML = `
+            <div class="col-md-4">
+                <select class="form-select form-select-sm process-select" onchange="updateDefaultDuration(this)">
+                    ${processOptions}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">期間</span>
+                    <input type="number" class="form-control process-duration" value="${duration}" min="1">
+                    <span class="input-group-text">日</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">開始</span>
+                    <input type="number" class="form-control process-offset" value="${startOffset}" min="0">
+                    <span class="input-group-text">日目</span>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeProcessRow(${processRowCounter})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+
+        container.appendChild(row);
+    }
+
+    function removeProcessRow(rowId) {
+        const row = document.getElementById(`process-row-${rowId}`);
+        if (row) {
+            row.remove();
+        }
+    }
+
+    function updateDefaultDuration(selectElement) {
+        const option = selectElement.options[selectElement.selectedIndex];
+        if (option && option.dataset.duration) {
+            const row = selectElement.closest('.process-row');
+            const durationInput = row.querySelector('.process-duration');
+            durationInput.value = option.dataset.duration;
+        }
+    }
+
+    function saveTemplate() {
+        const name = document.getElementById('template-name').value.trim();
+        const cropId = document.getElementById('template-crop').value;
+        const description = document.getElementById('template-description').value.trim();
+        const isDefault = document.getElementById('template-is-default').checked;
+
+        if (!name || !cropId) {
+            alert('テンプレート名と対象作物は必須です');
+            return;
+        }
+
+        // 工程を収集
+        const processRows = document.querySelectorAll('.process-row');
+        const processes = [];
+        let order = 0;
+
+        processRows.forEach(row => {
+            const processSelect = row.querySelector('.process-select');
+            const durationInput = row.querySelector('.process-duration');
+            const offsetInput = row.querySelector('.process-offset');
+
+            if (processSelect.value) {
+                processes.push({
+                    process: parseInt(processSelect.value),
+                    duration_days: parseInt(durationInput.value) || 7,
+                    start_offset_days: parseInt(offsetInput.value) || 0,
+                    display_order: order++
+                });
+            }
+        });
+
+        // APIでテンプレートを作成
+        fetch('/api/cultivation/templates/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                name: name,
+                crop: cropId,
+                description: description,
+                is_default: isDefault
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('テンプレートの作成に失敗しました');
+            return response.json();
+        })
+        .then(template => {
+            // 工程がある場合は追加（APIでは別途追加が必要な場合）
+            if (processes.length > 0) {
+                // 工程をそれぞれ追加
+                const promises = processes.map(proc => {
+                    return fetch('/api/cultivation/templates/' + template.id + '/add_process/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken')
+                        },
+                        body: JSON.stringify(proc)
+                    });
+                });
+                return Promise.all(promises);
+            }
+            return Promise.resolve();
+        })
+        .then(() => {
+            alert('テンプレートを作成しました');
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('テンプレートの作成に失敗しました: ' + error.message);
+        });
+    }
+
+    function editTemplate(templateId) {
+        alert('テンプレート編集機能は準備中です。テンプレートID: ' + templateId);
+        // TODO: 編集モーダルを実装
+    }
+
+    function deleteTemplate(templateId, templateName) {
+        if (!confirm(`テンプレート「${templateName}」を削除してもよろしいですか？`)) {
+            return;
+        }
+
+        fetch(`/api/cultivation/templates/${templateId}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('削除に失敗しました');
+            }
+            alert('テンプレートを削除しました。');
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('テンプレートの削除に失敗しました: ' + error.message);
+        });
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // モーダルが開いた時に工程行を1つ追加
+    document.getElementById('createTemplateModal').addEventListener('show.bs.modal', function() {
+        document.getElementById('process-list').innerHTML = '';
+        processRowCounter = 0;
+        addProcessRow();
+    });
+</script>
+{% endblock %}

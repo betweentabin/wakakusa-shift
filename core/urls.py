@@ -12,6 +12,7 @@ urlpatterns = [
     path('logout/', user_logout, name='logout'),
     path('cultivation/', include('cultivation.urls')),
     path('api/', include('shift_management.api_urls')),  # APIエンドポイントを追加
+    path('api/cultivation/', include('cultivation.api_urls')),  # Cultivation API
     path('', include('shift_management.urls')),
     # ヘルスチェックエンドポイント
     path('health/', health_check, name='health_check'),

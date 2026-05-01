@@ -7,6 +7,6 @@ gunicorn==21.2.0
 whitenoise==6.6.0
 python-dotenv==1.0.0
 WeasyPrint==61.2
-Pillow==10.2.0
+Pillow==11.0.0
 django-extensions==3.2.3
 django-debug-toolbar==4.2.0 

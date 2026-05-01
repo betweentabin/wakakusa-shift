@@ -772,19 +772,27 @@ function updateCalendarSelection() {
     });
 }
 
+// ローカルタイムゾーンでの日付文字列を取得（UTCによる日付ずれを防ぐ）
+function toLocalDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function selectWeekdays() {
     clearSelection();
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
-    
+
     for (let day = 1; day <= 31; day++) {
         const date = new Date(currentYear, currentMonth, day);
         if (date.getMonth() !== currentMonth) break;
-        
+
         const dayOfWeek = date.getDay();
         if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 月曜〜金曜
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = toLocalDateString(date);
             toggleDateSelection(dateStr);
         }
     }
@@ -795,14 +803,14 @@ function selectWeekends() {
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
-    
+
     for (let day = 1; day <= 31; day++) {
         const date = new Date(currentYear, currentMonth, day);
         if (date.getMonth() !== currentMonth) break;
-        
+
         const dayOfWeek = date.getDay();
         if (dayOfWeek === 0 || dayOfWeek === 6) { // 日曜・土曜
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = toLocalDateString(date);
             toggleDateSelection(dateStr);
         }
     }
@@ -813,12 +821,12 @@ function selectCurrentMonth() {
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
-    
+
     for (let day = 1; day <= 31; day++) {
         const date = new Date(currentYear, currentMonth, day);
         if (date.getMonth() !== currentMonth) break;
-        
-        const dateStr = date.toISOString().split('T')[0];
+
+        const dateStr = toLocalDateString(date);
         toggleDateSelection(dateStr);
     }
 }

@@ -732,27 +732,38 @@
                 </button>
             </div>
             
-            <a href="{% url 'cultivation:layout_floor_plan' layout.id %}" class="btn btn-warning">
-                <i class="fas fa-map"></i>栽培区画 2D平面図
-            </a>
             <a href="{% url 'cultivation:plot_floor_plan_with_layout' layout.id %}" class="btn btn-info">
-                <i class="fas fa-cube"></i>棚区画 2D/3D平面図
+                <i class="fas fa-map"></i>2D/3D平面図
+            </a>
+            <a href="{% url 'cultivation:schedule_view_layout' layout.id %}" class="btn btn-success">
+                <i class="fas fa-calendar-alt"></i>栽培スケジュール
             </a>
             <a href="{% url 'cultivation:section_create' layout.id %}" class="btn btn-primary">
                 <i class="fas fa-plus"></i>新規区画作成
             </a>
-            <a href="{% url 'cultivation:bulk_section_create' layout.id %}" class="btn btn-success">
-                <i class="fas fa-th-large"></i>一括区画作成
-            </a>
-            <a href="{% url 'cultivation:visual_section_create' layout.id %}" class="btn btn-info">
-                <i class="fas fa-mouse-pointer"></i>視覚的区画作成
-            </a>
-            <a href="{% url 'cultivation:layout_delete' layout.id %}" class="btn btn-outline-danger">
-                <i class="fas fa-trash"></i>削除
-            </a>
-            <a href="{% url 'cultivation:layout_list' %}" class="btn btn-secondary">
-                <i class="fas fa-list"></i>一覧へ
-            </a>
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-ellipsis-h"></i> その他
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'cultivation:bulk_section_create' layout.id %}">
+                            <i class="fas fa-th-large me-2"></i>一括区画作成
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'cultivation:visual_section_create' layout.id %}">
+                            <i class="fas fa-mouse-pointer me-2"></i>視覚的区画作成
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="{% url 'cultivation:layout_delete' layout.id %}">
+                            <i class="fas fa-trash me-2"></i>削除
+                        </a>
+                    </li>
+                </ul>
+            </div>
             <a href="{% url 'cultivation:cultivation_top' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i>戻る
             </a>

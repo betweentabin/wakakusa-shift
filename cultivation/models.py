@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from shift_management.models import Organization
 
 class Crop(models.Model):
     """作物"""
@@ -15,13 +16,24 @@ class Crop(models.Model):
 class CultivationLayout(models.Model):
     """栽培レイアウト"""
     name = models.CharField("レイアウト名", max_length=100)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='cultivation_layouts',
+        null=True,  # 一時的にnullを許可（マイグレーション用）
+        blank=True
+    )
     layout_image = models.ImageField("レイアウト図", upload_to='layouts/', blank=True, null=True)
-    import_file = models.FileField("インポートファイル", upload_to='imports/', blank=True, null=True, 
+    import_file = models.FileField("インポートファイル", upload_to='imports/', blank=True, null=True,
                                    help_text="PDF、Excel、画像ファイルをアップロードして自動的にレイアウトを作成")
     created_at = models.DateTimeField("作成日", default=timezone.now)
 
+    class Meta:
+        unique_together = ['name', 'organization']  # 組織内でレイアウト名はユニーク
+
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.organization.name})"
 
 class CultivationSection(models.Model):
     """栽培区画"""
@@ -149,6 +161,14 @@ class CultivationLog(models.Model):
 class Plot(models.Model):
     """水耕栽培の棚区画"""
     layout = models.ForeignKey(CultivationLayout, on_delete=models.CASCADE, related_name='plots', verbose_name="レイアウト", null=True, blank=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='plots',
+        null=True,  # 一時的にnullを許可（マイグレーション用）
+        blank=True
+    )
     section = models.OneToOneField(CultivationSection, on_delete=models.CASCADE, related_name='plot', verbose_name="対応区画", null=True, blank=True)
     shelf_number = models.CharField("棚番号", max_length=20)
     x_position = models.PositiveIntegerField("X座標", help_text="グリッド表示時の横位置")
@@ -170,6 +190,12 @@ class Plot(models.Model):
     threejs_y = models.FloatField("3D Y座標", default=0.0, help_text="3D表示でのY座標（高さ、メートル単位）")
     threejs_z = models.FloatField("3D Z座標", default=0.0, help_text="3D表示でのZ座標（奥行、メートル単位）")
     
+    # レーン容量設定
+    max_plates = models.PositiveIntegerField(
+        "最大プレート数", default=14,
+        help_text="このレーン（棚）に入れられるプレートの最大枚数（例: 14枚 or 8枚）"
+    )
+
     # 状態管理
     is_active = models.BooleanField("使用中", default=True)
     maintenance_notes = models.TextField("メンテナンス備考", blank=True, null=True)
@@ -177,7 +203,10 @@ class Plot(models.Model):
     class Meta:
         verbose_name = "棚区画"
         verbose_name_plural = "棚区画"
-        unique_together = ('layout', 'x_position', 'y_position')
+        unique_together = [
+            ('layout', 'x_position', 'y_position'),
+            # ('organization', 'shelf_number')  # 一旦コメントアウト（既存データに重複がある可能性）
+        ]
         ordering = ['y_position', 'x_position']
     
     def calculate_default_3d_position(self):
@@ -321,10 +350,21 @@ class Plot(models.Model):
 class ShelfCrop(models.Model):
     """棚で栽培する作物"""
     variety = models.CharField("品種", max_length=100)
-    planting_date = models.DateField("植付日")
-    expected_harvest_date = models.DateField("収穫予定日")
+    sowing_date = models.DateField("播種日", blank=True, null=True)
+    pre_planting_date = models.DateField("仮植日", blank=True, null=True)
+    planting_date = models.DateField("定植日", blank=True, null=True)
+    expected_harvest_date = models.DateField("収穫予定日", blank=True, null=True)
     harvest_date = models.DateField("収穫日", blank=True, null=True)
+    plate_count = models.PositiveIntegerField("プレート数", default=0, help_text="このレーン・段に入れているプレートの枚数")
     plot = models.ForeignKey(Plot, on_delete=models.CASCADE, related_name='shelf_crops', verbose_name="棚区画")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='shelf_crops',
+        null=True,  # 一時的にnullを許可（マイグレーション用）
+        blank=True
+    )
     level = models.PositiveIntegerField("段数", default=1, validators=[MinValueValidator(1)], help_text="棚の何段目か")
     notes = models.TextField("備考", blank=True, null=True)
     created_at = models.DateTimeField("登録日時", auto_now_add=True)
@@ -344,14 +384,45 @@ class ShelfCrop(models.Model):
             delta = self.expected_harvest_date - timezone.now().date()
             return delta.days
         return None
-    
+
     def days_overdue(self):
         """収穫予定日を過ぎた日数（正の値）"""
         days = self.days_until_harvest()
         if days is not None and days < 0:
             return -days
         return 0
-    
+
+    def get_growth_status(self):
+        """生育状態を返す: harvested / harvest_ready / planted / pre_planted / sowing / empty"""
+        today = timezone.now().date()
+        if self.harvest_date:
+            return 'harvested'
+        if self.expected_harvest_date and self.expected_harvest_date <= today:
+            return 'harvest_ready'
+        if self.planting_date and self.planting_date <= today:
+            return 'planted'
+        if self.pre_planting_date and self.pre_planting_date <= today:
+            return 'pre_planted'
+        if self.sowing_date:
+            return 'sowing'
+        return 'empty'
+
+    def is_today_action(self):
+        """今日が何かの作業日かどうかを返す"""
+        today = timezone.now().date()
+        return {
+            'is_sowing_today': self.sowing_date == today,
+            'is_pre_planting_today': self.pre_planting_date == today,
+            'is_planting_today': self.planting_date == today,
+            'is_harvest_today': self.expected_harvest_date == today,
+            'any': (
+                self.sowing_date == today or
+                self.pre_planting_date == today or
+                self.planting_date == today or
+                self.expected_harvest_date == today
+            ),
+        }
+
     def growth_progress_percentage(self):
         """成長進度をパーセンテージで計算"""
         if not self.expected_harvest_date or not self.planting_date:
@@ -383,6 +454,302 @@ class CropImage(models.Model):
         return f"{self.crop.variety} - {self.capture_date.strftime('%Y-%m-%d %H:%M')}"
 
 
+# ==========================================
+# スケジュール管理モデル
+# ==========================================
+
+class CropProcess(models.Model):
+    """作物の栽培工程マスター"""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='crop_processes',
+        null=True,
+        blank=True,
+        help_text="nullの場合は全組織共通"
+    )
+    name = models.CharField("工程名", max_length=50)
+    code = models.CharField("工程コード", max_length=20)
+    color = models.CharField("表示色", max_length=7, default="#808080", help_text="例: #4CAF50")
+    display_order = models.PositiveIntegerField("表示順", default=0)
+    default_duration = models.PositiveIntegerField("デフォルト期間", default=7, help_text="日数")
+    description = models.TextField("説明", blank=True)
+    is_active = models.BooleanField("有効", default=True)
+
+    class Meta:
+        verbose_name = "栽培工程"
+        verbose_name_plural = "栽培工程"
+        ordering = ['display_order']
+        unique_together = ['organization', 'code']
+
+    def __str__(self):
+        return self.name
+
+
+class CultivationSchedule(models.Model):
+    """栽培スケジュール - 各工程の期間を管理"""
+    shelf_crop = models.ForeignKey(
+        ShelfCrop,
+        on_delete=models.CASCADE,
+        related_name='schedules',
+        verbose_name="棚作物"
+    )
+    process = models.ForeignKey(
+        CropProcess,
+        on_delete=models.CASCADE,
+        verbose_name="工程"
+    )
+    start_date = models.DateField("開始日")
+    end_date = models.DateField("終了日")
+    notes = models.TextField("備考", blank=True)
+    is_completed = models.BooleanField("完了", default=False)
+    completed_date = models.DateField("完了日", null=True, blank=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "栽培スケジュール"
+        verbose_name_plural = "栽培スケジュール"
+        ordering = ['start_date', 'process__display_order']
+
+    def __str__(self):
+        return f"{self.shelf_crop.variety} - {self.process.name} ({self.start_date})"
+
+    def duration_days(self):
+        """工程の期間（日数）"""
+        return (self.end_date - self.start_date).days + 1
+
+    def is_active(self):
+        """現在進行中の工程かどうか"""
+        today = timezone.now().date()
+        return self.start_date <= today <= self.end_date and not self.is_completed
+
+
+class CropTemplate(models.Model):
+    """作物の標準栽培テンプレート"""
+    crop = models.ForeignKey(
+        Crop,
+        on_delete=models.CASCADE,
+        related_name='templates',
+        verbose_name="作物"
+    )
+    name = models.CharField("テンプレート名", max_length=100)
+    description = models.TextField("説明", blank=True)
+    is_default = models.BooleanField("デフォルト", default=False)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "栽培テンプレート"
+        verbose_name_plural = "栽培テンプレート"
+        unique_together = ['crop', 'name']
+
+    def __str__(self):
+        return f"{self.crop.name} - {self.name}"
+
+
+class CropTemplateProcess(models.Model):
+    """テンプレートに含まれる工程"""
+    template = models.ForeignKey(
+        CropTemplate,
+        on_delete=models.CASCADE,
+        related_name='processes',
+        verbose_name="テンプレート"
+    )
+    process = models.ForeignKey(
+        CropProcess,
+        on_delete=models.CASCADE,
+        verbose_name="工程"
+    )
+    duration_days = models.PositiveIntegerField("標準日数")
+    start_offset_days = models.PositiveIntegerField("開始オフセット日数", default=0)
+    display_order = models.PositiveIntegerField("表示順", default=0)
+
+    class Meta:
+        verbose_name = "テンプレート工程"
+        verbose_name_plural = "テンプレート工程"
+        ordering = ['display_order']
+
+    def __str__(self):
+        return f"{self.template.name} - {self.process.name}"
+
+
+# ==========================================
+# ガントチャート機能用モデル
+# ==========================================
+
+class ProcessSchedule(models.Model):
+    """工程スケジュール（ガントチャートの帯）"""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='process_schedules'
+    )
+    plot = models.ForeignKey(
+        Plot,
+        on_delete=models.CASCADE,
+        verbose_name="棚",
+        related_name='process_schedules'
+    )
+    level = models.PositiveIntegerField("段", null=True, blank=True, help_text="nullなら棚全体")
+    group_name = models.CharField("グループ名", max_length=100, blank=True, help_text="任意のグループ名")
+
+    process = models.ForeignKey(
+        CropProcess,
+        on_delete=models.CASCADE,
+        verbose_name="工程",
+        related_name='process_schedules'
+    )
+    start_date = models.DateField("開始日")
+    end_date = models.DateField("終了日")
+
+    # 連携設定
+    parent_schedule = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='child_schedules',
+        verbose_name="親スケジュール"
+    )
+    is_linked = models.BooleanField("連携有効", default=True, help_text="前後の工程と連携して移動するか")
+
+    # メモ・備考
+    notes = models.TextField("備考", blank=True)
+
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "工程スケジュール"
+        verbose_name_plural = "工程スケジュール"
+        ordering = ['plot', 'level', 'start_date']
+
+    def __str__(self):
+        level_str = f"-{self.level}段" if self.level else ""
+        return f"{self.plot.shelf_number}{level_str} {self.process.name} ({self.start_date}〜{self.end_date})"
+
+    def duration_days(self):
+        """期間（日数）"""
+        return (self.end_date - self.start_date).days + 1
+
+    def move_schedule(self, days_offset, move_children=True):
+        """スケジュールを移動（連携する子スケジュールも移動）"""
+        from datetime import timedelta
+        self.start_date += timedelta(days=days_offset)
+        self.end_date += timedelta(days=days_offset)
+        self.save()
+
+        if move_children and self.is_linked:
+            for child in self.child_schedules.filter(is_linked=True):
+                child.move_schedule(days_offset, move_children=True)
+
+
+class LaneConfig(models.Model):
+    """レーン（棚/グループ）の設定"""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='lane_configs'
+    )
+    plot = models.ForeignKey(
+        Plot,
+        on_delete=models.CASCADE,
+        verbose_name="棚",
+        related_name='lane_configs'
+    )
+    level = models.PositiveIntegerField("段", null=True, blank=True, help_text="nullなら棚全体のデフォルト")
+
+    max_overlap = models.PositiveIntegerField("最大重ね本数", default=1, help_text="1=重ね禁止")
+
+    class Meta:
+        verbose_name = "レーン設定"
+        verbose_name_plural = "レーン設定"
+        unique_together = ['organization', 'plot', 'level']
+
+    def __str__(self):
+        level_str = f"-{self.level}段" if self.level else ""
+        return f"{self.plot.shelf_number}{level_str} (最大{self.max_overlap}本)"
+
+
+class HolidayConfig(models.Model):
+    """休日・非稼働日設定（曜日ベース）"""
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='holiday_config'
+    )
+
+    sunday_off = models.BooleanField("日曜休み", default=True)
+    monday_off = models.BooleanField("月曜休み", default=False)
+    tuesday_off = models.BooleanField("火曜休み", default=False)
+    wednesday_off = models.BooleanField("水曜休み", default=False)
+    thursday_off = models.BooleanField("木曜休み", default=False)
+    friday_off = models.BooleanField("金曜休み", default=False)
+    saturday_off = models.BooleanField("土曜休み", default=True)
+
+    # 休日をスキップするかどうか
+    skip_holidays = models.BooleanField("休日スキップ", default=False, help_text="工程期間計算時に休日を除外するか")
+
+    class Meta:
+        verbose_name = "休日設定"
+        verbose_name_plural = "休日設定"
+
+    def __str__(self):
+        return f"{self.organization.name}の休日設定"
+
+    def get_off_days(self):
+        """休みの曜日リスト（0=月曜, 6=日曜）を返す"""
+        off_days = []
+        if self.monday_off:
+            off_days.append(0)
+        if self.tuesday_off:
+            off_days.append(1)
+        if self.wednesday_off:
+            off_days.append(2)
+        if self.thursday_off:
+            off_days.append(3)
+        if self.friday_off:
+            off_days.append(4)
+        if self.saturday_off:
+            off_days.append(5)
+        if self.sunday_off:
+            off_days.append(6)
+        return off_days
+
+    def is_holiday(self, date):
+        """指定日が休日かどうか"""
+        # 曜日チェック
+        if date.weekday() in self.get_off_days():
+            return True
+        # 個別休日チェック
+        return self.holidays.filter(date=date).exists()
+
+
+class Holiday(models.Model):
+    """個別の休日"""
+    holiday_config = models.ForeignKey(
+        HolidayConfig,
+        on_delete=models.CASCADE,
+        verbose_name="休日設定",
+        related_name='holidays'
+    )
+    date = models.DateField("日付")
+    name = models.CharField("名称", max_length=100, blank=True, help_text="祝日名など")
+
+    class Meta:
+        verbose_name = "個別休日"
+        verbose_name_plural = "個別休日"
+        unique_together = ['holiday_config', 'date']
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.date} {self.name}"
+
+
 # シグナル: 区画作成時に自動的に対応する棚を作成
 @receiver(post_save, sender=CultivationSection)
 def create_plot_for_section(sender, instance, created, **kwargs):
@@ -390,7 +757,7 @@ def create_plot_for_section(sender, instance, created, **kwargs):
     if created:
         # 区画名に基づいて棚番号を生成
         shelf_number = f"棚-{instance.name}"
-        
+
         # 対応する棚を作成
         Plot.objects.create(
             layout=instance.layout,

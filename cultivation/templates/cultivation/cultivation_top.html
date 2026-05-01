@@ -150,10 +150,58 @@
         .hero-section h1 {
             font-size: 1.75rem;
         }
-        
+
         .hero-section .lead {
             font-size: 1rem;
         }
+    }
+
+    /* ミニ棚グリッドスタイル */
+    .shelf-grid-mini {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 12px;
+        border: 1px solid #e9ecef;
+    }
+    .shelf-grid-mini h6 {
+        color: #495057;
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+    }
+    .shelf-grid-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+    .shelf-mini {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 20px;
+    }
+    .level-mini {
+        width: 20px;
+        height: 12px;
+        border-radius: 2px;
+        border: 1px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        font-weight: bold;
+    }
+    .level-empty         { background-color: #e9ecef; }
+    .level-sowing        { background-color: #eceff1; border-color: #b0bec5; }
+    .level-pre_planted   { background-color: #fff9c4; border-color: #f9a825; }
+    .level-planted       { background-color: #d4edda; border-color: #28a745; }
+    .level-harvest_ready { background-color: #ffe0b2; border-color: #e65100; }
+    .level-harvested     { background-color: #eeeeee; border-color: #9e9e9e; }
+    @media (max-width: 576px) {
+        .shelf-grid-container { max-height: 80px; }
+        .level-mini { width: 16px; height: 10px; font-size: 7px; }
+        .shelf-mini { min-width: 16px; }
     }
 </style>
 {% endblock %}
@@ -212,29 +260,23 @@
         <h5 class="mb-3">
             <i class="fas fa-bolt me-2"></i>クイックアクション
         </h5>
-        <div class="dropdown">
-            <button class="btn btn-primary action-btn dropdown-toggle" type="button" 
-                    data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="fas fa-plus me-1"></i>レイアウト作成
-            </button>
-            <ul class="dropdown-menu">
-                <li>
-                    <a class="dropdown-item" href="{% url 'cultivation:layout_create' %}">
-                        <i class="fas fa-magic me-2"></i>ガイド付き作成
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item" href="{% url 'cultivation:layout_create_simple' %}">
-                        <i class="fas fa-edit me-2"></i>シンプル作成
-                    </a>
-                </li>
-            </ul>
-        </div>
+        <a href="{% url 'cultivation:layout_create' %}" class="btn btn-primary action-btn">
+            <i class="fas fa-plus me-1"></i>レイアウト作成
+        </a>
+        <a href="{% url 'cultivation:shelf_grid' %}" class="btn btn-success action-btn">
+            <i class="fas fa-th me-1"></i>棚割りグリッド
+        </a>
         <a href="{% url 'cultivation:crop_list' %}" class="btn btn-info action-btn">
             <i class="fas fa-seedling me-1"></i>作物名管理
         </a>
-        <a href="{% url 'cultivation:plot_management' %}" class="btn btn-success action-btn">
+        <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary action-btn">
             <i class="fas fa-warehouse me-1"></i>棚区画管理
+        </a>
+        <a href="{% url 'cultivation:gantt_chart' %}" class="btn btn-warning action-btn">
+            <i class="fas fa-project-diagram me-1"></i>ガントチャート
+        </a>
+        <a href="{% url 'cultivation:lane_master_settings' %}" class="btn btn-dark action-btn">
+            <i class="fas fa-sliders-h me-1"></i>レーン設定
         </a>
         {% if layouts %}
             <a href="{% url 'cultivation:layout_detail' layouts.0.id %}" class="btn btn-info action-btn">
@@ -267,11 +309,11 @@
                             <h5 class="card-title">
                                 <i class="fas fa-seedling me-2 text-success"></i>{{ layout.name }}
                             </h5>
-                            
+
                             <div class="layout-stats">
                                 <div class="stat-item">
                                     <i class="fas fa-th me-1"></i>
-                                    <strong>{{ layout.sections_count }}</strong> 区画
+                                    <strong>{{ layout.plots_count }}</strong> 棚
                                 </div>
                                 <div class="stat-item">
                                     <i class="fas fa-leaf me-1"></i>
@@ -281,8 +323,30 @@
                                     <i class="fas fa-calendar-check me-1"></i>
                                     <strong>{{ layout.harvest_ready_count }}</strong> 収穫可能
                                 </div>
+                                <div class="stat-item">
+                                    <i class="fas fa-square me-1 text-secondary"></i>
+                                    <strong>{{ layout.empty_levels_count }}</strong> 空き
+                                </div>
                             </div>
-                            
+
+                            {% if layout.plots_with_details %}
+                                <div class="shelf-grid-mini mt-3">
+                                    <h6><i class="fas fa-eye me-1"></i>各棚の作物状況</h6>
+                                    <div class="shelf-grid-container">
+                                        {% for plot in layout.plots_with_details %}
+                                            <div class="shelf-mini" title="{{ plot.shelf_number }}">
+                                                {% for level in plot.level_details %}
+                                                    <div class="level-mini level-{{ level.status }}"
+                                                         title="{{ plot.shelf_number }} Lv{{ level.level }}: {{ level.crop_name }}">
+                                                        {% if level.crop_name != '空き' %}{{ level.crop_name|slice:":1" }}{% endif %}
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+
                             <div class="d-flex justify-content-between mt-3">
                                 <a href="{% url 'cultivation:layout_detail' layout.id %}" class="btn btn-primary">
                                     <i class="fas fa-eye me-1"></i>詳細表示

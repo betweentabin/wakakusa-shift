@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}納品書詳細 - {{ delivery_note.delivery_number }}{% endblock %}
 
@@ -62,7 +63,7 @@
                                 <p class="mb-1">実際の納品日: {{ delivery_note.actual_delivery_date|date:"Y年m月d日" }}</p>
                             {% endif %}
                             <p class="mb-1">
-                                ステータス: 
+                                状態: 
                                 <span class="badge bg-{% if delivery_note.status == 'delivered' %}success{% elif delivery_note.status == 'issued' %}primary{% elif delivery_note.status == 'cancelled' %}danger{% else %}secondary{% endif %}">
                                     {{ delivery_note.get_status_display }}
                                 </span>
@@ -93,7 +94,7 @@
                                         <th>説明</th>
                                         <th class="text-end">予定数量</th>
                                         <th class="text-end">実際の納品数量</th>
-                                        <th class="text-end">差異</th>
+                                        <th class="text-end">差（予定との差）</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -101,15 +102,9 @@
                                         <tr>
                                             <td>{{ item.item_name }}</td>
                                             <td>{{ item.item_description|default:"-" }}</td>
-                                            <td class="text-end">{{ item.quantity }} {{ item.unit }}</td>
-                                            <td class="text-end">{{ item.delivered_quantity }} {{ item.unit }}</td>
-                                            <td class="text-end">
-                                                {% with diff=item.delivered_quantity|add:item.quantity|floatformat:2|add:"-"|add:item.quantity|floatformat:2 %}
-                                                    <span class="{% if item.delivered_quantity < item.quantity %}text-danger{% elif item.delivered_quantity > item.quantity %}text-success{% endif %}">
-                                                        {{ item.delivered_quantity|floatformat:2|add:" - "|add:item.quantity|floatformat:2 }}
-                                                    </span>
-                                                {% endwith %}
-                                            </td>
+                                            <td class="text-end">{{ item.quantity|floatformat:2 }} {{ item.unit }}</td>
+                                            <td class="text-end">{{ item.delivered_quantity|default:0|floatformat:2 }} {{ item.unit }}</td>
+                                            <td class="text-end">{{ item.delivered_quantity|default:0|sub:item.quantity|floatformat:2 }} {{ item.unit }}</td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
@@ -133,10 +128,14 @@
                             <i class="fas fa-file-pdf me-2"></i>
                             PDF出力
                         </a>
-                        <button class="btn btn-outline-secondary" disabled>
+                        <a href="{% url 'shift_management:delivery_note_excel' delivery_note.pk %}" class="btn btn-outline-success">
+                            <i class="fas fa-file-excel me-2"></i>
+                            Excel出力
+                        </a>
+                        <a href="{% url 'shift_management:delivery_note_print' delivery_note.pk %}" target="_blank" class="btn btn-outline-secondary">
                             <i class="fas fa-print me-2"></i>
-                            印刷 (未実装)
-                        </button>
+                            印刷
+                        </a>
                         {% if delivery_note.status == 'draft' %}
                             <form method="post" action="{% url 'shift_management:delivery_note_change_status' delivery_note.pk %}" style="display: inline;">
                                 {% csrf_token %}

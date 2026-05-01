@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>請求書印刷 - {{ invoice.invoice_number }}</title>
+  <style>
+    /* 印刷コントロール（画面のみ表示） */
+    .print-controls { position: sticky; top: 0; background: #f8f9fa; border-bottom: 1px solid #ddd; padding: 10px; display: flex; gap: 8px; justify-content: flex-end; }
+    .print-btn { padding: 8px 12px; border: 1px solid #888; background: white; border-radius: 6px; cursor: pointer; }
+    .print-btn.primary { background: #0d6efd; color: white; border-color: #0d6efd; }
+    @media print { .print-controls { display: none !important; } }
+
+    /* 帳票レイアウト（WeasyPrint用と整合） */
+    @page { size: A4; margin: 18mm; }
+    body { font-family: 'Noto Sans CJK JP','Noto Sans JP','Hiragino Sans','Yu Gothic',Meiryo,sans-serif; color:#222; font-size:12px; }
+    .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .issuer { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    .issuer-title { font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+    .doc-meta { text-align: right; }
+    .doc-title { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+    .meta-table { margin-left:auto; border-collapse: collapse; }
+    .meta-table td { padding: 3px 6px; }
+    .section-title { font-size: 14px; font-weight: 700; border-left: 4px solid #666; padding-left: 8px; margin: 18px 0 8px; }
+    .to-box { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.items th { background:#f2f4f7; border:1px solid #bbb; padding:6px; font-weight:700; }
+    table.items td { border:1px solid #bbb; padding:6px; }
+    table.items td.num { text-align: right; }
+    .totals { width: 40%; margin-left:auto; border-collapse: collapse; }
+    .totals td { border:1px solid #bbb; padding:6px; }
+    .totals .label { background:#f2f4f7; font-weight:700; }
+    .footer-note { margin-top: 18px; color:#555; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="print-controls">
+    <button class="print-btn" onclick="window.close()">閉じる</button>
+    <button class="print-btn primary" onclick="window.print()">印刷する</button>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="issuer">
+      <div class="issuer-title">発行元 / Issuer</div>
+      <div><strong>{{ issuer.name|default:"（発行元名）" }}</strong></div>
+      {% if issuer.address %}<div>{{ issuer.address|linebreaksbr }}</div>{% endif %}
+      {% if issuer.contact_phone %}<div>TEL: {{ issuer.contact_phone }}</div>{% endif %}
+      {% if issuer.contact_email %}<div>Email: {{ issuer.contact_email }}</div>{% endif %}
+    </div>
+    <div class="doc-meta">
+      <div class="doc-title">請求書</div>
+      <table class="meta-table">
+        <tr><td>請求書番号</td><td>: {{ invoice.invoice_number }}</td></tr>
+        <tr><td>発行日</td><td>: {{ invoice.issue_date|date:"Y年n月j日" }}</td></tr>
+        <tr><td>支払期限</td><td>: {{ invoice.due_date|date:"Y年n月j日" }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bill to -->
+  <div class="section-title">請求先 / Bill To</div>
+  <div class="to-box">
+    <div><strong>{{ invoice.bill_to_name }}</strong></div>
+    <div>{{ invoice.bill_to_address|linebreaksbr }}</div>
+    {% if invoice.bill_to_contact %}<div>担当者: {{ invoice.bill_to_contact }}</div>{% endif %}
+    {% if invoice.bill_to_phone %}<div>TEL: {{ invoice.bill_to_phone }}</div>{% endif %}
+    {% if invoice.bill_to_email %}<div>Email: {{ invoice.bill_to_email }}</div>{% endif %}
+  </div>
+
+  <!-- Items -->
+  <div class="section-title">請求明細 / Items</div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width: 8%;">No.</th>
+        <th>品目名 / Item</th>
+        <th>説明 / Desc</th>
+        <th>数量 / Qty</th>
+        <th>単位 / Unit</th>
+        <th>単価 / Unit Price</th>
+        <th>金額 / Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="num">{{ forloop.counter }}</td>
+        <td>{{ item.item_name }}</td>
+        <td>{{ item.item_description|default:"-" }}</td>
+        <td class="num">{{ item.quantity|floatformat:1 }}</td>
+        <td>{{ item.unit }}</td>
+        <td class="num">¥{{ item.unit_price|floatformat:0 }}</td>
+        <td class="num">¥{{ item.amount|floatformat:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <table class="totals">
+    <tr>
+      <td class="label">小計</td>
+      <td class="num">¥{{ invoice.subtotal|floatformat:0 }}</td>
+    </tr>
+    <tr>
+      <td class="label">消費税 ({{ invoice.tax_rate }}%)</td>
+      <td class="num">¥{{ invoice.tax_amount|floatformat:0 }}</td>
+    </tr>
+    <tr>
+      <td class="label">合計</td>
+      <td class="num">¥{{ invoice.total_amount|floatformat:0 }}</td>
+    </tr>
+  </table>
+
+  {% if invoice.notes %}
+  <div class="section-title">備考 / Notes</div>
+  <div class="to-box" style="min-height: 60px;">
+    {{ invoice.notes|linebreaksbr }}
+  </div>
+  {% endif %}
+
+  <div class="footer-note">
+    本書面に関するお問い合わせは発行元までお願いいたします。
+  </div>
+
+  <script>
+    // 自動で印刷ダイアログを開く（新規タブで開いたときに便利）
+    window.addEventListener('load', function(){
+      // 過剰発火防止のため、短い遅延を挟む
+      setTimeout(function(){ try { window.print(); } catch(e){} }, 200);
+    });
+  </script>
+</body>
+</html>
+

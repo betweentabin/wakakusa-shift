@@ -33,12 +33,28 @@
                 <div class="card-body">
                     <form method="post">
                         {% csrf_token %}
-                        
+
+                        <!-- 請求書番号 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.invoice_number.id_for_label }}" class="form-label">
+                                        {{ form.invoice_number.label }}
+                                    </label>
+                                    {{ form.invoice_number }}
+                                    <small class="text-muted">{{ form.invoice_number.help_text }}</small>
+                                    {% if form.invoice_number.errors %}
+                                        <div class="text-danger small">{{ form.invoice_number.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row">
                             <!-- 請求先情報 -->
                             <div class="col-md-6">
                                 <h5 class="mb-3">請求先情報</h5>
-                                
+
                                 <div class="mb-3">
                                     <label for="{{ form.bill_to_name.id_for_label }}" class="form-label">
                                         {{ form.bill_to_name.label }}
@@ -151,6 +167,35 @@
 
                         <hr class="my-4">
 
+                        <!-- 発行元（上書き・任意） -->
+                        <div class="row">
+                            <div class="col-12">
+                                <h5 class="mb-3">発行元（上書き・任意）</h5>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">{{ form.issuer_name.label }}</label>
+                                            {{ form.issuer_name }}
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">{{ form.issuer_phone.label }}</label>
+                                            {{ form.issuer_phone }}
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">{{ form.issuer_email.label }}</label>
+                                            {{ form.issuer_email }}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">{{ form.issuer_address.label }}</label>
+                                            {{ form.issuer_address }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- 請求明細 -->
                         <div class="row">
                             <div class="col-12">
@@ -223,6 +268,8 @@
 
 {% block extra_js %}
 <script>
+// サーバー側からのプレフィル明細（存在しない場合は undefined ）
+window.prefillItems = {% if prefill_items %}{{ prefill_items|safe }}{% else %}null{% endif %};
 document.addEventListener('DOMContentLoaded', function() {
     let itemCounter = 0;
     const tbody = document.getElementById('invoice-items-tbody');
@@ -334,8 +381,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // 明細追加ボタン
     addBtn.addEventListener('click', addItemRow);
     
-    // 初期行を1つ追加
-    addItemRow();
+    // 初期行
+    if (Array.isArray(window.prefillItems) && window.prefillItems.length > 0) {
+        window.prefillItems.forEach(function(it){
+            addItemRow();
+            const lastRow = tbody.lastElementChild;
+            lastRow.querySelector('input[name$="-item_name"]').value = it.item_name || '';
+            lastRow.querySelector('textarea[name$="-item_description"]').value = it.item_description || '';
+            lastRow.querySelector('.quantity-input').value = it.quantity || '';
+            lastRow.querySelector('input[name$="-unit"]').value = it.unit || '個';
+            lastRow.querySelector('.unit-price-input').value = it.unit_price || '';
+            updateRowAmount(lastRow);
+        });
+        updateTotals();
+    } else {
+        addItemRow();
+    }
     
     // フォーム送信時に明細データを整理
     document.querySelector('form').addEventListener('submit', function(e) {

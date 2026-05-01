@@ -214,7 +214,7 @@
                                     <a href="{% url 'shift_management:delivery_note_detail' delivery_note.pk %}" 
                                        class="btn btn-sm btn-outline-primary">詳細</a>
                                     {% if delivery_note.status != 'delivered' %}
-                                        <a href="#" class="btn btn-sm btn-outline-secondary">編集</a>
+                                        <a href="{% url 'shift_management:delivery_note_edit' delivery_note.pk %}" class="btn btn-sm btn-outline-secondary">編集</a>
                                     {% endif %}
                                 </div>
                             </div>

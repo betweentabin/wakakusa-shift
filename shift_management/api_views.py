@@ -140,6 +140,230 @@ def api_item_detail(request, item_id):
     })
 
 
+# ===== 請求書API =====
+
+from .models import Invoice, DeliveryNote
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_invoices_list(request):
+    """GET /api/invoices: 請求書一覧"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'view')
+    if perm_error:
+        return perm_error
+    invoices = Invoice.objects.filter(organization=organization).order_by('-issue_date')
+    data = [
+        {
+            'id': inv.id,
+            'invoice_number': inv.invoice_number,
+            'issue_date': inv.issue_date.isoformat(),
+            'due_date': inv.due_date.isoformat(),
+            'bill_to_name': inv.bill_to_name,
+            'subtotal': str(inv.subtotal),
+            'tax_rate': str(inv.tax_rate),
+            'tax_amount': str(inv.tax_amount),
+            'total_amount': str(inv.total_amount),
+            'status': inv.status,
+        }
+        for inv in invoices
+    ]
+    return Response({'invoices': data, 'total_count': len(data)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_invoice_detail(request, invoice_id):
+    """GET /api/invoices/{id}: 請求書詳細"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'view')
+    if perm_error:
+        return perm_error
+    invoice = get_object_or_404(Invoice, id=invoice_id, organization=organization)
+    items = [
+        {
+            'id': it.id,
+            'item_name': it.item_name,
+            'item_description': it.item_description or '',
+            'quantity': str(it.quantity),
+            'unit': it.unit,
+            'unit_price': str(it.unit_price),
+            'amount': str(it.amount),
+        }
+        for it in invoice.items.all()
+    ]
+    return Response({
+        'id': invoice.id,
+        'invoice_number': invoice.invoice_number,
+        'issue_date': invoice.issue_date.isoformat(),
+        'due_date': invoice.due_date.isoformat(),
+        'bill_to_name': invoice.bill_to_name,
+        'subtotal': str(invoice.subtotal),
+        'tax_rate': str(invoice.tax_rate),
+        'tax_amount': str(invoice.tax_amount),
+        'total_amount': str(invoice.total_amount),
+        'status': invoice.status,
+        'items': items,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_invoice_change_status(request, invoice_id):
+    """POST /api/invoices/{id}/status: ステータス変更"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'edit')
+    if perm_error:
+        return perm_error
+    invoice = get_object_or_404(Invoice, id=invoice_id, organization=organization)
+    new_status = request.data.get('status')
+    if new_status not in dict(Invoice.STATUS_CHOICES):
+        return Response({'error': '無効なステータスです。'}, status=status.HTTP_400_BAD_REQUEST)
+    old_status = invoice.status
+    invoice.status = new_status
+    if new_status == 'paid' and not invoice.payment_date:
+        invoice.payment_date = datetime.now().date()
+    invoice.save()
+    log_model_change(
+        user=request.user,
+        organization=organization,
+        action='invoice_status',
+        instance=invoice,
+        old_values={'status': old_status},
+        request=request
+    )
+    return Response({'message': 'ステータスを更新しました。', 'status': invoice.status})
+
+
+# ===== 納品書API =====
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_delivery_notes_list(request):
+    """GET /api/delivery-notes: 納品書一覧"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'view')
+    if perm_error:
+        return perm_error
+    notes = DeliveryNote.objects.filter(organization=organization).order_by('-issue_date')
+    data = [
+        {
+            'id': dn.id,
+            'delivery_number': dn.delivery_number,
+            'issue_date': dn.issue_date.isoformat(),
+            'delivery_date': dn.delivery_date.isoformat() if dn.delivery_date else None,
+            'actual_delivery_date': dn.actual_delivery_date.isoformat() if dn.actual_delivery_date else None,
+            'deliver_to_name': dn.deliver_to_name,
+            'status': dn.status,
+            'applied_to_inventory': dn.applied_to_inventory,
+        }
+        for dn in notes
+    ]
+    return Response({'delivery_notes': data, 'total_count': len(data)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_delivery_note_detail(request, delivery_note_id):
+    """GET /api/delivery-notes/{id}: 納品書詳細"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'view')
+    if perm_error:
+        return perm_error
+    dn = get_object_or_404(DeliveryNote, id=delivery_note_id, organization=organization)
+    items = [
+        {
+            'id': it.id,
+            'item_id': it.item.id if it.item else None,
+            'item_name': it.item_name,
+            'item_description': it.item_description or '',
+            'quantity': str(it.quantity),
+            'unit': it.unit,
+            'delivered_quantity': str(it.delivered_quantity),
+        }
+        for it in dn.items.all()
+    ]
+    return Response({
+        'id': dn.id,
+        'delivery_number': dn.delivery_number,
+        'issue_date': dn.issue_date.isoformat(),
+        'delivery_date': dn.delivery_date.isoformat() if dn.delivery_date else None,
+        'actual_delivery_date': dn.actual_delivery_date.isoformat() if dn.actual_delivery_date else None,
+        'deliver_to_name': dn.deliver_to_name,
+        'status': dn.status,
+        'applied_to_inventory': dn.applied_to_inventory,
+        'items': items,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_delivery_note_change_status(request, delivery_note_id):
+    """POST /api/delivery-notes/{id}/status: ステータス変更"""
+    organization = get_user_organization(request)
+    if not organization:
+        return Response({'error': '組織が見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+    perm_error = check_api_permission(request, organization, 'edit')
+    if perm_error:
+        return perm_error
+    dn = get_object_or_404(DeliveryNote, id=delivery_note_id, organization=organization)
+    new_status = request.data.get('status')
+    if new_status not in dict(DeliveryNote.STATUS_CHOICES):
+        return Response({'error': '無効なステータスです。'}, status=status.HTTP_400_BAD_REQUEST)
+    old_status = dn.status
+    dn.status = new_status
+    if new_status == 'delivered':
+        if not dn.actual_delivery_date:
+            dn.actual_delivery_date = datetime.now().date()
+        # 在庫反映（未反映の場合のみ）
+        if not dn.applied_to_inventory:
+            from shift_management.models import Inventory, Transaction
+            for dn_item in dn.items.all():
+                if dn_item.item is None:
+                    continue
+                qty_dec = dn_item.delivered_quantity if dn_item.delivered_quantity else dn_item.quantity
+                try:
+                    qty = int(qty_dec)
+                except Exception:
+                    continue
+                Transaction.objects.create(
+                    item=dn_item.item,
+                    transaction_type='in',
+                    quantity=qty,
+                    user=request.user,
+                    notes=f'納品書({dn.delivery_number})による自動入庫(API)'
+                )
+                inventory, _ = Inventory.objects.get_or_create(
+                    item=dn_item.item,
+                    defaults={'current_stock': 0}
+                )
+                inventory.current_stock += qty
+                inventory.save()
+            dn.applied_to_inventory = True
+    dn.save()
+    log_model_change(
+        user=request.user,
+        organization=organization,
+        action='delivery_note_status',
+        instance=dn,
+        old_values={'status': old_status},
+        request=request
+    )
+    return Response({'message': 'ステータスを更新しました。', 'status': dn.status})
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_item_create(request):

@@ -52,7 +52,29 @@
         <div class="card-body">
           <form method="post" novalidate>
             {% csrf_token %}
-            
+
+            <!-- フォームエラー表示 -->
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger mb-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                {% for error in form.non_field_errors %}
+                  {{ error }}{% if not forloop.last %}<br>{% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            {% if form.errors %}
+              <div class="alert alert-warning mb-4">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                入力内容にエラーがあります。以下を確認してください。
+                <ul class="mb-0 mt-2">
+                {% for field, errors in form.errors.items %}
+                  <li><strong>{{ field }}</strong>: {{ errors|join:", " }}</li>
+                {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+
             <!-- 名前フィールド -->
             <div class="mb-4">
               <label for="{{ form.name.id_for_label }}" class="form-label required">

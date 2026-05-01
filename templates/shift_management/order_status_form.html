@@ -25,7 +25,7 @@
                                 <strong>発注日時:</strong> {{ order.order_date|date:"Y年m月d日 H:i" }}
                             </div>
                             <div class="col-md-6">
-                                <strong>現在のステータス:</strong> 
+                                <strong>現在の状態:</strong> 
                                 <span class="badge 
                                     {% if order.status == 'ordered' %}bg-primary
                                     {% elif order.status == 'delivered' %}bg-success
@@ -91,7 +91,7 @@
                         <!-- 自動入庫処理の説明 -->
                         <div class="alert alert-warning">
                             <i class="fas fa-info-circle me-2"></i>
-                            <strong>注意:</strong> ステータスを「納品済み」に変更すると、自動的に入庫処理が実行され、在庫数が増加します。
+                            <strong>注意:</strong> 状態を「納品済み」に変更すると、自動的に入庫処理が実行され、在庫数が増加します。
                         </div>
                         
                         <div class="d-flex justify-content-between">

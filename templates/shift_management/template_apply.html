@@ -5,65 +5,132 @@
 {% block content %}
 <div class="container py-4">
   <h1 class="mb-4">シフトテンプレート適用</h1>
-  
+
   <div class="card">
     <div class="card-header">
       <h5 class="card-title">{{ template.name }}</h5>
     </div>
     <div class="card-body">
       <p>{{ template.description|default:"" }}</p>
-      
+
       <form method="post">
         {% csrf_token %}
-        
-        <div class="alert alert-info">
+
+        {% if has_flexible_details %}
+          <div class="alert alert-primary">
+            <h6><i class="fas fa-info-circle"></i> スタッフ選択モード</h6>
+            <p>このテンプレートはスタッフ指定なしで作成されています。</p>
+            <p>適用するスタッフを選択してください。選択したスタッフ全員に同じシフトパターンが作成されます。</p>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label"><strong>適用するスタッフを選択</strong> <span class="text-danger">*</span></label>
+            {% if template.organization %}
+            <p class="text-muted small mb-2">
+              <i class="fas fa-building"></i> 組織: {{ template.organization.name }}
+            </p>
+            {% endif %}
+            <div class="row">
+              {% for staff in available_staff %}
+              <div class="col-md-4 col-sm-6 mb-2">
+                <div class="form-check">
+                  <input type="checkbox" name="selected_staff" value="{{ staff.id }}" id="staff_{{ staff.id }}" class="form-check-input" checked>
+                  <label class="form-check-label" for="staff_{{ staff.id }}">
+                    {{ staff.name }} ({{ staff.get_role_type_display }})
+                  </label>
+                </div>
+              </div>
+              {% empty %}
+              <div class="col-12">
+                <p class="text-muted">選択可能なスタッフがいません。</p>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="mt-2">
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllStaff()">全て選択</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllStaff()">全て解除</button>
+            </div>
+          </div>
+        {% else %}
+          <div class="alert alert-info">
+            <h6><i class="fas fa-user-check"></i> スタッフ指定モード</h6>
+            <p>このテンプレートにはスタッフが登録されています。</p>
+            <p>テンプレートに登録されたスタッフに自動的にシフトが作成されます。</p>
+          </div>
+        {% endif %}
+
+        <div class="alert alert-secondary">
           <p>選択した期間にテンプレートを適用します。</p>
           <p>「既存のシフトを上書きする」にチェックを入れると、同じ日付・スタッフの既存シフトを削除して新しいシフトを作成します。</p>
         </div>
-        
+
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label for="id_start_date" class="form-label">開始日</label>
-            {{ form.start_date }}
-            {% if form.start_date.errors %}
-            <div class="invalid-feedback d-block">
-              {% for error in form.start_date.errors %}
-              {{ error }}
-              {% endfor %}
-            </div>
+            <label for="id_start_date" class="form-label">開始日 <span class="text-danger">*</span></label>
+            {% if default_start_date %}
+            <input type="date" name="start_date" id="id_start_date" class="form-control" value="{{ default_start_date|date:'Y-m-d' }}" required>
+            {% else %}
+            <input type="date" name="start_date" id="id_start_date" class="form-control" required>
             {% endif %}
           </div>
-          
+
           <div class="col-md-6 mb-3">
-            <label for="id_end_date" class="form-label">終了日</label>
-            {{ form.end_date }}
-            {% if form.end_date.errors %}
-            <div class="invalid-feedback d-block">
-              {% for error in form.end_date.errors %}
-              {{ error }}
-              {% endfor %}
-            </div>
+            <label for="id_end_date" class="form-label">終了日 <span class="text-danger">*</span></label>
+            {% if default_end_date %}
+            <input type="date" name="end_date" id="id_end_date" class="form-control" value="{{ default_end_date|date:'Y-m-d' }}" required>
+            {% else %}
+            <input type="date" name="end_date" id="id_end_date" class="form-control" required>
             {% endif %}
           </div>
         </div>
-        
-        <div class="mb-3 form-check">
-          {{ form.overwrite }}
-          <label class="form-check-label" for="id_overwrite">既存のシフトを上書きする</label>
-          {% if form.overwrite.errors %}
-          <div class="invalid-feedback d-block">
-            {% for error in form.overwrite.errors %}
-            {{ error }}
-            {% endfor %}
+
+        <div class="mb-4">
+          <label class="form-label"><strong>適用する曜日を選択</strong> <span class="text-danger">*</span></label>
+          <p class="text-muted small">選択した曜日のみにシフトが適用されます</p>
+          <div class="row">
+            <div class="col-12">
+              <div class="btn-group-toggle d-flex flex-wrap gap-2" data-toggle="buttons">
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="0" checked> 月
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="1" checked> 火
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="2" checked> 水
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="3" checked> 木
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="4" checked> 金
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="5" checked> 土
+                </label>
+                <label class="btn btn-outline-primary weekday-btn active">
+                  <input type="checkbox" name="selected_weekdays" value="6" checked> 日
+                </label>
+              </div>
+            </div>
           </div>
-          {% endif %}
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllWeekdays()">全て選択</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllWeekdays()">全て解除</button>
+          </div>
         </div>
-        
+
+        <div class="mb-3 form-check">
+          <input type="checkbox" name="overwrite" id="id_overwrite" class="form-check-input">
+          <label class="form-check-label" for="id_overwrite">既存のシフトを上書きする</label>
+        </div>
+
         <div class="d-flex justify-content-between">
           <a href="{% url 'shift_management:template_list' %}" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> 戻る
           </a>
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary btn-lg">
             <i class="fas fa-calendar-check"></i> テンプレートを適用
           </button>
         </div>
@@ -71,4 +138,64 @@
     </div>
   </div>
 </div>
+
+<script>
+function selectAllStaff() {
+  document.querySelectorAll('input[name="selected_staff"]').forEach(checkbox => {
+    checkbox.checked = true;
+  });
+}
+
+function deselectAllStaff() {
+  document.querySelectorAll('input[name="selected_staff"]').forEach(checkbox => {
+    checkbox.checked = false;
+  });
+}
+
+function selectAllWeekdays() {
+  document.querySelectorAll('input[name="selected_weekdays"]').forEach(checkbox => {
+    checkbox.checked = true;
+    checkbox.parentElement.classList.add('active');
+  });
+}
+
+function deselectAllWeekdays() {
+  document.querySelectorAll('input[name="selected_weekdays"]').forEach(checkbox => {
+    checkbox.checked = false;
+    checkbox.parentElement.classList.remove('active');
+  });
+}
+
+// 曜日ボタンのクリックイベント
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.weekday-btn').forEach(label => {
+    label.addEventListener('click', function(e) {
+      // ラベルのクリック時にチェック状態を切り替え
+      setTimeout(() => {
+        const checkbox = this.querySelector('input[type="checkbox"]');
+        if (checkbox.checked) {
+          this.classList.add('active');
+        } else {
+          this.classList.remove('active');
+        }
+      }, 10);
+    });
+  });
+});
+</script>
+
+<style>
+.weekday-btn {
+  min-width: 60px;
+  margin: 4px;
+}
+.weekday-btn.active {
+  background-color: #0d6efd;
+  color: white;
+  border-color: #0d6efd;
+}
+.weekday-btn input[type="checkbox"] {
+  display: none;
+}
+</style>
 {% endblock %}

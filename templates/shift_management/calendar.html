@@ -299,14 +299,20 @@
   .fc-event.pending-shift {
     border-style: dashed !important;
     border-width: 2px !important;
-    opacity: 0.8;
-    background-color: #fff3cd !important;
-    border-color: #ffc107 !important;
-    color: #856404 !important;
+    opacity: 0.9;
+    background-color: #fff9e6 !important;
+    border-color: #ff9800 !important;
+    color: #663c00 !important;
   }
   
   .fc-event.pending-shift .fc-event-title {
     font-weight: bold;
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.7);
+  }
+
+  .fc-event.pending-shift .fc-event-time {
+    font-weight: 600;
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.7);
   }
   
   .fc-event.pending-shift:hover {
@@ -816,7 +822,8 @@
 
   <!-- メインカレンダー -->
   <div class="row mb-4">
-    <div class="col-12">
+    <!-- 左側: カレンダー -->
+    <div class="col-lg-9 col-12">
       <div class="card shadow-sm">
         <div class="card-header">
           <h5 class="card-title mb-0">
@@ -836,6 +843,123 @@
         </div>
       </div>
     </div>
+
+    <!-- 右側: 申請情報サイドバー（管理者のみ） -->
+    {% if user_role in 'manager,admin,global_admin' %}
+    <div class="col-lg-3 col-12 mt-3 mt-lg-0">
+      <!-- 承認待ちサマリー -->
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-warning text-dark">
+          <h6 class="mb-0">
+            <i class="fas fa-exclamation-triangle me-2"></i>承認待ち
+          </h6>
+        </div>
+        <div class="card-body p-2">
+          <div class="d-flex justify-content-between align-items-center mb-2 py-1">
+            <span style="font-size: 0.9rem;"><i class="fas fa-user-clock me-1"></i> 休暇申請</span>
+            <span class="badge bg-warning text-dark">{{ pending_leave_requests|length }}</span>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2 py-1">
+            <span style="font-size: 0.9rem;"><i class="fas fa-calendar-check me-1"></i> シフト提案</span>
+            <span class="badge bg-warning text-dark">{{ pending_shift_proposals|length }}</span>
+          </div>
+          <div class="d-flex justify-content-between align-items-center py-1">
+            <span style="font-size: 0.9rem;"><i class="fas fa-user-plus me-1"></i> スタッフ登録</span>
+            <span class="badge bg-warning text-dark">{{ pending_staff_approvals|length }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 休暇申請一覧 -->
+      {% if pending_leave_requests %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light">
+          <h6 class="mb-0" style="font-size: 0.95rem;">
+            <i class="fas fa-user-clock me-1"></i>最新の休暇申請
+          </h6>
+        </div>
+        <div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+          {% for leave_request in pending_leave_requests %}
+          <a href="{% url 'shift_management:leave_request_detail' leave_request.pk %}"
+             class="list-group-item list-group-item-action py-2">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1" style="font-size: 0.9rem;">{{ leave_request.staff.name }}</h6>
+              <small class="text-muted">{{ leave_request.created_at|date:"m/d H:i" }}</small>
+            </div>
+            <p class="mb-1 small">
+              <span class="badge bg-info">{{ leave_request.get_request_type_display }}</span>
+              {{ leave_request.start_date|date:"m/d" }} 〜 {{ leave_request.end_date|date:"m/d" }}
+            </p>
+          </a>
+          {% endfor %}
+        </div>
+        <div class="card-footer text-center py-1">
+          <a href="{% url 'shift_management:leave_request_list' %}" class="btn btn-sm btn-outline-primary">
+            すべて見る
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- シフト提案一覧 -->
+      {% if pending_shift_proposals %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light">
+          <h6 class="mb-0" style="font-size: 0.95rem;">
+            <i class="fas fa-calendar-check me-1"></i>最新のシフト提案
+          </h6>
+        </div>
+        <div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+          {% for proposal in pending_shift_proposals %}
+          <a href="{% url 'shift_management:shift_proposal_detail' proposal.pk %}"
+             class="list-group-item list-group-item-action py-2">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1" style="font-size: 0.9rem;">{{ proposal.proposed_to.name }}</h6>
+              <small class="text-muted">{{ proposal.created_at|date:"m/d H:i" }}</small>
+            </div>
+            <p class="mb-1 small">
+              {{ proposal.shift_date|date:"m/d" }}
+              {% if proposal.shift_type %}
+                <span class="badge bg-primary">{{ proposal.shift_type.name }}</span>
+              {% endif %}
+            </p>
+          </a>
+          {% endfor %}
+        </div>
+        <div class="card-footer text-center py-1">
+          <a href="{% url 'shift_management:shift_proposal_list' %}" class="btn btn-sm btn-outline-primary">
+            すべて見る
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- スタッフ承認待ち -->
+      {% if pending_staff_approvals %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light">
+          <h6 class="mb-0" style="font-size: 0.95rem;">
+            <i class="fas fa-user-plus me-1"></i>スタッフ承認待ち
+          </h6>
+        </div>
+        <div class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+          {% for staff in pending_staff_approvals %}
+          <a href="{% url 'shift_management:staff_detail' staff.pk %}"
+             class="list-group-item list-group-item-action py-2">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1" style="font-size: 0.9rem;">{{ staff.name }}</h6>
+              <small class="text-muted">{{ staff.created_at|date:"m/d H:i" }}</small>
+            </div>
+            <p class="mb-1 small">
+              <span class="badge bg-secondary">{{ staff.get_role_type_display }}</span>
+            </p>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
   
   <!-- コンパクトなフィルターセクション -->
@@ -1071,18 +1195,34 @@
           day: '日',
           list: 'リスト'
         },
-        events: function(info, successCallback, failureCallback) {
-          // APIからシフトデータを取得
-          fetch(`{% url 'shift_management:api_shifts' %}?start=${info.startStr}&end=${info.endStr}`)
-            .then(response => response.json())
-            .then(data => {
-              successCallback(data);
-            })
-            .catch(error => {
-              console.error('Error fetching shifts:', error);
-              failureCallback(error);
-            });
-        },
+        eventSources: [
+          {
+            // 確定シフト
+            events: function(info, successCallback, failureCallback) {
+              const url = '{% url "shift_management:api_shifts" %}?start=' + info.startStr + '&end=' + info.endStr;
+              fetch(url)
+                .then(response => response.json())
+                .then(data => successCallback(data))
+                .catch(error => {
+                  console.error('Error fetching shifts:', error);
+                  failureCallback(error);
+                });
+            }
+          },
+          {
+            // シフト提案
+            events: function(info, successCallback, failureCallback) {
+              const url = '{% url "shift_management:api_shift_proposals" %}?start=' + info.startStr + '&end=' + info.endStr;
+              fetch(url)
+                .then(response => response.json())
+                .then(data => successCallback(data))
+                .catch(error => {
+                  console.error('Error fetching proposals:', error);
+                  failureCallback(error);
+                });
+            }
+          }
+        ],
         eventClick: function(info) {
           // シフト詳細モーダルを表示
           const shiftId = info.event.id;
@@ -1115,7 +1255,7 @@
           }
           
           // 編集・削除ボタンのリンクを設定
-          document.getElementById('editShiftBtn').href = `/shift/${shiftId}/edit/`;
+          document.getElementById('editShiftBtn').href = `/shifts/${shiftId}/edit/`;
           document.getElementById('deleteShiftBtn').dataset.shiftId = shiftId;
           
           // モーダルを表示
@@ -1179,7 +1319,7 @@
             formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
             
             // サーバーにPOSTリクエスト送信
-            fetch('/shift-management/api/shift-update/', {
+            fetch('{% url "shift_management:update_shift_ajax" %}', {
               method: 'POST',
               body: formData
             })
@@ -1519,10 +1659,21 @@
     
     // カレンダーを初期化
     initCalendar();
-    
+
     // 承認パネルを初期化
     initApprovalPanel();
-    
+
+    // カレンダーのリフレッシュフラグをチェック
+    {% if refresh_calendar %}
+    // シフト一括登録後などでカレンダーをリフレッシュ
+    if (calendar) {
+      setTimeout(function() {
+        console.log('Refreshing calendar events...');
+        calendar.refetchEvents();
+      }, 500);  // カレンダーの初期化完了を待つ
+    }
+    {% endif %}
+
     // URLパラメータをチェックして自動更新
     function checkForAutoRefresh() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -1531,11 +1682,11 @@
         if (calendar) {
           calendar.refetchEvents();
         }
-        
+
         // URLからパラメータを削除（ブラウザの戻るボタンで戻ったときに再度更新されないように）
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
-        
+
         // 更新完了メッセージを表示
         showMessage('カレンダーが最新の情報に更新されました。', 'success');
       }
@@ -1681,7 +1832,7 @@
       const selectedOrgId = organizationSelect.value;
       
       // 組織切り替えAPIを呼び出し
-      fetch('/organization-switch/', {
+      fetch('{% url "shift_management:organization_switch" %}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

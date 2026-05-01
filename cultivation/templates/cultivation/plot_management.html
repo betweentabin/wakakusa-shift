@@ -80,39 +80,12 @@
     font-size: 0.85rem;
 }
 
-.level-indicator.has-crop {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-}
-
-.level-indicator.harvest-ready {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-}
-
-.level-indicator.overdue {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-}
-
-.level-status-empty {
-    background: #e9ecef;
-}
-
-.level-status-growing {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-}
-
-.level-status-harvest-ready {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-}
-
-.level-status-overdue {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-}
+.level-status-empty      { background: #f5f5f5; }
+.level-status-sowing     { background: #eceff1; border: 1px solid #b0bec5; }
+.level-status-pre_planted{ background: #fff9c4; border: 1px solid #f9a825; }
+.level-status-planted    { background: #c8e6c9; border: 1px solid #388e3c; }
+.level-status-harvest_ready { background: #ffe0b2; border: 1px solid #e65100; }
+.level-status-harvested  { background: #eeeeee; border: 1px solid #9e9e9e; opacity: 0.7; }
 
 .level-info {
     display: flex;
@@ -133,37 +106,19 @@
     display: inline-block;
 }
 
-.status-empty {
-    background-color: #6c757d;
-}
+.status-empty        { background-color: #6c757d; }
+.status-sowing       { background-color: #90a4ae; }
+.status-pre_planted  { background-color: #f9a825; }
+.status-planted      { background-color: #388e3c; }
+.status-harvest_ready{ background-color: #e65100; }
+.status-harvested    { background-color: #9e9e9e; }
 
-.status-growing {
-    background-color: #28a745;
-}
-
-.status-harvest-ready {
-    background-color: #ffc107;
-}
-
-.status-overdue {
-    background-color: #dc3545;
-}
-
-.plot-status-empty {
-    border-left: 4px solid #6c757d;
-}
-
-.plot-status-growing {
-    border-left: 4px solid #28a745;
-}
-
-.plot-status-harvest-ready {
-    border-left: 4px solid #ffc107;
-}
-
-.plot-status-overdue {
-    border-left: 4px solid #dc3545;
-}
+.plot-status-empty        { border-left: 4px solid #6c757d; }
+.plot-status-sowing       { border-left: 4px solid #90a4ae; }
+.plot-status-pre_planted  { border-left: 4px solid #f9a825; }
+.plot-status-planted      { border-left: 4px solid #388e3c; }
+.plot-status-harvest_ready{ border-left: 4px solid #e65100; }
+.plot-status-harvested    { border-left: 4px solid #9e9e9e; }
 
 .utilization-rate {
     padding-top: 8px;
@@ -324,6 +279,11 @@
                             <i class="fas fa-plus me-1"></i>
                             <span class="d-none d-sm-inline">新しい棚を追加</span>
                             <span class="d-inline d-sm-none">棚追加</span>
+                        </a>
+                        <a href="{% url 'cultivation:schedule_view' %}" class="btn-casual btn-casual-success">
+                            <i class="fas fa-calendar-alt me-1"></i>
+                            <span class="d-none d-sm-inline">栽培スケジュール</span>
+                            <span class="d-inline d-sm-none">スケジュール</span>
                         </a>
                         <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
                             <i class="fas fa-arrow-left me-1"></i>
@@ -529,22 +489,36 @@
                                         </div>
                                     </div>
                                     {% if level_info.status != 'empty' %}
-                                        <div class="level-status">
-                                            {% if level_info.status == 'overdue' %}
-                                                <span class="text-danger small">期限超過</span>
-                                            {% elif level_info.status == 'harvest_ready' %}
-                                                <span class="text-warning small">収穫可能</span>
-                                            {% elif level_info.status == 'growing' and level_info.days_until_harvest %}
-                                                <span class="text-success small">あと{{ level_info.days_until_harvest }}日</span>
+                                        <div class="level-status d-flex justify-content-between align-items-center">
+                                            <span>
+                                                {% if level_info.status == 'sowing' %}
+                                                    <span class="text-secondary small">播種済み</span>
+                                                {% elif level_info.status == 'pre_planted' %}
+                                                    <span class="small" style="color:#f57f17">仮植済み</span>
+                                                {% elif level_info.status == 'planted' %}
+                                                    <span class="text-success small">
+                                                        定植済み
+                                                        {% if level_info.days_until_harvest %}
+                                                            — あと{{ level_info.days_until_harvest }}日
+                                                        {% endif %}
+                                                    </span>
+                                                {% elif level_info.status == 'harvest_ready' %}
+                                                    <span class="small" style="color:#e65100">収穫可能</span>
+                                                {% elif level_info.status == 'harvested' %}
+                                                    <span class="text-muted small">収穫済み</span>
+                                                {% endif %}
+                                            </span>
+                                            {% if level_info.plate_count %}
+                                                <span class="text-muted small">{{ level_info.plate_count }}枚</span>
                                             {% endif %}
                                         </div>
                                     {% endif %}
                                     {% if level_info.progress_percentage %}
                                         <div class="progress mt-1" style="height: 4px;">
-                                            <div class="progress-bar 
-                                                {% if level_info.status == 'overdue' %}bg-danger
-                                                {% elif level_info.status == 'harvest_ready' %}bg-warning
-                                                {% else %}bg-success{% endif %}" 
+                                            <div class="progress-bar
+                                                {% if level_info.status == 'harvest_ready' %}bg-warning
+                                                {% elif level_info.status == 'harvested' %}bg-secondary
+                                                {% else %}bg-success{% endif %}"
                                                 style="width: {{ level_info.progress_percentage }}%">
                                             </div>
                                         </div>

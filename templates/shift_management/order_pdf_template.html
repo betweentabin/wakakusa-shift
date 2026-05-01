@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>発注書 - {{ order.id }}</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <style>
+        /* 実際の見た目はviews側のCSSで制御（@font-face等） */
+    </style>
+    
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="issuer">
+            <div class="issuer-title">発行元 / Issuer</div>
+            <div><strong>{{ organization.name|default:"（発行元名）" }}</strong></div>
+            {% if organization.address %}<div>{{ organization.address|linebreaksbr }}</div>{% endif %}
+            {% if organization.contact_phone %}<div>TEL: {{ organization.contact_phone }}</div>{% endif %}
+            {% if organization.contact_email %}<div>Email: {{ organization.contact_email }}</div>{% endif %}
+        </div>
+        <div class="doc-meta">
+            <div class="doc-title">発注書</div>
+            <table class="meta-table">
+                <tr><td>番号</td><td>: {{ order.id }}</td></tr>
+                <tr><td>発注日時</td><td>: {{ order.order_date|date:"Y年n月j日 H:i" }}</td></tr>
+                <tr><td>状態</td><td>: {{ order.get_status_display }}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Items -->
+    <div class="section-title">発注品目 / Items</div>
+    <table class="items">
+        <thead>
+            <tr>
+                <th style="width:8%;">No.</th>
+                <th>品目名 / Item</th>
+                <th>説明 / Desc</th>
+                <th>数量 / Qty</th>
+                <th>単位 / Unit</th>
+                <th>品目コード / Code</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="num">1</td>
+                <td>{{ order.item.item_name }}</td>
+                <td>-</td>
+                <td class="num">{{ order.ordered_quantity }}</td>
+                <td>{{ order.item.unit }}</td>
+                <td>{{ order.item.item_code }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {% if order.supplier_url %}
+    <div class="section-title">発注先URL / Supplier URL</div>
+    <div class="to-box">{{ order.supplier_url }}</div>
+    {% endif %}
+
+    {% if order.notes %}
+    <div class="section-title">備考 / Notes</div>
+    <div class="to-box" style="min-height:60px;">{{ order.notes|linebreaksbr }}</div>
+    {% endif %}
+
+    <div class="footer-note">
+        本書面に関するお問い合わせは発行元までお願いいたします。
+    </div>
+</body>
+</html>

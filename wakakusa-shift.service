@@ -1,21 +1,22 @@
 [Unit]
 Description=Wakakusa Shift Gunicorn daemon
-Requires=wakakusa-shift.socket
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-Type=notify
+Type=simple
 User=taigakuwata
 Group=taigakuwata
-RuntimeDirectory=wakakusa_shift
 WorkingDirectory=/home/taigakuwata/wakakusa-shift
+Environment=DJANGO_SETTINGS_MODULE=core.settings.production
 ExecStart=/home/taigakuwata/wakakusa-shift/venv/bin/gunicorn \
-          --config /home/taigakuwata/wakakusa-shift/gunicorn.conf.py \
-          --bind unix:/run/wakakusa_shift/gunicorn.sock \
-          wakakusa_shift.wsgi:application
+          -c /home/taigakuwata/wakakusa-shift/gunicorn.conf.py \
+          core.wsgi_production:application
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=5
+Restart=on-failure
+RestartSec=5
 PrivateTmp=true
 
 [Install]

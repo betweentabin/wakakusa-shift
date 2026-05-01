@@ -147,6 +147,49 @@
     color: #1976d2;
     margin-bottom: 10px;
 }
+
+.crop-container-simple {
+    position: relative;
+    display: inline-block;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background: #f8f9fa;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.crop-canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    cursor: crosshair;
+}
+
+.crop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    border: 2px dashed #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    display: none;
+    z-index: 10;
+}
+
+.crop-tools-simple {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.crop-instructions {
+    background: #e3f2fd;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+}
 </style>
 {% endblock %}
 
@@ -164,7 +207,7 @@
                         <p class="casual-subtitle">栽培レイアウトを作成しましょう</p>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="{% url 'cultivation:layout_list' %}" class="btn-casual btn-casual-secondary">
+                        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-casual btn-casual-secondary">
                             <i class="fas fa-arrow-left me-1"></i>
                             <span class="d-none d-sm-inline">一覧に戻る</span>
                             <span class="d-inline d-sm-none">戻る</span>
@@ -344,7 +387,37 @@
                     </div>
                     <div id="file-preview" class="mt-3" style="display: none;">
                         <h6>アップロードファイル:</h6>
-                        <img id="preview-image" class="img-fluid rounded" style="max-height: 300px;">
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="crop-container-simple" id="crop-container-simple">
+                                    <canvas id="crop-canvas-simple" class="crop-canvas"></canvas>
+                                    <div id="crop-overlay-simple" class="crop-overlay"></div>
+                                </div>
+                                <div class="crop-instructions mt-3">
+                                    <p class="small text-muted mb-2">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        画像上でマウスをドラッグしてOCR範囲を選択してください
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="col-lg-4">
+                                <div class="crop-tools-simple">
+                                    <button type="button" class="btn btn-sm btn-outline-info mb-2" onclick="previewCropSimple()" id="preview-btn-simple" disabled>
+                                        <i class="fas fa-eye me-1"></i>選択範囲をプレビュー
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning mb-2" onclick="resetCropSimple()">
+                                        <i class="fas fa-redo me-1"></i>リセット
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-success mb-2" onclick="autoDetectSimple()">
+                                        <i class="fas fa-magic me-1"></i>自動選択
+                                    </button>
+                                </div>
+                                <div id="crop-preview-container" class="mt-3" style="display: none;">
+                                    <h6 class="small">選択範囲プレビュー:</h6>
+                                    <img id="crop-preview-simple" class="img-fluid border rounded" style="max-height: 150px;" alt="選択範囲プレビュー">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -430,19 +503,255 @@ document.addEventListener('DOMContentLoaded', function() {
         if (file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                previewImage.src = e.target.result;
+                setupImageCanvas(e.target.result);
                 preview.style.display = 'block';
             };
             reader.readAsDataURL(file);
         } else if (file.type === 'application/pdf') {
             preview.style.display = 'block';
-            previewImage.style.display = 'none';
-            preview.innerHTML = '<p><i class="fas fa-file-pdf"></i> ' + file.name + '</p>';
+            // PDFの場合は従来通り
+            preview.innerHTML = '<div class="alert alert-info"><i class="fas fa-file-pdf me-2"></i>' + file.name + ' - PDFファイルが選択されました</div>';
         }
     }
     
     // デフォルトで手動作成を選択
     document.querySelector('.method-card').click();
+});
+
+// 画像カット機能
+let canvasSimple, ctxSimple, imgSimple;
+let isDrawingSimple = false;
+let startXSimple, startYSimple, endXSimple, endYSimple;
+let cropDataSimple = null;
+
+function setupImageCanvas(imageSrc) {
+    canvasSimple = document.getElementById('crop-canvas-simple');
+    ctxSimple = canvasSimple.getContext('2d');
+    
+    imgSimple = new Image();
+    imgSimple.onload = function() {
+        // キャンバスのサイズを設定
+        const maxWidth = 600;
+        const maxHeight = 400;
+        
+        let canvasWidth = imgSimple.width;
+        let canvasHeight = imgSimple.height;
+        
+        // サイズ調整
+        if (canvasWidth > maxWidth) {
+            canvasHeight = (canvasHeight * maxWidth) / canvasWidth;
+            canvasWidth = maxWidth;
+        }
+        if (canvasHeight > maxHeight) {
+            canvasWidth = (canvasWidth * maxHeight) / canvasHeight;
+            canvasHeight = maxHeight;
+        }
+        
+        canvasSimple.width = canvasWidth;
+        canvasSimple.height = canvasHeight;
+        
+        drawImageSimple();
+        setupEventListenersSimple();
+    };
+    imgSimple.src = imageSrc;
+}
+
+function drawImageSimple() {
+    ctxSimple.clearRect(0, 0, canvasSimple.width, canvasSimple.height);
+    ctxSimple.drawImage(imgSimple, 0, 0, canvasSimple.width, canvasSimple.height);
+    
+    // 選択範囲がある場合は描画
+    if (cropDataSimple) {
+        drawCropSelectionSimple();
+    }
+}
+
+function setupEventListenersSimple() {
+    let rect = canvasSimple.getBoundingClientRect();
+    
+    canvasSimple.addEventListener('mousedown', (e) => {
+        rect = canvasSimple.getBoundingClientRect();
+        isDrawingSimple = true;
+        startXSimple = (e.clientX - rect.left) * (canvasSimple.width / rect.width);
+        startYSimple = (e.clientY - rect.top) * (canvasSimple.height / rect.height);
+    });
+    
+    canvasSimple.addEventListener('mousemove', (e) => {
+        if (!isDrawingSimple) return;
+        
+        rect = canvasSimple.getBoundingClientRect();
+        endXSimple = (e.clientX - rect.left) * (canvasSimple.width / rect.width);
+        endYSimple = (e.clientY - rect.top) * (canvasSimple.height / rect.height);
+        
+        drawImageSimple();
+        drawCurrentSelectionSimple();
+    });
+    
+    canvasSimple.addEventListener('mouseup', () => {
+        if (isDrawingSimple) {
+            isDrawingSimple = false;
+            finalizeCropSimple();
+        }
+    });
+    
+    // タッチイベント対応
+    canvasSimple.addEventListener('touchstart', handleTouchStartSimple, { passive: false });
+    canvasSimple.addEventListener('touchmove', handleTouchMoveSimple, { passive: false });
+    canvasSimple.addEventListener('touchend', handleTouchEndSimple, { passive: false });
+}
+
+function handleTouchStartSimple(e) {
+    e.preventDefault();
+    const rect = canvasSimple.getBoundingClientRect();
+    const touch = e.touches[0];
+    isDrawingSimple = true;
+    startXSimple = (touch.clientX - rect.left) * (canvasSimple.width / rect.width);
+    startYSimple = (touch.clientY - rect.top) * (canvasSimple.height / rect.height);
+}
+
+function handleTouchMoveSimple(e) {
+    e.preventDefault();
+    if (!isDrawingSimple) return;
+    
+    const rect = canvasSimple.getBoundingClientRect();
+    const touch = e.touches[0];
+    endXSimple = (touch.clientX - rect.left) * (canvasSimple.width / rect.width);
+    endYSimple = (touch.clientY - rect.top) * (canvasSimple.height / rect.height);
+    
+    drawImageSimple();
+    drawCurrentSelectionSimple();
+}
+
+function handleTouchEndSimple(e) {
+    e.preventDefault();
+    if (isDrawingSimple) {
+        isDrawingSimple = false;
+        finalizeCropSimple();
+    }
+}
+
+function drawCurrentSelectionSimple() {
+    if (!isDrawingSimple) return;
+    
+    ctxSimple.strokeStyle = '#007bff';
+    ctxSimple.lineWidth = 2;
+    ctxSimple.setLineDash([5, 5]);
+    ctxSimple.strokeRect(startXSimple, startYSimple, endXSimple - startXSimple, endYSimple - startYSimple);
+    
+    // 半透明オーバーレイ
+    ctxSimple.fillStyle = 'rgba(0, 123, 255, 0.1)';
+    ctxSimple.fillRect(startXSimple, startYSimple, endXSimple - startXSimple, endYSimple - startYSimple);
+    ctxSimple.setLineDash([]);
+}
+
+function drawCropSelectionSimple() {
+    if (!cropDataSimple) return;
+    
+    ctxSimple.strokeStyle = '#28a745';
+    ctxSimple.lineWidth = 3;
+    ctxSimple.setLineDash([]);
+    ctxSimple.strokeRect(cropDataSimple.x, cropDataSimple.y, cropDataSimple.width, cropDataSimple.height);
+    
+    // 半透明オーバーレイ
+    ctxSimple.fillStyle = 'rgba(40, 167, 69, 0.1)';
+    ctxSimple.fillRect(cropDataSimple.x, cropDataSimple.y, cropDataSimple.width, cropDataSimple.height);
+}
+
+function finalizeCropSimple() {
+    if (Math.abs(endXSimple - startXSimple) < 10 || Math.abs(endYSimple - startYSimple) < 10) {
+        return; // 小さすぎる選択は無視
+    }
+    
+    cropDataSimple = {
+        x: Math.min(startXSimple, endXSimple),
+        y: Math.min(startYSimple, endYSimple),
+        width: Math.abs(endXSimple - startXSimple),
+        height: Math.abs(endYSimple - startYSimple)
+    };
+    
+    drawImageSimple();
+    document.getElementById('preview-btn-simple').disabled = false;
+}
+
+function previewCropSimple() {
+    if (!cropDataSimple) return;
+    
+    const previewCanvas = document.createElement('canvas');
+    const previewCtx = previewCanvas.getContext('2d');
+    
+    previewCanvas.width = cropDataSimple.width;
+    previewCanvas.height = cropDataSimple.height;
+    
+    // 元画像から切り取った部分を描画
+    previewCtx.drawImage(
+        imgSimple,
+        (cropDataSimple.x / canvasSimple.width) * imgSimple.width,
+        (cropDataSimple.y / canvasSimple.height) * imgSimple.height,
+        (cropDataSimple.width / canvasSimple.width) * imgSimple.width,
+        (cropDataSimple.height / canvasSimple.height) * imgSimple.height,
+        0, 0,
+        cropDataSimple.width, cropDataSimple.height
+    );
+    
+    const previewImg = document.getElementById('crop-preview-simple');
+    previewImg.src = previewCanvas.toDataURL();
+    document.getElementById('crop-preview-container').style.display = 'block';
+}
+
+function resetCropSimple() {
+    cropDataSimple = null;
+    drawImageSimple();
+    document.getElementById('crop-preview-container').style.display = 'none';
+    document.getElementById('preview-btn-simple').disabled = true;
+}
+
+function autoDetectSimple() {
+    // 簡単な自動検出（画像の中央80%を選択）
+    const margin = 0.1;
+    cropDataSimple = {
+        x: canvasSimple.width * margin,
+        y: canvasSimple.height * margin,
+        width: canvasSimple.width * (1 - 2 * margin),
+        height: canvasSimple.height * (1 - 2 * margin)
+    };
+    
+    drawImageSimple();
+    document.getElementById('preview-btn-simple').disabled = false;
+}
+
+// フォーム送信時に切り取った画像データを含める
+document.getElementById('layout-form').addEventListener('submit', function(e) {
+    if (selectedMethod === 'ocr' && cropDataSimple && imgSimple) {
+        // 切り取った画像データを作成
+        const cropCanvas = document.createElement('canvas');
+        const cropCtx = cropCanvas.getContext('2d');
+        
+        cropCanvas.width = cropDataSimple.width;
+        cropCanvas.height = cropDataSimple.height;
+        
+        // 元画像から切り取った部分を描画
+        cropCtx.drawImage(
+            imgSimple,
+            (cropDataSimple.x / canvasSimple.width) * imgSimple.width,
+            (cropDataSimple.y / canvasSimple.height) * imgSimple.height,
+            (cropDataSimple.width / canvasSimple.width) * imgSimple.width,
+            (cropDataSimple.height / canvasSimple.height) * imgSimple.height,
+            0, 0,
+            cropDataSimple.width, cropDataSimple.height
+        );
+        
+        // Base64データをhiddenフィールドに設定
+        const croppedImageData = cropCanvas.toDataURL();
+        let hiddenInput = document.getElementById('cropped-image-data');
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'cropped_image_data';
+            hiddenInput.id = 'cropped-image-data';
+            this.appendChild(hiddenInput);
+        }
+        hiddenInput.value = croppedImageData;
+    }
 });
 </script>
 {% endblock %}

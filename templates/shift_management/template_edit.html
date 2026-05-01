@@ -11,7 +11,7 @@
       <h5 class="card-title">テンプレート情報</h5>
     </div>
     <div class="card-body">
-      <form method="post" action="{% if is_create %}{% url 'shift_management:template_create' %}{% else %}?update_template=1{% endif %}">
+      <form method="post" action="{% if is_create %}{% url 'shift_management:shift_template_create' %}{% else %}?update_template=1{% endif %}">
         {% csrf_token %}
         
         <div class="mb-3">
@@ -83,7 +83,7 @@
           <tbody>
             {% for detail in details %}
             <tr>
-              <td>{{ detail.staff.name }}</td>
+              <td>{% if detail.staff %}{{ detail.staff.name }}{% else %}<span class="text-muted">（適用時に選択）</span>{% endif %}</td>
               <td>{{ detail.get_weekday_display }}</td>
               <td>{{ detail.shift_type.name }}</td>
               <td>{{ detail.start_time }}</td>

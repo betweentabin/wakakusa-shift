@@ -54,15 +54,21 @@ def require_inventory_permission(min_permission='view'):
                 messages.error(request, 'スタッフ情報が見つかりません。管理者にお問い合わせください。')
                 return redirect('shift_management:calendar')
 
-            # グローバル管理者も許可
-            if staff.role_type == 'global_admin':
+            # グローバル管理者と管理者は在庫管理の全権限を持つ
+            if staff.role_type in ['global_admin', 'manager']:
                 return view_func(request, *args, **kwargs)
 
-            # 管理者（manager）は在庫管理の全権限を持つ
-            if staff.role_type == 'manager':
-                return view_func(request, *args, **kwargs)
+            # 職員・アルバイト(staff, part_time)は基本的な閲覧・編集権限を持つ
+            if staff.role_type in ['staff', 'part_time']:
+                required_level = permission_levels.get(min_permission, 1)
+                # 職員・アルバイトはeditレベル（2）までデフォルトで許可
+                if required_level <= 2:
+                    return view_func(request, *args, **kwargs)
+                # admin権限が必要な場合は、inventory_permissionをチェック
+                if staff.inventory_permission == 'admin':
+                    return view_func(request, *args, **kwargs)
 
-            # 在庫管理権限をチェック
+            # その他の役割は在庫管理権限をチェック
             user_permission_level = permission_levels.get(staff.inventory_permission, 0)
             required_level = permission_levels.get(min_permission, 1)
 

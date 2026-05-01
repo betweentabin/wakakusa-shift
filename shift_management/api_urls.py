@@ -28,4 +28,14 @@ urlpatterns = [
     path('orders/<int:order_id>/', api_views.api_order_detail, name='api_order_detail'),
     path('orders/create/', api_views.api_order_create, name='api_order_create'),
     path('orders/<int:order_id>/status/', api_views.api_order_update_status, name='api_order_update_status'),
+
+    # ===== 請求書API（閲覧・ステータス変更） =====
+    path('invoices/', api_views.api_invoices_list, name='api_invoices_list'),
+    path('invoices/<int:invoice_id>/', api_views.api_invoice_detail, name='api_invoice_detail'),
+    path('invoices/<int:invoice_id>/status/', api_views.api_invoice_change_status, name='api_invoice_change_status'),
+
+    # ===== 納品書API（閲覧・ステータス変更） =====
+    path('delivery-notes/', api_views.api_delivery_notes_list, name='api_delivery_notes_list'),
+    path('delivery-notes/<int:delivery_note_id>/', api_views.api_delivery_note_detail, name='api_delivery_note_detail'),
+    path('delivery-notes/<int:delivery_note_id>/status/', api_views.api_delivery_note_change_status, name='api_delivery_note_change_status'),
 ]

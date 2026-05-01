@@ -24,3 +24,11 @@ def add(value, arg):
         return float(value) + float(arg)
     except (ValueError, TypeError):
         return 0 
+
+@register.filter
+def sub(value, arg):
+    """数値を引き算するフィルター（value - arg）"""
+    try:
+        return float(value) - float(arg)
+    except (ValueError, TypeError):
+        return 0

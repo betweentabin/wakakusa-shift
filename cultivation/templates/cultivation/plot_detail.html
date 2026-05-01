@@ -76,15 +76,20 @@
         font-weight: bold;
     }
     
-    .status-growing {
-        background-color: #d1e7dd;
-        color: #0f5132;
+    .status-sowing      { background-color: #eceff1; color: #37474f; }
+    .status-pre_planted { background-color: #fff9c4; color: #f57f17; }
+    .status-planted     { background-color: #d1e7dd; color: #0f5132; }
+    .status-harvest_ready { background-color: #ffe0b2; color: #e65100; }
+    .status-harvested   { background-color: #e2e3e5; color: #41464b; }
+    .status-empty       { background-color: #e2e3e5; color: #41464b; }
+
+    .plate-bar {
+        display: inline-block; width: 80px; height: 8px;
+        background: #dee2e6; border-radius: 4px; vertical-align: middle; overflow: hidden; margin-left: 6px;
     }
-    
-    .status-empty {
-        background-color: #e2e3e5;
-        color: #41464b;
-    }
+    .plate-bar-fill { height: 100%; border-radius: 4px; background: #43a047; }
+    .plate-bar-fill.warn { background: #f9a825; }
+    .plate-bar-fill.full { background: #e53935; }
 </style>
 {% endblock %}
 
@@ -98,6 +103,9 @@
                     <div>
                         <a href="{% url 'cultivation:plot_edit' plot.id %}" class="btn btn-outline-primary me-2">
                             <i class="fas fa-edit me-1"></i>編集
+                        </a>
+                        <a href="{% url 'cultivation:schedule_view_plot' plot.id %}" class="btn btn-success me-2">
+                            <i class="fas fa-calendar-alt me-1"></i>スケジュール
                         </a>
                         <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left me-1"></i>一覧に戻る
@@ -117,10 +125,23 @@
                     </div>
                     <div class="col-md-6">
                         <div class="info-item">
+                            <span class="info-label">段数 / 最大枚数:</span>
+                            <span class="info-value">{{ plot.levels }}段 / {{ plot.max_plates }}枚</span>
+                        </div>
+                        <div class="info-item">
                             <span class="info-label">状態:</span>
                             <span class="info-value">
                                 {% if current_crop %}
-                                    <span class="status-badge status-growing">栽培中</span>
+                                    {% with s=current_crop.get_growth_status %}
+                                    <span class="status-badge status-{{ s }}">
+                                        {% if s == 'sowing' %}播種済み
+                                        {% elif s == 'pre_planted' %}仮植済み
+                                        {% elif s == 'planted' %}定植済み
+                                        {% elif s == 'harvest_ready' %}収穫可能
+                                        {% elif s == 'harvested' %}収穫済み
+                                        {% else %}空き{% endif %}
+                                    </span>
+                                    {% endwith %}
                                 {% else %}
                                     <span class="status-badge status-empty">空き</span>
                                 {% endif %}
@@ -145,29 +166,55 @@
                                 <span class="info-label">品種:</span>
                                 <span class="info-value">{{ current_crop.variety }}</span>
                             </div>
+                            {% if current_crop.sowing_date %}
                             <div class="info-item">
-                                <span class="info-label">植付日:</span>
+                                <span class="info-label">播種日:</span>
+                                <span class="info-value">{{ current_crop.sowing_date|date:"Y年m月d日" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if current_crop.pre_planting_date %}
+                            <div class="info-item">
+                                <span class="info-label">仮植日:</span>
+                                <span class="info-value">{{ current_crop.pre_planting_date|date:"Y年m月d日" }}</span>
+                            </div>
+                            {% endif %}
+                            {% if current_crop.planting_date %}
+                            <div class="info-item">
+                                <span class="info-label">定植日:</span>
                                 <span class="info-value">{{ current_crop.planting_date|date:"Y年m月d日" }}</span>
                             </div>
+                            {% endif %}
+                            {% if current_crop.expected_harvest_date %}
                             <div class="info-item">
                                 <span class="info-label">収穫予定日:</span>
                                 <span class="info-value">{{ current_crop.expected_harvest_date|date:"Y年m月d日" }}</span>
                             </div>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <div class="info-item">
                                 <span class="info-label">収穫まで:</span>
                                 <span class="info-value">
-                                    {% if current_crop.days_until_harvest %}
-                                        {% if current_crop.days_until_harvest > 0 %}
-                                            あと{{ current_crop.days_until_harvest }}日
-                                        {% elif current_crop.days_until_harvest == 0 %}
-                                            本日収穫予定
-                                        {% else %}
-                                            収穫予定日を{{ current_crop.days_overdue }}日経過
+                                    {% with d=current_crop.days_until_harvest %}
+                                    {% if d is not None %}
+                                        {% if d > 0 %}あと{{ d }}日
+                                        {% elif d == 0 %}本日収穫予定
+                                        {% else %}{{ current_crop.days_overdue }}日超過
                                         {% endif %}
-                                    {% else %}
-                                        -
+                                    {% else %}-{% endif %}
+                                    {% endwith %}
+                                </span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">プレート数:</span>
+                                <span class="info-value">
+                                    {{ current_crop.plate_count }}/{{ plot.max_plates }}枚
+                                    {% if plot.max_plates > 0 %}
+                                    {% widthratio current_crop.plate_count plot.max_plates 100 as pct %}
+                                    <span class="plate-bar">
+                                        <span class="plate-bar-fill{% if pct >= 100 %} full{% elif pct >= 80 %} warn{% endif %} js-pct-bar"
+                                              data-pct="{{ pct }}"></span>
+                                    </span>
                                     {% endif %}
                                 </span>
                             </div>
@@ -261,4 +308,10 @@
     </div>
     {% endfor %}
 {% endif %}
+
+<script>
+document.querySelectorAll('.js-pct-bar').forEach(function(el) {
+    el.style.width = (el.dataset.pct || 0) + '%';
+});
+</script>
 {% endblock %}

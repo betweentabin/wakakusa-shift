@@ -85,12 +85,45 @@ def has_inventory_permission(user, organization, permission_level):
         return False
     
     try:
-        staff = Staff.objects.get(user=user, organization=organization)
-        if staff.approval_status != 'approved' or not staff.is_active:
+        # まず、ユーザーの全てのスタッフレコードを確認
+        staff_records = Staff.objects.filter(
+            user=user,
+            approval_status='approved',
+            is_active=True
+        )
+
+        # グローバル管理者チェック（どの組織のレコードでもOK）
+        if staff_records.filter(role_type='global_admin').exists():
+            return True
+
+        # 指定された組織のスタッフレコードを取得
+        staff = staff_records.filter(organization=organization).first()
+
+        if not staff:
             return False
-        
+
+        # 管理者は自動的に在庫管理の全権限を持つ
+        if staff.role_type == 'manager':
+            return True
+
+        # 職員・アルバイト(role_type='staff' or 'part_time')は基本的な在庫閲覧・編集権限を持つ
+        if staff.role_type in ['staff', 'part_time']:
+            # 職員・アルバイトは view と edit レベルの権限を持つ（admin権限は個別設定が必要）
+            permission_hierarchy = {
+                'none': 0,
+                'view': 1,
+                'edit': 2,
+                'admin': 3
+            }
+            required_level = permission_hierarchy.get(permission_level, 0)
+            # 職員・アルバイトはeditレベル（2）までデフォルトで許可
+            if required_level <= 2:
+                return True
+            # admin権限が必要な場合は、inventory_permissionをチェック
+            return staff.inventory_permission == 'admin'
+
         user_permission = staff.inventory_permission
-        
+
         # 権限レベルの階層
         permission_hierarchy = {
             'none': 0,
@@ -98,12 +131,12 @@ def has_inventory_permission(user, organization, permission_level):
             'edit': 2,
             'admin': 3
         }
-        
+
         required_level = permission_hierarchy.get(permission_level, 0)
         user_level = permission_hierarchy.get(user_permission, 0)
-        
+
         return user_level >= required_level
-        
+
     except Staff.DoesNotExist:
         return False
 
@@ -122,10 +155,88 @@ def get_user_organizations(user):
 
 
 def get_current_organization(request):
-    """現在選択されている組織を取得"""
-    if hasattr(request, 'current_organization'):
+    """現在選択されている組織を取得（属性→セッションの順で判定）"""
+    # Request属性に設定済みならそれを優先
+    if hasattr(request, 'current_organization') and request.current_organization:
         return request.current_organization
+    # セッションから取得
+    org_id = request.session.get('current_organization_id')
+    if org_id:
+        try:
+            return Organization.objects.get(id=org_id, is_active=True)
+        except Organization.DoesNotExist:
+            # 無効IDの場合はセッションをクリーン
+            request.session.pop('current_organization_id', None)
+            request.session.pop('current_organization_name', None)
     return None
+
+
+def is_global_admin(user):
+    """ユーザーがグローバル管理者かどうかを判定"""
+    if not user or not user.is_authenticated:
+        return False
+
+    if user.is_superuser:
+        return True
+
+    try:
+        staff = Staff.objects.get(user=user)
+        return staff.role_type == 'global_admin' and staff.is_active and staff.approval_status == 'approved'
+    except Staff.DoesNotExist:
+        return False
+
+
+def get_accessible_organizations(user):
+    """ユーザーがアクセス可能な組織のクエリセットを返す"""
+    if not user or not user.is_authenticated:
+        return Organization.objects.none()
+
+    # グローバル管理者は全組織にアクセス可能
+    if is_global_admin(user):
+        return Organization.objects.filter(is_active=True)
+
+    # 通常のユーザーは自分の組織のみ
+    try:
+        staff = Staff.objects.get(user=user, is_active=True, approval_status='approved')
+        if staff.organization:
+            return Organization.objects.filter(id=staff.organization.id, is_active=True)
+    except Staff.DoesNotExist:
+        pass
+
+    return Organization.objects.none()
+
+
+def filter_by_organization(queryset, user, org_field='organization'):
+    """
+    クエリセットを組織でフィルタリング
+
+    Args:
+        queryset: フィルタリング対象のクエリセット
+        user: 現在のユーザー
+        org_field: 組織フィールド名（デフォルト: 'organization'）
+                  リレーション経由の場合は 'staff__organization' のように指定
+
+    Returns:
+        フィルタリングされたクエリセット
+    """
+    if not user or not user.is_authenticated:
+        return queryset.none()
+
+    # グローバル管理者はフィルタリングなし
+    if is_global_admin(user):
+        return queryset
+
+    # 通常のユーザーは自分の組織のみ
+    try:
+        staff = Staff.objects.get(user=user, is_active=True, approval_status='approved')
+        if staff.organization:
+            filter_kwargs = {org_field: staff.organization}
+            return queryset.filter(**filter_kwargs)
+    except Staff.DoesNotExist:
+        pass
+
+    # スタッフ情報がない場合は空のクエリセットを返す
+    return queryset.none()
 
 
 class InventoryPermissionMixin:

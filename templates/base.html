@@ -386,32 +386,50 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav me-auto">
           {% if user.is_authenticated %}
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'shift_management:calendar' %}">
-                <i class="fas fa-calendar-alt me-1"></i>
-                シフト管理
-              </a>
-            </li>
+            {# 利用者以外はシフト管理メニューを表示 #}
+            {% if user.is_superuser or user.staff.role_type != 'user' %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'shift_management:calendar' %}">
+                  <i class="fas fa-calendar-alt me-1"></i>
+                  シフト管理
+                </a>
+              </li>
+            {% endif %}
+
+            {# 栽培管理は全員表示 #}
             <li class="nav-item">
               <a class="nav-link" href="{% url 'cultivation:cultivation_top' %}">
                 <i class="fas fa-seedling me-1"></i>
                 栽培管理
               </a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'shift_management:inventory_dashboard' %}">
-                <i class="fas fa-warehouse me-1"></i>
-                発注管理
-              </a>
-            </li>
+
+            {# 発注管理はアルバイト以上または在庫権限がある人 #}
+            {% if user.is_superuser or user.staff.role_type == 'global_admin' or user.staff.role_type == 'manager' or user.staff.role_type == 'staff' or user.staff.role_type == 'part_time' or user.staff.inventory_permission != 'none' %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'shift_management:inventory_dashboard' %}">
+                  <i class="fas fa-warehouse me-1"></i>
+                  発注管理
+                </a>
+              </li>
+            {% endif %}
+
+            {# シフト確認は全員表示 #}
             <li class="nav-item">
               <a class="nav-link" href="{% url 'shift_management:staff_view' %}">
                 <i class="fas fa-eye me-1"></i>
                 シフト確認
               </a>
             </li>
+
+            {# シフト打診は全員表示（職員・アルバイト用） #}
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'shift_management:shift_proposal_list' %}">
+                <i class="fas fa-hand-pointer me-1"></i>
+                シフト打診
+              </a>
+            </li>
           {% endif %}
-          <!-- 他の機能へのリンクはここに追加 -->
         </ul>
         <ul class="navbar-nav">
           {% if user.is_authenticated %}

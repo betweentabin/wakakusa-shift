@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% load static cultivation_filters %}
+
+{% block title %}棚割りグリッド{% if current_layout %} - {{ current_layout.name }}{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ========== レイアウト ========== */
+.shelf-grid-page { padding: 16px 0; }
+
+/* ========== 今日の作業バナー ========== */
+.today-banner {
+    background: #fff3cd;
+    border: 2px solid #e53935;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+.today-banner h5 {
+    color: #b71c1c;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.today-banner ul { margin: 0; padding-left: 1.2rem; }
+.today-banner li { margin-bottom: 3px; font-size: 0.9rem; }
+.action-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 4px;
+}
+.badge-sowing       { background:#e3f2fd; color:#1565c0; }
+.badge-pre_planting { background:#fff9c4; color:#f57f17; }
+.badge-planting     { background:#e8f5e9; color:#2e7d32; }
+.badge-harvest      { background:#fff3e0; color:#e65100; }
+
+/* ========== タブ ========== */
+.tank-tabs { margin-bottom: 16px; }
+.tank-tabs .nav-link {
+    color: #555;
+    border-radius: 8px 8px 0 0;
+    padding: 6px 16px;
+    font-size: 0.9rem;
+}
+.tank-tabs .nav-link.active {
+    background: #2e7d32;
+    color: #fff;
+    border-color: #2e7d32;
+}
+
+/* ========== グリッドテーブル ========== */
+.shelf-grid-wrapper { overflow-x: auto; }
+.shelf-grid-table {
+    border-collapse: separate;
+    border-spacing: 3px;
+    min-width: 100%;
+}
+.shelf-grid-table th,
+.shelf-grid-table td { padding: 0; vertical-align: top; }
+
+/* 段ヘッダー（行ラベル） */
+.level-header {
+    background: #37474f;
+    color: #fff;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    min-width: 48px;
+}
+
+/* レーンヘッダー（列ラベル） */
+.lane-header {
+    background: #455a64;
+    color: #fff;
+    text-align: center;
+    font-size: 0.78rem;
+    padding: 6px 4px;
+    border-radius: 6px;
+    min-width: 108px;
+    max-width: 130px;
+}
+.lane-header .lane-name { font-weight: 700; font-size: 0.85rem; }
+.lane-header .lane-capacity {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    margin-top: 2px;
+}
+
+/* グリッドセル */
+.grid-cell {
+    min-width: 108px;
+    max-width: 130px;
+    min-height: 72px;
+    padding: 6px 7px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    cursor: default;
+    transition: filter 0.15s;
+    position: relative;
+    border: 2px solid transparent;
+}
+.grid-cell:hover { filter: brightness(0.93); }
+
+/* 段なし（その棚はこの段を持たない） */
+.status-no_level {
+    background: #f5f5f5;
+    border-color: #e0e0e0;
+    opacity: 0.35;
+}
+
+/* 空き */
+.status-empty {
+    background: #fafafa;
+    border-color: #e0e0e0;
+}
+
+/* 播種のみ */
+.status-sowing {
+    background: #eceff1;
+    border-color: #b0bec5;
+}
+
+/* 仮植済み */
+.status-pre_planted {
+    background: #fff9c4;
+    border-color: #f9a825;
+}
+
+/* 定植済み */
+.status-planted {
+    background: #c8e6c9;
+    border-color: #388e3c;
+}
+
+/* 収穫可能 */
+.status-harvest_ready {
+    background: #ffe0b2;
+    border-color: #e65100;
+}
+
+/* 収穫済み */
+.status-harvested {
+    background: #eeeeee;
+    border-color: #9e9e9e;
+    opacity: 0.6;
+}
+
+/* 今日の作業ハイライト */
+.today-highlight {
+    outline: 3px solid #d32f2f !important;
+    outline-offset: -2px;
+}
+.today-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    background: #d32f2f;
+    color: #fff;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 8px;
+    letter-spacing: 0.03em;
+}
+
+/* セル内コンテンツ */
+.cell-variety {
+    font-weight: 700;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    margin-bottom: 3px;
+}
+.cell-plates {
+    font-size: 0.72rem;
+    color: #444;
+    margin-bottom: 2px;
+}
+.cell-plates .plate-bar {
+    display: inline-block;
+    width: 60px;
+    height: 6px;
+    background: #ddd;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 4px;
+    overflow: hidden;
+}
+.cell-plates .plate-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #43a047;
+    transition: width 0.3s;
+}
+.cell-plates .plate-bar-fill.warn  { background: #f9a825; }
+.cell-plates .plate-bar-fill.full  { background: #e53935; }
+.cell-date {
+    font-size: 0.7rem;
+    color: #555;
+    line-height: 1.5;
+}
+.cell-empty-label {
+    color: #bdbdbd;
+    font-size: 0.75rem;
+    text-align: center;
+    padding-top: 18px;
+}
+
+/* ========== 凡例 ========== */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 0.8rem;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.legend-box {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    flex-shrink: 0;
+}
+
+/* ========== 空状態 ========== */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9e9e9e;
+}
+
+/* ========== レスポンシブ ========== */
+@media (max-width: 768px) {
+    .grid-cell, .lane-header { min-width: 82px; max-width: 100px; }
+    .cell-variety { max-width: 80px; font-size: 0.76rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid shelf-grid-page">
+
+    <!-- ページヘッダー -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">
+            <i class="fas fa-th me-2 text-success"></i>棚割りグリッド
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{% url 'cultivation:plot_management' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-warehouse me-1"></i>棚管理
+            </a>
+            <a href="{% url 'cultivation:cultivation_top' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>トップ
+            </a>
+        </div>
+    </div>
+
+    <!-- 今日の作業バナー -->
+    {% if today_actions %}
+    <div class="today-banner">
+        <h5><i class="fas fa-exclamation-circle me-2"></i>今日（{{ today|date:"Y年m月d日" }}）の作業</h5>
+        <ul>
+            {% for action in today_actions %}
+            <li>
+                <strong>{{ action.plot_name }}</strong>
+                {{ action.level }}段 —
+                <em>{{ action.variety }}</em>
+                {% if action.plate_count > 0 %}（{{ action.plate_count }}枚）{% endif %}
+                <span class="action-badge badge-{{ action.type }}">{{ action.label }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- タンク切替タブ -->
+    {% if layouts %}
+    <ul class="nav nav-tabs tank-tabs">
+        {% for layout in layouts %}
+        <li class="nav-item">
+            <a class="nav-link {% if layout == current_layout %}active{% endif %}"
+               href="{% url 'cultivation:shelf_grid_layout' layout.id %}">
+                <i class="fas fa-layer-group me-1"></i>{{ layout.name }}
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if current_layout %}
+
+        <!-- 凡例 -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-box status-sowing" style="border-color:#b0bec5"></div>播種のみ
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-pre_planted" style="border-color:#f9a825"></div>仮植済み
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-planted" style="border-color:#388e3c"></div>定植済み
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-harvest_ready" style="border-color:#e65100"></div>収穫可能
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-empty" style="border-color:#e0e0e0"></div>空き
+            </div>
+            <div class="legend-item">
+                <div style="width:18px;height:18px;border-radius:4px;border:3px solid #d32f2f;flex-shrink:0;"></div>今日の作業
+            </div>
+        </div>
+
+        {% if plot_list %}
+        <div class="shelf-grid-wrapper">
+            <table class="shelf-grid-table">
+                <!-- 列ヘッダー（レーン名） -->
+                <thead>
+                    <tr>
+                        <th><div class="level-header">段</div></th>
+                        {% for plot in plot_list %}
+                        <th>
+                            <div class="lane-header">
+                                <div class="lane-name">{{ plot.shelf_number }}</div>
+                                <div class="lane-capacity">最大 {{ plot.max_plates }} 枚</div>
+                            </div>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+
+                <!-- グリッド本体 -->
+                <tbody>
+                    {% for level in level_range %}
+                    <tr>
+                        <td><div class="level-header">{{ level }}段</div></td>
+                        {% with row=grid|get_item:level %}
+                        {% for cell in row %}
+                        <td>
+                            <div class="grid-cell status-{{ cell.status }}{% if cell.is_today %} today-highlight{% endif %}"
+                                 {% if cell.crop %}
+                                 title="{{ cell.plot.shelf_number }} {{ level }}段: {{ cell.crop.variety }}{% if cell.crop.plate_count %} ({{ cell.crop.plate_count }}枚){% endif %}"
+                                 onclick="window.location='{% url 'cultivation:plot_detail' cell.plot.id %}'"
+                                 style="cursor:pointer;"
+                                 {% endif %}>
+
+                                {% if cell.is_today %}
+                                <span class="today-badge">TODAY</span>
+                                {% endif %}
+
+                                {% if cell.crop %}
+                                    <div class="cell-variety">{{ cell.crop.variety }}</div>
+
+                                    {% if cell.crop.plate_count > 0 %}
+                                    <div class="cell-plates">
+                                        {{ cell.crop.plate_count }}/{{ cell.plot.max_plates }}枚
+                                        {% if cell.plot.max_plates > 0 %}
+                                        <span class="plate-bar">
+                                            {% widthratio cell.crop.plate_count cell.plot.max_plates 100 as pct %}
+                                            <span class="plate-bar-fill{% if pct >= 100 %} full{% elif pct >= 80 %} warn{% endif %} js-pct-bar"
+                                                  data-pct="{{ pct }}"></span>
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+
+                                    <div class="cell-date">
+                                        {% if cell.crop.sowing_date %}
+                                        <div>播: {{ cell.crop.sowing_date|date:"m/d" }}</div>
+                                        {% endif %}
+                                        {% if cell.crop.pre_planting_date %}
+                                        <div>仮: {{ cell.crop.pre_planting_date|date:"m/d" }}</div>
+                                        {% endif %}
+                                        {% if cell.crop.planting_date %}
+                                        <div>定: {{ cell.crop.planting_date|date:"m/d" }}</div>
+                                        {% endif %}
+                                        {% if cell.crop.expected_harvest_date %}
+                                        <div>収: {{ cell.crop.expected_harvest_date|date:"m/d" }}</div>
+                                        {% endif %}
+                                    </div>
+
+                                {% elif cell.status == 'no_level' %}
+                                    {# この棚はこの段数を持たない #}
+                                {% else %}
+                                    <div class="cell-empty-label">空き</div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endfor %}
+                        {% endwith %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-warehouse fa-3x mb-3"></i>
+            <p>このタンクにはまだ棚（レーン）が登録されていません。</p>
+            <a href="{% url 'cultivation:plot_create' %}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i>棚を追加する
+            </a>
+        </div>
+        {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-layer-group fa-3x mb-3"></i>
+        <p>レイアウト（タンク）がまだ登録されていません。</p>
+        <a href="{% url 'cultivation:layout_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>レイアウトを作成する
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+document.querySelectorAll('.js-pct-bar').forEach(function(el) {
+    el.style.width = (el.dataset.pct || 0) + '%';
+});
+</script>
+{% endblock %}

@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'shift_management/base_user.html' %}
 
 {% block title %}休み・通院申請一覧{% endblock %}
 
@@ -17,6 +17,26 @@
                     </a>
                 </div>
             </div>
+
+            <!-- ステータスフィルタ -->
+            {% if user_role == 'manager' %}
+            <div class="mb-3">
+                <div class="btn-group" role="group">
+                    <a href="?status=pending" class="btn btn-sm {% if status_filter == 'pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        🕐 承認待ち
+                    </a>
+                    <a href="?status=approved" class="btn btn-sm {% if status_filter == 'approved' %}btn-success{% else %}btn-outline-success{% endif %}">
+                        ✅ 承認済み
+                    </a>
+                    <a href="?status=rejected" class="btn btn-sm {% if status_filter == 'rejected' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                        ❌ 却下
+                    </a>
+                    <a href="?status=all" class="btn btn-sm {% if status_filter == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+                        📋 全て
+                    </a>
+                </div>
+            </div>
+            {% endif %}
 
             {% if page_obj %}
                 <div class="card">

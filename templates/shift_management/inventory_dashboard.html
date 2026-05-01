@@ -100,9 +100,31 @@
     </div>
     {% endif %}
 
+    <!-- メインナビゲーション -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bars me-2"></i>メインメニュー</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'shift_management:calendar' %}" class="btn btn-outline-secondary btn-action">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    シフト管理
+                </a>
+                <a href="{% url 'shift_management:staff_list' %}" class="btn btn-outline-secondary btn-action">
+                    <i class="fas fa-users me-1"></i>
+                    スタッフ一覧
+                </a>
+                <a href="{% url 'shift_management:item_list' %}" class="btn btn-outline-secondary btn-action">
+                    <i class="fas fa-list me-1"></i>
+                    品目一覧
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- アクションボタン -->
     <div class="row mb-4">
         <div class="col-12">
+            <h5 class="mb-2"><i class="fas fa-bolt me-2"></i>クイックアクション</h5>
             <div class="d-flex gap-2 flex-wrap">
                 <a href="{% url 'shift_management:item_create' %}" class="btn btn-success btn-action">
                     <i class="fas fa-plus me-1"></i>
@@ -127,6 +149,10 @@
                 <a href="{% url 'shift_management:delivery_note_list' %}" class="btn btn-outline-secondary btn-action">
                     <i class="fas fa-truck me-1"></i>
                     納品書一覧
+                </a>
+                <a href="{% url 'shift_management:order_list' %}" class="btn btn-outline-info btn-action">
+                    <i class="fas fa-clipboard-list me-1"></i>
+                    発注履歴
                 </a>
                 <a href="{% url 'shift_management:organization_edit' current_organization.pk %}" class="btn btn-outline-dark btn-action">
                     <i class="fas fa-cog me-1"></i>

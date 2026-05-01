@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+{% load custom_filters %}
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>納品書印刷 - {{ delivery_note.delivery_number }}</title>
+  <style>
+    /* 印刷コントロール（画面のみ表示） */
+    .print-controls { position: sticky; top: 0; background: #f8f9fa; border-bottom: 1px solid #ddd; padding: 10px; display: flex; gap: 8px; justify-content: flex-end; }
+    .print-btn { padding: 8px 12px; border: 1px solid #888; background: white; border-radius: 6px; cursor: pointer; }
+    .print-btn.primary { background: #0d6efd; color: white; border-color: #0d6efd; }
+    @media print { .print-controls { display: none !important; } }
+
+    /* 帳票レイアウト（WeasyPrint用と整合） */
+    @page { size: A4; margin: 18mm; }
+    body { font-family: 'Noto Sans CJK JP','Noto Sans JP','Hiragino Sans','Yu Gothic',Meiryo,sans-serif; color:#222; font-size:12px; }
+    .header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .issuer { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    .issuer-title { font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+    .doc-meta { text-align: right; }
+    .doc-title { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+    .meta-table { margin-left:auto; border-collapse: collapse; }
+    .meta-table td { padding: 3px 6px; }
+    .section-title { font-size: 14px; font-weight: 700; border-left: 4px solid #666; padding-left: 8px; margin: 18px 0 8px; }
+    .to-box { border: 1px solid #bbb; padding: 10px; border-radius: 6px; }
+    .items-section h3 { margin: 18px 0 8px; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.items th { background:#f2f4f7; border:1px solid #bbb; padding:6px; font-weight:700; }
+    table.items td { border:1px solid #bbb; padding:6px; }
+    table.items td.num { text-align: right; }
+    .footer-note { margin-top: 18px; color:#555; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="print-controls">
+    <button class="print-btn" onclick="window.close()">閉じる</button>
+    <button class="print-btn primary" onclick="window.print()">印刷する</button>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="issuer">
+      <div class="issuer-title">発行元 / Issuer</div>
+      <div><strong>{{ issuer.name|default:"（発行元名）" }}</strong></div>
+      {% if issuer.address %}<div>{{ issuer.address|linebreaksbr }}</div>{% endif %}
+      {% if issuer.contact_phone %}<div>TEL: {{ issuer.contact_phone }}</div>{% endif %}
+      {% if issuer.contact_email %}<div>Email: {{ issuer.contact_email }}</div>{% endif %}
+    </div>
+    <div class="doc-meta">
+      <div class="doc-title">納品書</div>
+      <table class="meta-table">
+        <tr><td>納品書番号</td><td>: {{ delivery_note.delivery_number }}</td></tr>
+        <tr><td>発行日</td><td>: {{ delivery_note.issue_date|date:"Y年n月j日" }}</td></tr>
+        {% if delivery_note.delivery_date %}
+        <tr><td>納品予定日</td><td>: {{ delivery_note.delivery_date|date:"Y年n月j日" }}</td></tr>
+        {% endif %}
+        {% if delivery_note.actual_delivery_date %}
+        <tr><td>実際の納品日</td><td>: {{ delivery_note.actual_delivery_date|date:"Y年n月j日" }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <!-- Deliver to -->
+  <div class="section-title">納品先 / Ship To</div>
+  <div class="to-box">
+    <div><strong>{{ delivery_note.deliver_to_name }}</strong></div>
+    <div>{{ delivery_note.deliver_to_address|linebreaksbr }}</div>
+    {% if delivery_note.deliver_to_contact %}<div>担当者: {{ delivery_note.deliver_to_contact }}</div>{% endif %}
+    {% if delivery_note.deliver_to_phone %}<div>TEL: {{ delivery_note.deliver_to_phone }}</div>{% endif %}
+  </div>
+
+  <div class="items-section">
+    <h3>納品明細 / Items</h3>
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 8%;">No.</th>
+          <th>品目名 / Item</th>
+          <th>説明 / Desc</th>
+          <th>予定数量 / Qty (Plan)</th>
+          <th>単位 / Unit</th>
+          <th>実際の納品数量 / Qty (Actual)</th>
+          <th>差（予定との差） / Diff</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td class="num">{{ forloop.counter }}</td>
+          <td>{{ item.item_name }}</td>
+          <td>{{ item.item_description|default:"-" }}</td>
+          <td class="num">{{ item.quantity|floatformat:1 }}</td>
+          <td>{{ item.unit }}</td>
+          <td class="num">{{ item.delivered_quantity|default:0|floatformat:1 }}</td>
+          <td class="num">{{ item.delivered_quantity|default:0|sub:item.quantity|floatformat:1 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if delivery_note.notes %}
+  <div class="section-title">備考 / Notes</div>
+  <div class="to-box" style="min-height: 60px;">
+    {{ delivery_note.notes|linebreaksbr }}
+  </div>
+  {% endif %}
+
+  <div class="footer-note">
+    本書面に関するお問い合わせは発行元までお願いいたします。
+  </div>
+
+  <script>
+    window.addEventListener('load', function(){
+      setTimeout(function(){ try { window.print(); } catch(e){} }, 200);
+    });
+  </script>
+</body>
+</html>
+

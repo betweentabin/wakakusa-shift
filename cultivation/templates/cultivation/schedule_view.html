@@ -1,0 +1,1224 @@
+{% extends "base.html" %}
+{% load cultivation_filters %}
+
+{% block title %}栽培スケジュール管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 20px 0;
+        border-radius: 15px;
+        margin-bottom: 20px;
+    }
+
+    @media (min-width: 768px) {
+        .hero-section {
+            padding: 40px 0;
+            margin-bottom: 30px;
+        }
+    }
+
+    .filter-card {
+        background: white;
+        border-radius: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .schedule-container {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        overflow-x: auto;
+    }
+
+    .schedule-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        min-width: 800px;
+    }
+
+    .schedule-table th {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .schedule-table th:first-child {
+        border-radius: 15px 0 0 0;
+        min-width: 100px;
+    }
+
+    .schedule-table th:nth-child(2) {
+        min-width: 150px;
+    }
+
+    .schedule-table th:last-child {
+        border-radius: 0 15px 0 0;
+    }
+
+    .schedule-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .schedule-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .schedule-table tbody tr:last-child td:first-child {
+        border-radius: 0 0 0 15px;
+    }
+
+    .schedule-table tbody tr:last-child td:last-child {
+        border-radius: 0 0 15px 0;
+    }
+
+    .gantt-wrapper {
+        position: relative;
+        overflow-x: auto;
+        overflow-y: visible;
+        margin-top: 20px;
+    }
+
+    .gantt {
+        width: 100%;
+        min-height: 400px;
+    }
+
+    .process-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: white;
+        margin: 2px;
+        white-space: nowrap;
+    }
+
+    .date-range-selector {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .date-range-selector label {
+        margin: 0;
+        font-weight: 500;
+    }
+
+    .date-range-selector input[type="date"] {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .btn-filter {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+    .btn-filter:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+        color: white;
+    }
+
+    .layout-selector {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 10px;
+    }
+
+    .layout-selector select {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .btn-action {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+        color: white;
+    }
+
+    .btn-secondary-action {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-secondary-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+        color: white;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    @media (max-width: 768px) {
+        .schedule-table th,
+        .schedule-table td {
+            padding: 8px;
+            font-size: 0.9rem;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .btn-action,
+        .btn-secondary-action {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- ヒーローセクション -->
+    <div class="hero-section text-center">
+        <h1 class="mb-2">
+            <i class="fas fa-calendar-alt"></i> 栽培スケジュール管理
+        </h1>
+        <p class="mb-0">作物の栽培工程をガントチャート形式で管理</p>
+    </div>
+
+    <!-- フィルターカード -->
+    <div class="filter-card">
+        <h5 class="mb-3"><i class="fas fa-filter"></i> 表示フィルター</h5>
+
+        <!-- レイアウト選択 -->
+        <div class="layout-selector mb-3">
+            <label for="layout-select">レイアウト:</label>
+            <select id="layout-select" class="form-select" onchange="changeLayout(this.value)">
+                <option value="">全体表示</option>
+                {% for layout in layouts %}
+                <option value="{{ layout.id }}" {% if current_layout and current_layout.id == layout.id %}selected{% endif %}>
+                    {{ layout.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            {% if current_plot %}
+            <span class="badge bg-info">
+                <i class="fas fa-layer-group"></i> 棚: {{ current_plot.shelf_number }}
+            </span>
+            {% endif %}
+        </div>
+
+        <!-- フィルタ選択 -->
+        <form method="get" id="date-filter-form">
+            <!-- 日付範囲選択 -->
+            <div class="date-range-selector mb-3">
+                <label for="start-date">開始日:</label>
+                <input type="date" id="start-date" name="start_date" value="{{ start_date }}" class="form-control">
+
+                <label for="end-date">終了日:</label>
+                <input type="date" id="end-date" name="end_date" value="{{ end_date }}" class="form-control">
+            </div>
+
+            <!-- 追加フィルタ -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="plot-filter" class="form-label">棚</label>
+                    <select class="form-select" id="plot-filter" name="plot_id">
+                        <option value="">すべての棚</option>
+                        {% for plot in plots %}
+                        <option value="{{ plot.id }}" {% if request.GET.plot_id == plot.id|stringformat:"s" %}selected{% endif %}>
+                            {{ plot.shelf_number }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="crop-filter" class="form-label">作物</label>
+                    <input type="text" class="form-control" id="crop-filter" name="crop_name"
+                           value="{{ request.GET.crop_name }}" placeholder="作物名で検索...">
+                </div>
+                <div class="col-md-4">
+                    <label for="process-filter" class="form-label">工程</label>
+                    <select class="form-select" id="process-filter" name="process_id">
+                        <option value="">すべての工程</option>
+                        {% for process in processes %}
+                        <option value="{{ process.id }}" {% if request.GET.process_id == process.id|stringformat:"s" %}selected{% endif %}>
+                            {{ process.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-filter">
+                    <i class="fas fa-search"></i> フィルター適用
+                </button>
+                <a href="{% if current_layout %}{% url 'cultivation:schedule_view_layout' current_layout.id %}{% elif current_plot %}{% url 'cultivation:schedule_view_plot' current_plot.id %}{% else %}{% url 'cultivation:schedule_view' %}{% endif %}" class="btn btn-secondary">
+                    <i class="fas fa-redo"></i> リセット
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- アクションボタン -->
+    <div class="action-buttons">
+        <button type="button" class="btn-action" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
+            <i class="fas fa-plus-circle"></i> 新規スケジュール追加
+        </button>
+        <button type="button" class="btn-action" style="background: linear-gradient(135deg, #ffc107, #ff9800);" data-bs-toggle="modal" data-bs-target="#applyTemplateModal">
+            <i class="fas fa-magic"></i> テンプレートから作成
+        </button>
+        <a href="{% url 'cultivation:schedule_templates' %}" class="btn-secondary-action">
+            <i class="fas fa-clipboard-list"></i> テンプレート管理
+        </a>
+        <button type="button" class="btn-secondary-action" onclick="exportPDF()" style="background: linear-gradient(135deg, #dc3545, #c82333);">
+            <i class="fas fa-file-pdf"></i> PDF エクスポート
+        </button>
+        <a href="{% url 'cultivation:cultivation_top' %}" class="btn-secondary-action">
+            <i class="fas fa-arrow-left"></i> 栽培管理トップへ
+        </a>
+        {% if current_layout %}
+        <a href="{% url 'cultivation:layout_detail' current_layout.id %}" class="btn-secondary-action">
+            <i class="fas fa-info-circle"></i> レイアウト詳細へ
+        </a>
+        {% endif %}
+        {% if current_plot %}
+        <a href="{% url 'cultivation:plot_detail' current_plot.id %}" class="btn-secondary-action">
+            <i class="fas fa-th"></i> 棚詳細へ
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- スケジュール表示 -->
+    <div class="schedule-container">
+        {% if shelf_crops %}
+        <h5 class="mb-3">
+            <i class="fas fa-chart-gantt"></i> スケジュール一覧
+            <span class="badge bg-success">{{ shelf_crops|length }}件の作物</span>
+        </h5>
+
+        <!-- 工程凡例 -->
+        <div class="mb-3">
+            <strong>工程凡例:</strong>
+            {% for process in processes %}
+            <span class="process-badge" style="background-color: {{ process.color }};">
+                {{ process.name }}
+            </span>
+            {% endfor %}
+        </div>
+
+        <!-- スケジュールテーブル -->
+        <div class="table-responsive">
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th>棚番号</th>
+                        <th>作物</th>
+                        <th>定植日</th>
+                        <th>予定収穫日</th>
+                        <th>スケジュール状況</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for crop in shelf_crops %}
+                    <tr>
+                        <td>
+                            <strong>{{ crop.plot.shelf_number }}</strong>
+                            <br>
+                            <small class="text-muted">レベル {{ crop.level }}</small>
+                        </td>
+                        <td>
+                            <strong>{{ crop.variety }}</strong>
+                        </td>
+                        <td>
+                            {% if crop.planting_date %}
+                            {{ crop.planting_date|date:"Y/m/d" }}
+                            {% else %}
+                            <span class="text-muted">未設定</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if crop.expected_harvest_date %}
+                            {{ crop.expected_harvest_date|date:"Y/m/d" }}
+                            {% else %}
+                            <span class="text-muted">未設定</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% with crop_schedules=schedules|filter_by_shelf_crop:crop.id %}
+                            {% if crop_schedules %}
+                                {% for schedule in crop_schedules %}
+                                <span class="process-badge" style="background-color: {{ schedule.process.color }};"
+                                      title="{{ schedule.process.name }}: {{ schedule.start_date|date:'Y/m/d' }} - {{ schedule.end_date|date:'Y/m/d' }}">
+                                    {{ schedule.process.name }}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">スケジュール未設定</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ガントチャート表示エリア -->
+        <div class="gantt-wrapper mt-4">
+            <h5 class="mb-3"><i class="fas fa-chart-bar"></i> ガントチャート</h5>
+            <div id="gantt-container" class="gantt"></div>
+        </div>
+
+        {% else %}
+        <!-- 空の状態 -->
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <h4>表示するスケジュールがありません</h4>
+            <p class="text-muted">作物を登録してスケジュールを設定してください。</p>
+            <a href="{% url 'cultivation:cultivation_top' %}" class="btn-action mt-3">
+                <i class="fas fa-plus"></i> 作物管理へ
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- スケジュール追加モーダル -->
+    <div class="modal fade" id="addScheduleModal" tabindex="-1" aria-labelledby="addScheduleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #28a745, #20c997); color: white;">
+                    <h5 class="modal-title" id="addScheduleModalLabel">
+                        <i class="fas fa-plus-circle"></i> スケジュール追加
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addScheduleForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="add-plot-select" class="form-label">棚</label>
+                                <select class="form-select" id="add-plot-select" required>
+                                    <option value="">棚を選択...</option>
+                                    {% for crop in shelf_crops %}
+                                    <option value="{{ crop.id }}" data-plot="{{ crop.plot.shelf_number }}" data-level="{{ crop.level }}" data-variety="{{ crop.variety }}">
+                                        {{ crop.plot.shelf_number }} - L{{ crop.level }} - {{ crop.variety }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="add-process-select" class="form-label">工程</label>
+                                <select class="form-select" id="add-process-select" required>
+                                    <option value="">工程を選択...</option>
+                                    {% for process in processes %}
+                                    <option value="{{ process.id }}" data-color="{{ process.color }}">
+                                        {{ process.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="add-start-date" class="form-label">開始日</label>
+                                <input type="date" class="form-control" id="add-start-date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="add-end-date" class="form-label">終了日</label>
+                                <input type="date" class="form-control" id="add-end-date" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="add-notes" class="form-label">備考</label>
+                            <textarea class="form-control" id="add-notes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="saveSchedule()">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- スケジュール編集モーダル -->
+    <div class="modal fade" id="editScheduleModal" tabindex="-1" aria-labelledby="editScheduleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #007bff, #0056b3); color: white;">
+                    <h5 class="modal-title" id="editScheduleModalLabel">
+                        <i class="fas fa-edit"></i> スケジュール編集
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editScheduleForm">
+                        <input type="hidden" id="edit-schedule-id">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">棚・作物</label>
+                                <input type="text" class="form-control" id="edit-crop-display" disabled>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">工程</label>
+                                <input type="text" class="form-control" id="edit-process-display" disabled>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="edit-start-date" class="form-label">開始日</label>
+                                <input type="date" class="form-control" id="edit-start-date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="edit-end-date" class="form-label">終了日</label>
+                                <input type="date" class="form-control" id="edit-end-date" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit-notes" class="form-label">備考</label>
+                            <textarea class="form-control" id="edit-notes" rows="3"></textarea>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="edit-is-completed">
+                            <label class="form-check-label" for="edit-is-completed">
+                                完了
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="deleteSchedule()">
+                        <i class="fas fa-trash"></i> 削除
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="updateSchedule()">
+                        <i class="fas fa-save"></i> 更新
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- スケジュール削除確認モーダル -->
+    <div class="modal fade" id="deleteScheduleModal" tabindex="-1" aria-labelledby="deleteScheduleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteScheduleModalLabel">
+                        <i class="fas fa-exclamation-triangle"></i> スケジュール削除確認
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>このスケジュールを削除してもよろしいですか？</p>
+                    <p class="text-muted" id="delete-schedule-info"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDeleteSchedule()">
+                        <i class="fas fa-trash"></i> 削除する
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- テンプレート適用モーダル -->
+    <div class="modal fade" id="applyTemplateModal" tabindex="-1" aria-labelledby="applyTemplateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #ffc107, #ff9800); color: white;">
+                    <h5 class="modal-title" id="applyTemplateModalLabel">
+                        <i class="fas fa-magic"></i> テンプレートからスケジュール作成
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> テンプレートを使用すると、作物の標準的な栽培工程を自動的にスケジュールできます。
+                    </div>
+                    <form id="applyTemplateForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="template-crop-select" class="form-label">棚・作物</label>
+                                <select class="form-select" id="template-crop-select" required onchange="loadTemplatesForCrop()">
+                                    <option value="">棚と作物を選択...</option>
+                                    {% for crop in shelf_crops %}
+                                    <option value="{{ crop.id }}" data-variety="{{ crop.variety }}">
+                                        {{ crop.plot.shelf_number }} - L{{ crop.level }} - {{ crop.variety }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="template-select" class="form-label">テンプレート</label>
+                                <select class="form-select" id="template-select" required disabled>
+                                    <option value="">まず作物を選択してください</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="template-start-date" class="form-label">開始日（播種日）</label>
+                            <input type="date" class="form-control" id="template-start-date" required>
+                            <small class="text-muted">この日付を基準に、すべての工程が自動的にスケジュールされます。</small>
+                        </div>
+                        <div id="template-preview" class="mb-3" style="display: none;">
+                            <h6 class="fw-bold">テンプレートプレビュー:</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div id="template-preview-content"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> キャンセル
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="applyTemplate()">
+                        <i class="fas fa-magic"></i> テンプレートを適用
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Frappe Gantt Library -->
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+
+<script>
+    // レイアウト変更
+    function changeLayout(layoutId) {
+        if (layoutId) {
+            window.location.href = `/cultivation/schedule/layout/${layoutId}/`;
+        } else {
+            window.location.href = '/cultivation/schedule/';
+        }
+    }
+
+    // ガントチャートデータの準備
+    {% if shelf_crops %}
+    const ganttTasks = [
+        {% for crop in shelf_crops %}
+        {% with crop_schedules=schedules|filter_by_shelf_crop:crop.id %}
+        {% for schedule in crop_schedules %}
+        {
+            id: 'schedule-{{ schedule.id }}',
+            name: '{{ crop.plot.shelf_number }} L{{ crop.level }} - {{ crop.variety|truncatechars:15 }} ({{ schedule.process.name }})',
+            start: '{{ schedule.start_date|date:"Y-m-d" }}',
+            end: '{{ schedule.end_date|date:"Y-m-d" }}',
+            progress: {% if schedule.is_completed %}100{% else %}50{% endif %},
+            custom_class: 'process-{{ schedule.process.code }}',
+            dependencies: ''
+        },
+        {% endfor %}
+        {% endwith %}
+        {% endfor %}
+    ];
+
+    // ガントチャートの初期化
+    if (ganttTasks.length > 0) {
+        const gantt = new Gantt("#gantt-container", ganttTasks, {
+            view_mode: 'Week',
+            language: 'ja',
+            date_format: 'YYYY-MM-DD',
+            custom_popup_html: function(task) {
+                return `
+                    <div class="details-container">
+                        <h5>${task.name}</h5>
+                        <p>期間: ${task._start.format('YYYY/MM/DD')} - ${task._end.format('YYYY/MM/DD')}</p>
+                        <p>進捗: ${task.progress}%</p>
+                    </div>
+                `;
+            },
+            on_click: function (task) {
+                console.log('Task clicked:', task);
+                // 編集モーダルを開く
+                openEditModal(task.id);
+            },
+            on_date_change: function(task, start, end) {
+                console.log('Date changed:', task, start, end);
+                // ドラッグ&ドロップでスケジュールを更新
+                updateScheduleByDrag(task.id, start, end);
+            },
+            on_progress_change: function(task, progress) {
+                console.log('Progress changed:', task, progress);
+                // TODO: APIを呼び出して進捗を更新
+            },
+            on_view_change: function(mode) {
+                console.log('View mode changed:', mode);
+            }
+        });
+
+        // 工程ごとの色をCSSで設定
+        {% for process in processes %}
+        document.querySelectorAll('.process-{{ process.code }}').forEach(el => {
+            el.style.fill = '{{ process.color }}';
+        });
+        {% endfor %}
+
+        // ビューモード切り替えボタン
+        const viewButtons = `
+            <div class="btn-group mb-3" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="gantt.change_view_mode('Day')">日</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="gantt.change_view_mode('Week')">週</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="gantt.change_view_mode('Month')">月</button>
+            </div>
+        `;
+        document.querySelector('#gantt-container').insertAdjacentHTML('beforebegin', viewButtons);
+
+        // グローバルスコープに保存（ボタンから参照できるように）
+        window.gantt = gantt;
+    } else {
+        document.querySelector('#gantt-container').innerHTML = '<p class="text-muted text-center">表示期間内にスケジュールがありません。</p>';
+    }
+    {% endif %}
+</script>
+
+<style>
+    /* Frappe Gantt のカスタムスタイル */
+    .gantt .bar {
+        fill: #28a745;
+        stroke: #20c997;
+        stroke-width: 2;
+        opacity: 0.9;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+    .gantt .bar:hover {
+        opacity: 1;
+    }
+
+    .gantt .bar-progress {
+        fill: #155724;
+    }
+
+    .gantt .bar-label {
+        fill: white;
+        font-weight: 500;
+        font-size: 12px;
+    }
+
+    .gantt .today-highlight {
+        fill: rgba(255, 193, 7, 0.2);
+        stroke: #ffc107;
+    }
+
+    {% for process in processes %}
+    .gantt .bar.process-{{ process.code }} {
+        fill: {{ process.color }};
+    }
+    {% endfor %}
+</style>
+
+<script>
+    // CSRF トークン取得
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    // スケジュールデータをグローバル変数として保存
+    const scheduleData = {};
+    {% for schedule in schedules %}
+    scheduleData['schedule-{{ schedule.id }}'] = {
+        id: {{ schedule.id }},
+        shelf_crop_id: {{ schedule.shelf_crop.id }},
+        process_id: {{ schedule.process.id }},
+        shelf_number: '{{ schedule.shelf_crop.plot.shelf_number }}',
+        level: {{ schedule.shelf_crop.level }},
+        variety: '{{ schedule.shelf_crop.variety }}',
+        process_name: '{{ schedule.process.name }}',
+        start_date: '{{ schedule.start_date|date:"Y-m-d" }}',
+        end_date: '{{ schedule.end_date|date:"Y-m-d" }}',
+        notes: '{{ schedule.notes|escapejs }}',
+        is_completed: {{ schedule.is_completed|yesno:"true,false" }}
+    };
+    {% endfor %}
+
+    // スケジュール追加
+    function saveSchedule() {
+        const shelfCropId = document.getElementById('add-plot-select').value;
+        const processId = document.getElementById('add-process-select').value;
+        const startDate = document.getElementById('add-start-date').value;
+        const endDate = document.getElementById('add-end-date').value;
+        const notes = document.getElementById('add-notes').value;
+
+        if (!shelfCropId || !processId || !startDate || !endDate) {
+            alert('すべての必須項目を入力してください。');
+            return;
+        }
+
+        // 日付の妥当性チェック
+        if (new Date(startDate) > new Date(endDate)) {
+            alert('開始日は終了日より前である必要があります。');
+            return;
+        }
+
+        const data = {
+            shelf_crop: shelfCropId,
+            process: processId,
+            start_date: startDate,
+            end_date: endDate,
+            notes: notes
+        };
+
+        fetch('/api/cultivation/schedules/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw err; });
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert('スケジュールを追加しました。');
+            // モーダルを閉じる
+            bootstrap.Modal.getInstance(document.getElementById('addScheduleModal')).hide();
+            // ページをリロード
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('スケジュールの追加に失敗しました: ' + JSON.stringify(error));
+        });
+    }
+
+    // スケジュール編集モーダルを開く
+    function openEditModal(taskId) {
+        const schedule = scheduleData[taskId];
+        if (!schedule) {
+            console.error('Schedule not found:', taskId);
+            return;
+        }
+
+        document.getElementById('edit-schedule-id').value = schedule.id;
+        document.getElementById('edit-crop-display').value =
+            `${schedule.shelf_number} - L${schedule.level} - ${schedule.variety}`;
+        document.getElementById('edit-process-display').value = schedule.process_name;
+        document.getElementById('edit-start-date').value = schedule.start_date;
+        document.getElementById('edit-end-date').value = schedule.end_date;
+        document.getElementById('edit-notes').value = schedule.notes;
+        document.getElementById('edit-is-completed').checked = schedule.is_completed;
+
+        const modal = new bootstrap.Modal(document.getElementById('editScheduleModal'));
+        modal.show();
+    }
+
+    // スケジュール更新
+    function updateSchedule() {
+        const scheduleId = document.getElementById('edit-schedule-id').value;
+        const startDate = document.getElementById('edit-start-date').value;
+        const endDate = document.getElementById('edit-end-date').value;
+        const notes = document.getElementById('edit-notes').value;
+        const isCompleted = document.getElementById('edit-is-completed').checked;
+
+        if (!startDate || !endDate) {
+            alert('開始日と終了日を入力してください。');
+            return;
+        }
+
+        // 日付の妥当性チェック
+        if (new Date(startDate) > new Date(endDate)) {
+            alert('開始日は終了日より前である必要があります。');
+            return;
+        }
+
+        const data = {
+            start_date: startDate,
+            end_date: endDate,
+            notes: notes,
+            is_completed: isCompleted
+        };
+
+        fetch(`/api/cultivation/schedules/${scheduleId}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw err; });
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert('スケジュールを更新しました。');
+            // モーダルを閉じる
+            bootstrap.Modal.getInstance(document.getElementById('editScheduleModal')).hide();
+            // ページをリロード
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('スケジュールの更新に失敗しました: ' + JSON.stringify(error));
+        });
+    }
+
+    // スケジュール削除確認モーダルを開く
+    function deleteSchedule() {
+        const scheduleId = document.getElementById('edit-schedule-id').value;
+        const taskId = `schedule-${scheduleId}`;
+        const schedule = scheduleData[taskId];
+
+        if (!schedule) {
+            console.error('Schedule not found:', taskId);
+            return;
+        }
+
+        document.getElementById('delete-schedule-info').textContent =
+            `${schedule.shelf_number} - ${schedule.variety} - ${schedule.process_name} (${schedule.start_date} ~ ${schedule.end_date})`;
+
+        // 編集モーダルを閉じる
+        bootstrap.Modal.getInstance(document.getElementById('editScheduleModal')).hide();
+
+        // 削除確認モーダルを開く
+        const modal = new bootstrap.Modal(document.getElementById('deleteScheduleModal'));
+        modal.show();
+    }
+
+    // スケジュール削除実行
+    function confirmDeleteSchedule() {
+        const scheduleId = document.getElementById('edit-schedule-id').value;
+
+        fetch(`/api/cultivation/schedules/${scheduleId}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrftoken
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('削除に失敗しました');
+            }
+            alert('スケジュールを削除しました。');
+            // モーダルを閉じる
+            bootstrap.Modal.getInstance(document.getElementById('deleteScheduleModal')).hide();
+            // ページをリロード
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('スケジュールの削除に失敗しました: ' + error.message);
+        });
+    }
+
+    // ドラッグ&ドロップでスケジュールを更新
+    function updateScheduleByDrag(taskId, start, end) {
+        const schedule = scheduleData[taskId];
+        if (!schedule) {
+            console.error('Schedule not found:', taskId);
+            return;
+        }
+
+        const startDate = start.format('YYYY-MM-DD');
+        const endDate = end.format('YYYY-MM-DD');
+
+        const data = {
+            start_date: startDate,
+            end_date: endDate
+        };
+
+        fetch(`/api/cultivation/schedules/${schedule.id}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw err; });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('スケジュールを更新しました:', data);
+            // スケジュールデータを更新
+            scheduleData[taskId].start_date = startDate;
+            scheduleData[taskId].end_date = endDate;
+            // 通知を表示（オプション）
+            showNotification('スケジュールを更新しました', 'success');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('スケジュールの更新に失敗しました: ' + JSON.stringify(error));
+            // ページをリロードして元に戻す
+            location.reload();
+        });
+    }
+
+    // 通知を表示（簡易版）
+    function showNotification(message, type = 'info') {
+        // 通知要素を作成
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3`;
+        notification.style.zIndex = '9999';
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        // 3秒後に削除
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
+    // テンプレート関連の処理
+    let templatesData = [];
+
+    // 作物に対応するテンプレートを読み込む
+    function loadTemplatesForCrop() {
+        const cropSelect = document.getElementById('template-crop-select');
+        const templateSelect = document.getElementById('template-select');
+        const variety = cropSelect.options[cropSelect.selectedIndex].dataset.variety;
+
+        if (!variety) {
+            templateSelect.disabled = true;
+            templateSelect.innerHTML = '<option value="">まず作物を選択してください</option>';
+            return;
+        }
+
+        // APIからテンプレートを取得（作物名でフィルタ）
+        fetch(`/api/cultivation/templates/`)
+            .then(response => response.json())
+            .then(data => {
+                templatesData = data;
+
+                // 作物名に一致するテンプレートをフィルタ
+                const matchingTemplates = data.filter(template =>
+                    template.crop_name && variety.includes(template.crop_name)
+                );
+
+                if (matchingTemplates.length === 0) {
+                    templateSelect.disabled = true;
+                    templateSelect.innerHTML = '<option value="">この作物のテンプレートがありません</option>';
+                } else {
+                    templateSelect.disabled = false;
+                    templateSelect.innerHTML = '<option value="">テンプレートを選択...</option>';
+                    matchingTemplates.forEach(template => {
+                        const option = document.createElement('option');
+                        option.value = template.id;
+                        option.textContent = `${template.name} (${template.processes.length}工程)`;
+                        templateSelect.appendChild(option);
+                    });
+                }
+
+                // テンプレート選択時のイベントリスナーを追加
+                templateSelect.onchange = loadTemplatePreview;
+            })
+            .catch(error => {
+                console.error('Error loading templates:', error);
+                templateSelect.disabled = true;
+                templateSelect.innerHTML = '<option value="">テンプレートの読み込みに失敗しました</option>';
+            });
+    }
+
+    // テンプレートのプレビューを表示
+    function loadTemplatePreview() {
+        const templateSelect = document.getElementById('template-select');
+        const templateId = templateSelect.value;
+        const previewDiv = document.getElementById('template-preview');
+        const previewContent = document.getElementById('template-preview-content');
+
+        if (!templateId) {
+            previewDiv.style.display = 'none';
+            return;
+        }
+
+        // テンプレートデータを取得
+        const template = templatesData.find(t => t.id == templateId);
+        if (!template) return;
+
+        // プレビューを生成
+        let html = '<div class="timeline">';
+        template.processes.forEach((proc, index) => {
+            html += `
+                <div class="d-flex align-items-center mb-2">
+                    <div class="badge me-2" style="background-color: ${proc.process_detail.color}; min-width: 80px;">
+                        ${proc.process_detail.name}
+                    </div>
+                    <div class="flex-grow-1">
+                        <small class="text-muted">
+                            ${proc.start_offset_days}日目から ${proc.duration_days}日間
+                        </small>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        previewContent.innerHTML = html;
+        previewDiv.style.display = 'block';
+    }
+
+    // テンプレートを適用
+    function applyTemplate() {
+        const shelfCropId = document.getElementById('template-crop-select').value;
+        const templateId = document.getElementById('template-select').value;
+        const startDate = document.getElementById('template-start-date').value;
+
+        if (!shelfCropId || !templateId || !startDate) {
+            alert('すべての項目を入力してください。');
+            return;
+        }
+
+        const data = {
+            shelf_crop_id: parseInt(shelfCropId),
+            template_id: parseInt(templateId),
+            start_date: startDate
+        };
+
+        fetch('/api/cultivation/schedules/from-template/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw err; });
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message || 'テンプレートからスケジュールを作成しました。');
+            // モーダルを閉じる
+            bootstrap.Modal.getInstance(document.getElementById('applyTemplateModal')).hide();
+            // ページをリロード
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('テンプレートの適用に失敗しました: ' + JSON.stringify(error));
+        });
+    }
+
+    // PDFエクスポート
+    function exportPDF() {
+        // 現在のURLパラメータを取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const startDate = urlParams.get('start_date') || document.getElementById('start-date').value;
+        const endDate = urlParams.get('end_date') || document.getElementById('end-date').value;
+        const plotId = urlParams.get('plot_id');
+        const cropName = urlParams.get('crop_name');
+        const processId = urlParams.get('process_id');
+
+        // エクスポートURLを構築
+        let exportUrl = '{% url "cultivation:schedule_export_pdf" %}?';
+        const params = [];
+
+        if (startDate) params.push(`start_date=${startDate}`);
+        if (endDate) params.push(`end_date=${endDate}`);
+        {% if current_layout %}
+        params.push(`layout_id={{ current_layout.id }}`);
+        {% endif %}
+        {% if current_plot %}
+        params.push(`plot_id={{ current_plot.id }}`);
+        {% endif %}
+        if (plotId && !params.some(p => p.includes('plot_id'))) params.push(`plot_id=${plotId}`);
+
+        exportUrl += params.join('&');
+
+        // 新しいタブでPDFを開く
+        window.open(exportUrl, '_blank');
+    }
+</script>
+{% endblock %}

@@ -52,6 +52,7 @@ urlpatterns = [
     path('templates/<int:pk>/edit/', views.template_edit, name='shift_template_edit'),
     path('templates/<int:pk>/delete/', views.template_delete, name='shift_template_delete'),
     path('templates/<int:pk>/apply/', views.template_apply, name='apply_template'),
+    path('template-details/<int:pk>/delete/', views.template_detail_delete, name='template_detail_delete'),
     
     # 時間チャート
     path('time-chart/', views.time_chart, name='time_chart'),
@@ -61,6 +62,7 @@ urlpatterns = [
     
     # API エンドポイント
     path('api/shifts/', views.api_shifts, name='api_shifts'),
+    path('api/shift-proposals/', views.api_shift_proposals, name='api_shift_proposals'),
     path('api/pending-shifts/', views.api_pending_shifts, name='api_pending_shifts'),
     path('api/staff-shifts/', views.staff_api_shifts, name='staff_api_shifts'),
     path('api/shift-update/', views.api_shift_update, name='update_shift_ajax'),
@@ -100,6 +102,11 @@ urlpatterns = [
     path('orders/', views.order_list, name='order_list'),
     path('orders/create/', views.order_create, name='order_create'),
     path('orders/<int:pk>/update/', views.order_update_status, name='order_update_status'),
+    path('orders/<int:pk>/pdf/', views.order_pdf, name='order_pdf'),
+    path('orders/<int:pk>/excel/', views.order_excel, name='order_excel'),
+    # 発注からの請求書/納品書発行
+    path('orders/<int:pk>/create-invoice/', views.order_create_invoice, name='order_create_invoice'),
+    path('orders/<int:pk>/create-delivery-note/', views.order_create_delivery_note, name='order_create_delivery_note'),
     
     # 請求書・納品書発行機能
     path('invoices/', views.invoice_list, name='invoice_list'),
@@ -107,10 +114,15 @@ urlpatterns = [
     path('invoices/<int:pk>/', views.invoice_detail, name='invoice_detail'),
     path('invoices/<int:pk>/edit/', views.invoice_edit, name='invoice_edit'),
     path('invoices/<int:pk>/pdf/', views.invoice_pdf, name='invoice_pdf'),
+    path('invoices/<int:pk>/print/', views.invoice_print, name='invoice_print'),
+    path('invoices/<int:pk>/excel/', views.invoice_excel, name='invoice_excel'),
     path('invoices/<int:pk>/change-status/', views.invoice_change_status, name='invoice_change_status'),
     path('delivery-notes/', views.delivery_note_list, name='delivery_note_list'),
     path('delivery-notes/create/', views.delivery_note_create, name='delivery_note_create'),
     path('delivery-notes/<int:pk>/', views.delivery_note_detail, name='delivery_note_detail'),
+    path('delivery-notes/<int:pk>/edit/', views.delivery_note_edit, name='delivery_note_edit'),
     path('delivery-notes/<int:pk>/pdf/', views.delivery_note_pdf, name='delivery_note_pdf'),
+    path('delivery-notes/<int:pk>/print/', views.delivery_note_print, name='delivery_note_print'),
+    path('delivery-notes/<int:pk>/excel/', views.delivery_note_excel, name='delivery_note_excel'),
     path('delivery-notes/<int:pk>/change-status/', views.delivery_note_change_status, name='delivery_note_change_status'),
 ]

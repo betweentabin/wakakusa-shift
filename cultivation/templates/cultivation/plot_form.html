@@ -42,7 +42,13 @@
                             {{ form.levels }}
                             <div class="form-text">1以上の数値</div>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label for="{{ form.max_plates.id_for_label }}" class="form-label">最大プレート数</label>
+                            {{ form.max_plates }}
+                            <div class="form-text">1レーンあたりの最大プレート枚数（例: 14 または 8）</div>
+                        </div>
+
                         <div class="d-flex justify-content-between">
                             <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary">
                                 <i class="fas fa-arrow-left me-1"></i>一覧に戻る

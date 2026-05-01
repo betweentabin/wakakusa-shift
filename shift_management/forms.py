@@ -411,7 +411,7 @@ class StaffForm(forms.ModelForm):
         if self.instance and self.instance.pk and self.instance.user:
             self.fields['username'].initial = self.instance.user.username
             self.fields['create_user_account'].initial = True
-        
+
         # role_typeフィールドを必須にし、デフォルト値を設定
         self.fields['role_type'].required = True
         if not self.instance.pk:  # 新規作成時のみ
@@ -451,14 +451,21 @@ class StaffForm(forms.ModelForm):
         create_user_account = cleaned_data.get('create_user_account')
         password = cleaned_data.get('password')
         password_confirm = cleaned_data.get('password_confirm')
-        
+
         if create_user_account and password and password != password_confirm:
             raise forms.ValidationError('パスワードが一致しません。')
-        
+
         return cleaned_data
 
     def save(self, commit=True):
         staff = super().save(commit=False)
+
+        # role_typeに基づいてinventory_permissionを自動設定
+        role_type = self.cleaned_data.get('role_type')
+        if role_type in ['staff', 'manager', 'global_admin']:
+            staff.inventory_permission = 'admin'
+        else:
+            staff.inventory_permission = 'none'
         
         if commit:
             staff.save()
@@ -741,12 +748,38 @@ class ShiftTemplateDetailForm(forms.ModelForm):
             'end_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
         }
         labels = {
-            'staff': 'スタッフ',
+            'staff': 'スタッフ（選択しない場合は適用時に選択）',
             'shift_type': 'シフト種別',
             'weekday': '曜日',
             'start_time': '開始時間',
             'end_time': '終了時間',
         }
+
+    def __init__(self, *args, **kwargs):
+        # 組織情報を受け取る
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+
+        # スタッフフィールドを任意に設定
+        self.fields['staff'].required = False
+        self.fields['staff'].empty_label = '-- スタッフ指定なし（適用時に選択） --'
+
+        # 組織に基づいてスタッフをフィルタリング
+        if organization:
+            self.fields['staff'].queryset = Staff.objects.filter(
+                organization=organization,
+                approval_status='approved',
+                is_active=True
+            ).order_by('name')
+        else:
+            # 組織が指定されていない場合は承認済みのアクティブなスタッフのみ
+            self.fields['staff'].queryset = Staff.objects.filter(
+                approval_status='approved',
+                is_active=True
+            ).order_by('name')
+
+        # シフト種別は全組織共通なのでフィルタリング不要
+        self.fields['shift_type'].queryset = ShiftType.objects.all().order_by('name')
 
 class DateRangeForm(forms.Form):
     start_date = forms.DateField(
@@ -783,6 +816,12 @@ class TemplateApplyForm(forms.Form):
             'type': 'date',
             'class': 'form-control'
         })
+    )
+    overwrite = forms.BooleanField(
+        label='既存のシフトを上書き',
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
     )
 
 class ShiftExportForm(forms.Form):
@@ -829,6 +868,32 @@ class ShiftReasonForm(forms.ModelForm):
             'deletion_reason': '事由',
             'notes': '備考',
         }
+
+    def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+
+        # 組織に基づいてスタッフをフィルタリング
+        if organization:
+            self.fields['staff'].queryset = Staff.objects.filter(
+                organization=organization,
+                approval_status='approved',
+                is_active=True
+            ).order_by('name')
+        else:
+            self.fields['staff'].queryset = Staff.objects.filter(
+                approval_status='approved',
+                is_active=True
+            ).order_by('name')
+
+    def save(self, commit=True):
+        shift = super().save(commit=False)
+        # 事由付きシフトのフラグを設定
+        shift.is_deleted_with_reason = True
+        shift.approval_status = 'approved'
+        if commit:
+            shift.save()
+        return shift
 
 
 # wakakusa-shift-2から移植した新しいフォーム
@@ -1256,16 +1321,17 @@ class OrderStatusForm(forms.ModelForm):
 
 class InvoiceForm(forms.ModelForm):
     """請求書作成・編集フォーム"""
-    
+
     class Meta:
         model = Invoice
         fields = [
-            'bill_to_name', 'bill_to_address', 'bill_to_contact', 
+            'invoice_number', 'bill_to_name', 'bill_to_address', 'bill_to_contact',
             'bill_to_phone', 'bill_to_email', 'issue_date', 'due_date',
             'tax_rate', 'notes',
             'issuer_name', 'issuer_address', 'issuer_phone', 'issuer_email'
         ]
         widgets = {
+            'invoice_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '空欄の場合は自動採番'}),
             'bill_to_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '請求先名'}),
             'bill_to_address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '請求先住所'}),
             'bill_to_contact': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '担当者名'}),
@@ -1281,6 +1347,7 @@ class InvoiceForm(forms.ModelForm):
             'issuer_email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': '発行元メール'}),
         }
         labels = {
+            'invoice_number': '請求書番号',
             'bill_to_name': '請求先名',
             'bill_to_address': '請求先住所',
             'bill_to_contact': '担当者',
@@ -1299,7 +1366,11 @@ class InvoiceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
-        
+
+        # 請求書番号は任意（空欄なら自動採番）
+        self.fields['invoice_number'].required = False
+        self.fields['invoice_number'].help_text = '空欄の場合は自動採番されます'
+
         # 初期値設定
         if not self.instance.pk:
             from datetime import date, timedelta
