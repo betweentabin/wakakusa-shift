@@ -5,7 +5,7 @@ from django.db import models
 from django.utils import timezone
 from django.core.paginator import Paginator
 import json
-from .models import CultivationLayout, CultivationSection, CultivationPlan, CultivationLog, Crop, Plot, ShelfCrop
+from .models import CultivationLayout, CultivationSection, CultivationPlan, CultivationLog, Crop, Plot, ShelfCrop, CultivationAlert, HarvestTarget
 from .forms import CultivationLayoutForm, CultivationPlanForm, CultivationLogForm, PlotForm, ShelfCropForm, CultivationSectionForm, CropImageForm, CropForm, PlotInlineForm, BulkAddLanesForm
 from .utils import process_import_file
 from shift_management.views import get_current_organization
@@ -1698,38 +1698,23 @@ def plot_grid_view(request):
             floor_plan_data = {'plots': plots_data}
     
     import json
-    
+
+    class SafeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            return str(obj)
+
     # JSONシリアライゼーションを安全に実行
     try:
-        floor_plan_data_json = json.dumps(floor_plan_data)
-    except (TypeError, ValueError) as e:
+        floor_plan_data_json = json.dumps(floor_plan_data, cls=SafeEncoder)
+    except Exception as e:
         print(f"ERROR: Failed to serialize floor_plan_data: {e}")
-        print(f"ERROR: Data type: {type(floor_plan_data)}")
-        if isinstance(floor_plan_data, dict):
-            for key, value in floor_plan_data.items():
-                try:
-                    json.dumps(value)
-                except (TypeError, ValueError):
-                    print(f"ERROR: Problem in key '{key}': {type(value)}")
-                    if isinstance(value, list):
-                        for i, item in enumerate(value):
-                            try:
-                                json.dumps(item)
-                            except (TypeError, ValueError):
-                                print(f"ERROR: Problem in list item {i}: {type(item)}")
-                                if isinstance(item, dict):
-                                    for k, v in item.items():
-                                        try:
-                                            json.dumps(v)
-                                        except (TypeError, ValueError):
-                                            print(f"ERROR: Problem in '{k}': {type(v)} = {str(v)[:100]}")
-        floor_plan_data_json = json.dumps({})
-    
+        floor_plan_data_json = '{"plots":[]}'
+
     try:
-        plot_details_json = json.dumps(plot_details)
-    except (TypeError, ValueError) as e:
+        plot_details_json = json.dumps(plot_details, cls=SafeEncoder)
+    except Exception as e:
         print(f"ERROR: Failed to serialize plot_details: {e}")
-        plot_details_json = json.dumps({})
+        plot_details_json = '{}'
     
     context = {
         'grid': grid,
@@ -1841,11 +1826,17 @@ def plot_grid_view(request):
     # コンテキストに棚データを追加
     if plots_floor_plan_data:
         context['plots_floor_plan_data'] = plots_floor_plan_data
+        import math as _math
+        class _SafeEnc(json.JSONEncoder):
+            def default(self, obj):
+                return str(obj)
+            def iterencode(self, o, _one_shot=False):
+                return super().iterencode(o, _one_shot=_one_shot)
         try:
-            context['plots_floor_plan_data_json'] = json.dumps(plots_floor_plan_data)
-        except (TypeError, ValueError) as e:
+            context['plots_floor_plan_data_json'] = json.dumps(plots_floor_plan_data, cls=_SafeEnc)
+        except Exception as e:
             print(f"ERROR: Failed to serialize plots_floor_plan_data: {e}")
-            context['plots_floor_plan_data_json'] = json.dumps({'plots': []})
+            context['plots_floor_plan_data_json'] = '{"plots":[]}'
     
     # テンプレートを選択（平面図は統合済み）
     if view_mode == 'floor_plan':
@@ -3555,7 +3546,7 @@ def _get_today_actions(plots, today):
 
 def shelf_grid_view(request, layout_id=None):
     """棚割りグリッド表示 - タンク別タブ、段×レーンのマス目で状態を一覧表示"""
-    from datetime import date as date_type
+    from datetime import date as date_type, timedelta
 
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
@@ -3598,6 +3589,63 @@ def shelf_grid_view(request, layout_id=None):
 
     max_levels = max((p.levels for p in plot_list), default=0)
 
+    # ── 日付検索 ──
+    DATE_FIELD_MAP = {
+        'sowing':   'sowing_date',
+        'pre':      'pre_planting_date',
+        'planting': 'planting_date',
+        'harvest':  'expected_harvest_date',
+    }
+    search_field   = request.GET.get('sf', '')
+    search_from    = request.GET.get('sd_from', '')
+    search_to      = request.GET.get('sd_to', '')
+    search_results = None
+
+    if search_field and search_field in DATE_FIELD_MAP:
+        db_field = DATE_FIELD_MAP[search_field]
+        # 組織スコープの作物を対象
+        if is_global_admin(request.user):
+            qs = ShelfCrop.objects.filter(harvest_date__isnull=True)
+        elif current_organization:
+            qs = ShelfCrop.objects.filter(
+                harvest_date__isnull=True,
+                organization=current_organization,
+            )
+        else:
+            qs = ShelfCrop.objects.none()
+
+        # 日付フィルター
+        if search_from:
+            try:
+                qs = qs.filter(**{f'{db_field}__gte': search_from})
+            except Exception:
+                pass
+        if search_to:
+            try:
+                qs = qs.filter(**{f'{db_field}__lte': search_to})
+            except Exception:
+                pass
+        if not search_from and not search_to:
+            # 期間未指定は今日以降30日
+            qs = qs.filter(**{f'{db_field}__gte': today,
+                               f'{db_field}__lte': today + timedelta(days=30)})
+
+        qs = qs.select_related('plot', 'plot__layout').order_by(db_field, 'plot__shelf_number', 'level')
+
+        search_results = []
+        for crop in qs:
+            days = crop.days_until_harvest()
+            status = crop.get_growth_status()
+            display_status = 'overdue' if (days is not None and days < 0) else status
+            search_results.append({
+                'crop':   crop,
+                'plot':   crop.plot,
+                'level':  crop.level,
+                'status': display_status,
+                'days':   days,
+                'date_val': getattr(crop, db_field),
+            })
+
     context = {
         'layouts': layouts,
         'current_layout': current_layout,
@@ -3606,6 +3654,12 @@ def shelf_grid_view(request, layout_id=None):
         'level_range': range(1, max_levels + 1),
         'today_actions': today_actions,
         'today': today,
+        # 検索
+        'search_field':   search_field,
+        'search_from':    search_from,
+        'search_to':      search_to,
+        'search_results': search_results,
+        'date_field_map': DATE_FIELD_MAP,
     }
     return render(request, 'cultivation/shelf_grid.html', context)
 
@@ -3718,3 +3772,637 @@ def lane_master_settings(request, layout_id=None):
         'plots_count': plots.count(),
     }
     return render(request, 'cultivation/lane_master_settings.html', context)
+
+
+# ─────────────────────────────────────────────
+#  棚グリッド セル API
+# ─────────────────────────────────────────────
+
+def _build_cell_data(plot, level, crop, today):
+    """セルの表示用JSONデータを構築するヘルパー"""
+    from datetime import date as date_type
+    if today is None:
+        today = date_type.today()
+
+    if crop is None:
+        return {
+            'plot_id': plot.id,
+            'level': level,
+            'status': 'empty',
+            'has_crop': False,
+            'max_plates': plot.max_plates,
+            'shelf_number': plot.shelf_number,
+        }
+
+    status = crop.get_growth_status()
+    days = crop.days_until_harvest()
+    today_info = crop.is_today_action()
+    display_status = 'overdue' if (days is not None and days < 0) else status
+
+    fmt = lambda d: d.strftime('%m/%d') if d else ''
+    pct = min(100, round(crop.plate_count / plot.max_plates * 100)) if plot.max_plates > 0 else 0
+
+    return {
+        'plot_id': plot.id,
+        'level': level,
+        'shelf_number': plot.shelf_number,
+        'status': display_status,
+        'has_crop': True,
+        'max_plates': plot.max_plates,
+        'crop_id': crop.id,
+        'variety': crop.variety,
+        'plate_count': crop.plate_count,
+        'sowing_date': fmt(crop.sowing_date),
+        'pre_planting_date': fmt(crop.pre_planting_date),
+        'planting_date': fmt(crop.planting_date),
+        'expected_harvest_date': fmt(crop.expected_harvest_date),
+        'days_until_harvest': days,
+        'is_today': today_info['any'],
+        'today_types': [k for k, v in today_info.items() if v and k != 'any'],
+        'pct': pct,
+        'pct_class': 'full' if pct >= 100 else ('warn' if pct >= 80 else ''),
+    }
+
+
+def _generate_alerts_for_org(organization, today):
+    """組織の今日のアラートを生成（既存は上書き）"""
+    A = CultivationAlert
+
+    # 今日すでに生成済みなら何もしない
+    if A.objects.filter(organization=organization, alert_date=today).exists():
+        return
+
+    crops = ShelfCrop.objects.filter(
+        organization=organization,
+        harvest_date__isnull=True,
+    ).select_related('plot')
+
+    new_alerts = []
+    for crop in crops:
+        base = dict(
+            organization=organization,
+            alert_date=today,
+            variety=crop.variety,
+            shelf_number=crop.plot.shelf_number if crop.plot else '',
+            level=crop.level,
+            shelf_crop=crop,
+        )
+
+        # 収穫遅延
+        if crop.expected_harvest_date and crop.expected_harvest_date < today:
+            days = (today - crop.expected_harvest_date).days
+            new_alerts.append(A(
+                alert_type=A.TYPE_OVERDUE,
+                priority=A.PRIORITY_HIGH,
+                overdue_days=days,
+                message=f"{crop.variety}（{crop.plot.shelf_number} {crop.level}段）が {days}日 収穫遅延",
+                **base,
+            ))
+        # 本日収穫予定
+        elif crop.expected_harvest_date == today:
+            new_alerts.append(A(
+                alert_type=A.TYPE_HARVEST_TODAY,
+                priority=A.PRIORITY_HIGH,
+                message=f"{crop.variety}（{crop.plot.shelf_number} {crop.level}段）本日収穫予定",
+                **base,
+            ))
+        # 本日定植
+        if crop.planting_date == today:
+            new_alerts.append(A(
+                alert_type=A.TYPE_PLANTING_TODAY,
+                message=f"{crop.variety}（{crop.plot.shelf_number} {crop.level}段）本日定植予定",
+                **base,
+            ))
+        # 本日播種
+        if crop.sowing_date == today:
+            new_alerts.append(A(
+                alert_type=A.TYPE_SOWING_TODAY,
+                message=f"{crop.variety}（{crop.plot.shelf_number} {crop.level}段）本日播種予定",
+                **base,
+            ))
+        # 本日仮植
+        if crop.pre_planting_date == today:
+            new_alerts.append(A(
+                alert_type=A.TYPE_PRE_TODAY,
+                message=f"{crop.variety}（{crop.plot.shelf_number} {crop.level}段）本日仮植予定",
+                **base,
+            ))
+
+    if new_alerts:
+        A.objects.bulk_create(new_alerts, ignore_conflicts=True)
+
+
+@login_required
+def alert_list(request):
+    """栽培アラート一覧"""
+    from datetime import date as date_type
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    today = date_type.today()
+
+    # 今日のアラートを生成
+    if current_organization:
+        _generate_alerts_for_org(current_organization, today)
+
+    # 既読にする（POST）
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'read_all':
+            CultivationAlert.objects.filter(
+                organization=current_organization, is_read=False
+            ).update(is_read=True)
+        elif action == 'read_one':
+            alert_id = request.POST.get('alert_id')
+            CultivationAlert.objects.filter(
+                id=alert_id, organization=current_organization
+            ).update(is_read=True)
+        return redirect('cultivation:alert_list')
+
+    # 表示フィルター
+    show = request.GET.get('show', 'unread')  # unread / all
+    qs = CultivationAlert.objects.filter(organization=current_organization)
+    if show == 'unread':
+        qs = qs.filter(is_read=False)
+    qs = qs.order_by('-priority', '-alert_date', 'alert_type')[:100]
+
+    unread_count = CultivationAlert.objects.filter(
+        organization=current_organization, is_read=False
+    ).count()
+
+    context = {
+        'alerts': qs,
+        'unread_count': unread_count,
+        'show': show,
+        'today': today,
+    }
+    return render(request, 'cultivation/alert_list.html', context)
+
+
+@login_required
+def alert_unread_count_api(request):
+    """未読アラート件数をJSONで返す（ナビバー用）"""
+    from django.http import JsonResponse
+    from datetime import date as date_type
+
+    current_organization = get_current_organization(request)
+    if not current_organization:
+        return JsonResponse({'count': 0})
+
+    today = date_type.today()
+    _generate_alerts_for_org(current_organization, today)
+
+    count = CultivationAlert.objects.filter(
+        organization=current_organization, is_read=False
+    ).count()
+    return JsonResponse({'count': count})
+
+
+@login_required
+def kpi_dashboard(request):
+    """KPI ダッシュボード — 品種×月の収穫目標 vs 実績"""
+    from datetime import date as date_type
+    from django.db.models import Sum, Q
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    today = date_type.today()
+    year  = int(request.GET.get('year',  today.year))
+    month = int(request.GET.get('month', today.month))
+
+    # 前後月ナビ用
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    # 組織スコープ
+    if is_global_admin(request.user):
+        org_filter_target = {}
+        org_filter_crop   = {}
+    else:
+        org_filter_target = {'organization': current_organization}
+        org_filter_crop   = {'organization': current_organization}
+
+    # 目標一覧
+    targets_qs = HarvestTarget.objects.filter(
+        year=year, month=month, **org_filter_target
+    )
+    targets = {t.crop_name: t for t in targets_qs}
+
+    # 実績: 当月に収穫日のある ShelfCrop を品種ごとに集計
+    actuals_qs = ShelfCrop.objects.filter(
+        harvest_date__year=year,
+        harvest_date__month=month,
+        harvest_quantity__isnull=False,
+        **org_filter_crop,
+    ).values('variety').annotate(
+        total=Sum('harvest_quantity'),
+        count=models.Count('id'),
+    )
+    actuals = {row['variety']: row for row in actuals_qs}
+
+    # 収穫件数（量なし含む）
+    harvested_qs = ShelfCrop.objects.filter(
+        harvest_date__year=year,
+        harvest_date__month=month,
+        **org_filter_crop,
+    ).values('variety').annotate(count=models.Count('id'))
+    harvested_counts = {row['variety']: row['count'] for row in harvested_qs}
+
+    # 品種リストを統合（目標あり or 実績あり）
+    all_varieties = sorted(set(list(targets.keys()) + list(actuals.keys()) + list(harvested_counts.keys())))
+
+    rows = []
+    total_target = 0
+    total_actual = 0
+    for variety in all_varieties:
+        t = targets.get(variety)
+        a = actuals.get(variety)
+        target_qty  = float(t.target_quantity) if t else None
+        actual_qty  = float(a['total']) if a else 0.0
+        harvest_cnt = harvested_counts.get(variety, 0)
+        unit = t.unit if t else (a and 'kg' or 'kg')
+
+        if target_qty:
+            pct = min(200, round(actual_qty / target_qty * 100))
+            total_target += target_qty
+            total_actual += actual_qty
+        else:
+            pct = None
+
+        rows.append({
+            'variety':     variety,
+            'target_qty':  target_qty,
+            'actual_qty':  actual_qty,
+            'harvest_cnt': harvest_cnt,
+            'unit':        unit,
+            'pct':         pct,
+            'has_target':  t is not None,
+        })
+
+    # 登録済み品種サジェスト（目標入力フォーム用）
+    known_varieties = list(
+        Crop.objects.values_list('name', flat=True).order_by('name')
+    )
+
+    # POST: 目標を保存
+    if request.method == 'POST':
+        crop_name   = request.POST.get('crop_name', '').strip()
+        target_qty  = request.POST.get('target_quantity', '').strip()
+        unit        = request.POST.get('unit', 'kg').strip() or 'kg'
+        p_year      = int(request.POST.get('year',  year))
+        p_month     = int(request.POST.get('month', month))
+        org         = current_organization
+
+        if crop_name and target_qty and org:
+            try:
+                qty = float(target_qty)
+                HarvestTarget.objects.update_or_create(
+                    organization=org,
+                    crop_name=crop_name,
+                    year=p_year,
+                    month=p_month,
+                    defaults={'target_quantity': qty, 'unit': unit},
+                )
+                messages.success(request, f'{crop_name} {p_year}/{p_month:02d} の目標を保存しました')
+            except ValueError:
+                messages.error(request, '目標量は数値で入力してください')
+            except Exception:
+                messages.error(request, '目標の保存中にエラーが発生しました')
+        return redirect(f"{request.path}?year={p_year}&month={p_month}")
+
+    context = {
+        'year': year, 'month': month,
+        'prev_year': prev_year, 'prev_month': prev_month,
+        'next_year': next_year, 'next_month': next_month,
+        'rows': rows,
+        'total_target': total_target,
+        'total_actual': total_actual,
+        'total_pct': round(total_actual / total_target * 100) if total_target else None,
+        'known_varieties': known_varieties,
+        'today': today,
+    }
+    return render(request, 'cultivation/kpi_dashboard.html', context)
+
+
+@login_required
+def variety_master_api(request):
+    """品種マスタ一覧をJSON返却（セルモーダルの自動補完・標準日数取得用）"""
+    from django.http import JsonResponse
+    try:
+        crops = Crop.objects.all().order_by('name')
+        data = [
+            {
+                'name': c.name,
+                'days_to_pre_planting': c.days_to_pre_planting,
+                'days_to_planting': c.days_to_planting,
+                'days_to_harvest': c.days_to_harvest,
+            }
+            for c in crops
+        ]
+        return JsonResponse({'varieties': data})
+    except Exception:
+        return JsonResponse({'varieties': []}, status=500)
+
+
+@login_required
+def cell_api(request, plot_id, level):
+    """棚グリッドセルのAjax API
+    GET  → セルデータをJSON返却
+    POST → action: create / update / harvest
+    """
+    from django.http import JsonResponse
+    from datetime import date as date_type
+
+    plot = get_object_or_404(Plot, id=plot_id)
+    today = date_type.today()
+
+    if request.method == 'GET':
+        crop = ShelfCrop.objects.filter(
+            plot=plot, level=level, harvest_date__isnull=True
+        ).order_by('-planting_date').first()
+
+        data = _build_cell_data(plot, level, crop, today)
+        if crop:
+            # モーダルフォーム用に ISO 形式の日付も返す
+            data['crop_form'] = {
+                'variety': crop.variety,
+                'sowing_date': crop.sowing_date.isoformat() if crop.sowing_date else '',
+                'pre_planting_date': crop.pre_planting_date.isoformat() if crop.pre_planting_date else '',
+                'planting_date': crop.planting_date.isoformat() if crop.planting_date else '',
+                'expected_harvest_date': crop.expected_harvest_date.isoformat() if crop.expected_harvest_date else '',
+                'plate_count': crop.plate_count,
+            }
+        return JsonResponse({'success': True, 'cell': data})
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': '不正なリクエスト'}, status=400)
+
+    action = body.get('action', 'update')
+
+    # ── 収穫済みにする ──
+    if action == 'harvest':
+        crop = ShelfCrop.objects.filter(
+            plot=plot, level=level, harvest_date__isnull=True
+        ).first()
+        if not crop:
+            return JsonResponse({'success': False, 'error': '対象の作物が見つかりません'}, status=404)
+        crop.harvest_date = today
+        qty = body.get('harvest_quantity')
+        if qty not in (None, ''):
+            try:
+                crop.harvest_quantity = float(qty)
+            except (ValueError, TypeError):
+                pass
+        unit = (body.get('harvest_unit') or '').strip()
+        if unit:
+            crop.harvest_unit = unit
+        crop.save()
+        return JsonResponse({'success': True, 'cell': _build_cell_data(plot, level, None, today)})
+
+    # ── 日付パース ──
+    def parse_date(val):
+        val = (val or '').strip()
+        if not val:
+            return None
+        try:
+            from datetime import datetime
+            return datetime.strptime(val, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    variety = (body.get('variety') or '').strip()
+    if not variety:
+        return JsonResponse({'success': False, 'error': '品種名を入力してください'}, status=400)
+
+    plate_count = int(body.get('plate_count') or 0)
+    sowing_date = parse_date(body.get('sowing_date'))
+    pre_planting_date = parse_date(body.get('pre_planting_date'))
+    planting_date = parse_date(body.get('planting_date'))
+    expected_harvest_date = parse_date(body.get('expected_harvest_date'))
+
+    # ── 新規作成 ──
+    if action == 'create':
+        crop = ShelfCrop(
+            plot=plot,
+            level=level,
+            variety=variety,
+            plate_count=plate_count,
+            sowing_date=sowing_date,
+            pre_planting_date=pre_planting_date,
+            planting_date=planting_date,
+            expected_harvest_date=expected_harvest_date,
+        )
+        crop.save()
+        return JsonResponse({'success': True, 'cell': _build_cell_data(plot, level, crop, today)})
+
+    # ── 更新 ──
+    if action == 'update':
+        crop = ShelfCrop.objects.filter(
+            plot=plot, level=level, harvest_date__isnull=True
+        ).order_by('-planting_date').first()
+        if not crop:
+            return JsonResponse({'success': False, 'error': '対象の作物が見つかりません'}, status=404)
+        crop.variety = variety
+        crop.plate_count = plate_count
+        crop.sowing_date = sowing_date
+        crop.pre_planting_date = pre_planting_date
+        crop.planting_date = planting_date
+        crop.expected_harvest_date = expected_harvest_date
+        crop.save()
+        return JsonResponse({'success': True, 'cell': _build_cell_data(plot, level, crop, today)})
+
+    return JsonResponse({'success': False, 'error': '不明なアクション'}, status=400)
+
+
+# ─────────────────────────────────────────────
+# ⑥ 月次収穫レポート
+# ─────────────────────────────────────────────
+
+def _build_monthly_report_context(request, year, month):
+    """月次レポートのコンテキストデータを組み立てる共通ヘルパー"""
+    from datetime import date
+    from calendar import monthrange
+    from django.db.models import Sum, Count
+
+    current_organization = get_current_organization(request)
+    global_admin = is_global_admin(request.user)
+
+    _, last_day = monthrange(year, month)
+    month_start = date(year, month, 1)
+    month_end   = date(year, month, last_day)
+
+    org_sc_filter = {} if global_admin else {'organization': current_organization}
+
+    # ── 品種別収穫実績 ──
+    harvested_qs = (
+        ShelfCrop.objects
+        .filter(harvest_date__range=[month_start, month_end], **org_sc_filter)
+        .values('variety', 'harvest_unit')
+        .annotate(total_qty=Sum('harvest_quantity'), count=Count('id'))
+        .order_by('variety')
+    )
+    actuals = {row['variety']: row for row in harvested_qs}
+
+    # ── KPI 目標 ──
+    org_ht_filter = {} if global_admin else {'organization': current_organization}
+    targets = {
+        t.crop_name: t
+        for t in HarvestTarget.objects.filter(year=year, month=month, **org_ht_filter)
+    }
+
+    all_varieties = sorted(set(actuals.keys()) | set(targets.keys()))
+    rows = []
+    total_actual = 0.0
+    total_target = 0.0
+    achieved_count = 0
+    for variety in all_varieties:
+        a = actuals.get(variety)
+        t = targets.get(variety)
+        actual_qty   = float(a['total_qty'] or 0) if a else 0.0
+        harvest_count = a['count'] if a else 0
+        unit         = (a['harvest_unit'] if a else None) or (t.unit if t else 'kg')
+        target_qty   = float(t.target_quantity) if t else None
+        pct          = round(actual_qty / target_qty * 100, 1) if target_qty else None
+        if pct is not None and pct >= 100:
+            achieved_count += 1
+        total_actual += actual_qty
+        if target_qty:
+            total_target += target_qty
+        rows.append({
+            'variety':       variety,
+            'actual_qty':    actual_qty,
+            'target_qty':    target_qty,
+            'unit':          unit,
+            'harvest_count': harvest_count,
+            'pct':           pct,
+        })
+
+    overall_pct = round(total_actual / total_target * 100, 1) if total_target > 0 else None
+
+    # ── 棚稼働率 ──
+    org_plot_filter = {} if global_admin else {'layout__organization': current_organization}
+    total_levels = sum(
+        p.levels for p in Plot.objects.filter(**org_plot_filter).only('levels')
+    )
+    active_levels = ShelfCrop.objects.filter(
+        harvest_date__isnull=True, **org_sc_filter
+    ).values('plot_id', 'level').distinct().count()
+    empty_levels  = max(total_levels - active_levels, 0)
+    occupancy     = round(active_levels / total_levels * 100, 1) if total_levels > 0 else 0.0
+
+    # ── アラート集計（当月） ──
+    org_alert_filter = {} if global_admin else {'organization': current_organization}
+    alert_qs = (
+        CultivationAlert.objects
+        .filter(alert_date__range=[month_start, month_end], **org_alert_filter)
+        .values('alert_type')
+        .annotate(count=Count('id'))
+        .order_by('alert_type')
+    )
+    type_label = dict(CultivationAlert.TYPE_CHOICES)
+    alert_summary = [
+        {'label': type_label.get(row['alert_type'], row['alert_type']), 'count': row['count']}
+        for row in alert_qs
+    ]
+    total_alerts = sum(r['count'] for r in alert_summary)
+
+    # prev / next month
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    today = date.today()
+    return {
+        'year': year, 'month': month,
+        'prev_year': prev_year, 'prev_month': prev_month,
+        'next_year': next_year, 'next_month': next_month,
+        'rows': rows,
+        'total_actual':   round(total_actual, 2),
+        'total_target':   round(total_target, 2) if total_target > 0 else None,
+        'overall_pct':    overall_pct,
+        'achieved_count': achieved_count,
+        'total_varieties': len(rows),
+        'total_levels':   total_levels,
+        'active_levels':  active_levels,
+        'empty_levels':   empty_levels,
+        'occupancy':      occupancy,
+        'alert_summary':  alert_summary,
+        'total_alerts':   total_alerts,
+        'current_organization': current_organization,
+        'export_date': today.strftime('%Y年%m月%d日'),
+    }
+
+
+@login_required
+def monthly_report(request):
+    """月次収穫レポート（画面）"""
+    from datetime import date
+    today = date.today()
+    try:
+        year  = int(request.GET.get('year',  today.year))
+        month = int(request.GET.get('month', today.month))
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        year, month = today.year, today.month
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect('shift_management:organization_select')
+
+    context = _build_monthly_report_context(request, year, month)
+    return render(request, 'cultivation/monthly_report.html', context)
+
+
+@login_required
+def monthly_report_pdf(request):
+    """月次収穫レポート（PDF出力）"""
+    from datetime import date
+    from django.http import HttpResponse
+    from django.template.loader import render_to_string
+    from weasyprint import HTML
+
+    today = date.today()
+    try:
+        year  = int(request.GET.get('year',  today.year))
+        month = int(request.GET.get('month', today.month))
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        year, month = today.year, today.month
+
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        return HttpResponse('組織が選択されていません', status=403)
+
+    context = _build_monthly_report_context(request, year, month)
+    html_string = render_to_string('cultivation/monthly_report_pdf_template.html', context)
+    pdf_file = HTML(string=html_string).write_pdf()
+
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    filename  = f'harvest_report_{year}{month:02d}.pdf'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
