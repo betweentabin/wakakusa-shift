@@ -76,4 +76,21 @@ urlpatterns = [
     # レーンマスター設定
     path('settings/lanes/', views.lane_master_settings, name='lane_master_settings'),
     path('settings/lanes/<int:layout_id>/', views.lane_master_settings, name='lane_master_settings_layout'),
+
+    # 棚グリッド セル API (Ajax)
+    path('api/cell/<int:plot_id>/<int:level>/', views.cell_api, name='cell_api'),
+
+    # 品種マスタ API (Ajax)
+    path('api/varieties/', views.variety_master_api, name='variety_master_api'),
+
+    # KPI ダッシュボード
+    path('kpi/', views.kpi_dashboard, name='kpi_dashboard'),
+
+    # アラート通知
+    path('alerts/', views.alert_list, name='alert_list'),
+    path('api/alerts/unread-count/', views.alert_unread_count_api, name='alert_unread_count'),
+
+    # 月次収穫レポート
+    path('report/monthly/', views.monthly_report, name='monthly_report'),
+    path('report/monthly/pdf/', views.monthly_report_pdf, name='monthly_report_pdf'),
 ] 

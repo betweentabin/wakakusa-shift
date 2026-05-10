@@ -93,6 +93,18 @@
 </style>
 {% endblock %}
 
+{% block breadcrumbs %}
+<div class="breadcrumb-bar">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}"><i class="fas fa-seedling me-1"></i>栽培管理</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'cultivation:shelf_grid' %}">棚割りグリッド</a></li>
+      <li class="breadcrumb-item active">{{ plot.shelf_number }}</li>
+    </ol>
+  </nav>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="row">
@@ -278,11 +290,6 @@
             {% endfor %}
             {% endif %}
             
-            <div class="mt-4">
-                <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary">
-                    <i class="bi bi-grid-3x3"></i> 一覧に戻る
-                </a>
-            </div>
         </div>
     </div>
 </div>

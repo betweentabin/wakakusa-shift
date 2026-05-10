@@ -61,6 +61,22 @@
 </style>
 {% endblock %}
 
+{% block breadcrumbs %}
+<div class="breadcrumb-bar">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}"><i class="fas fa-seedling me-1"></i>栽培管理</a></li>
+      {% if current_layout %}
+        <li class="breadcrumb-item"><a href="{% url 'cultivation:lane_master_settings' %}">レーン設定</a></li>
+        <li class="breadcrumb-item active">{{ current_layout.name }}</li>
+      {% else %}
+        <li class="breadcrumb-item active">レーン設定</li>
+      {% endif %}
+    </ol>
+  </nav>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
 
@@ -115,9 +131,6 @@
                     <i class="fas fa-list me-2 text-secondary"></i>レーン一覧
                     <span class="crop-count-badge ms-2">{{ plots_count }}本</span>
                 </h5>
-                <button class="btn btn-primary btn-sm" form="formset-form" type="submit" name="action" value="update_lanes">
-                    <i class="fas fa-save me-1"></i>変更を一括保存
-                </button>
             </div>
 
             <form id="formset-form" method="post">

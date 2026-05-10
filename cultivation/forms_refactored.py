@@ -254,10 +254,15 @@ class CultivationPlanForm(BootstrapFormMixin, DateValidationMixin, forms.ModelFo
         }
     
     def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         
         # 作物の選択肢を設定
-        self.fields['crop'].queryset = Crop.objects.all().order_by('name')
+        crop_qs = Crop.objects.all().order_by('name')
+        if organization:
+            from django.db.models import Q
+            crop_qs = crop_qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        self.fields['crop'].queryset = crop_qs
         
         # 編集時に現在の栽培期間を表示
         if self.instance and self.instance.pk:

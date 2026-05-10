@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from .models import CultivationLayout, CultivationPlan, CultivationLog, Plot, ShelfCrop, CultivationSection, CropImage, Crop
 
 class CultivationLayoutForm(forms.ModelForm):
@@ -118,7 +119,7 @@ class CropForm(forms.ModelForm):
     """作物名管理用フォーム"""
     class Meta:
         model = Crop
-        fields = ['name', 'color']
+        fields = ['name', 'color', 'days_to_pre_planting', 'days_to_planting', 'days_to_harvest']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -128,6 +129,15 @@ class CropForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'color',
                 'value': '#28a745'
+            }),
+            'days_to_pre_planting': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 0, 'style': 'max-width:100px;'
+            }),
+            'days_to_planting': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 0, 'style': 'max-width:100px;'
+            }),
+            'days_to_harvest': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': 0, 'style': 'max-width:100px;'
             }),
         }
         labels = {
@@ -192,7 +202,13 @@ class CultivationPlanForm(forms.ModelForm):
         }
     
     def __init__(self, *args, **kwargs):
+        organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
+        crop_qs = Crop.objects.all().order_by('name')
+        if organization:
+            crop_qs = crop_qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        self.fields['crop'].queryset = crop_qs
+
         if self.instance and self.instance.pk:
             # 編集時に現在の栽培期間を表示
             period = self.instance.growth_period_days()

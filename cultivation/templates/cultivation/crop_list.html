@@ -141,6 +141,7 @@
                             <thead class="table-light">
                                 <tr>
                                     <th class="ps-4">作物名</th>
+                                    {% if show_organization %}<th>組織</th>{% endif %}
                                     <th>表示色</th>
                                     <th>使用状況</th>
                                     <th class="text-center pe-4">操作</th>
@@ -155,6 +156,15 @@
                             <strong>{{ crop.name }}</strong>
                         </div>
                                     </td>
+                                    {% if show_organization %}
+                                    <td>
+                                        {% if crop.organization %}
+                                            {{ crop.organization.name }}
+                                        {% else %}
+                                            <span class="text-muted">未設定</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
                                     <td>
                                         <div class="d-flex align-items-center">
                                             <span class="badge color-badge me-2" style="background-color: {{ crop.color }}; color: white;">
@@ -201,6 +211,11 @@
                                                     <div class="color-indicator me-2" style="background-color: {{ crop.color }};"></div>
                                                     <h6 class="card-title mb-0">{{ crop.name }}</h6>
                                                 </div>
+                                                {% if show_organization %}
+                                                <div class="text-muted small mb-2">
+                                                    {% if crop.organization %}{{ crop.organization.name }}{% else %}未設定{% endif %}
+                                                </div>
+                                                {% endif %}
                                                 <div class="d-flex align-items-center mb-2">
                                                     <span class="badge color-badge me-2" style="background-color: {{ crop.color }}; color: white;">
                                                         {{ crop.color }}
@@ -244,6 +259,11 @@
                                             <div class="color-indicator me-2" style="background-color: {{ crop.color }};"></div>
                                             <h6 class="card-title mb-0">{{ crop.name }}</h6>
                                         </div>
+                                        {% if show_organization %}
+                                        <div class="text-muted small mb-2">
+                                            {% if crop.organization %}{{ crop.organization.name }}{% else %}未設定{% endif %}
+                                        </div>
+                                        {% endif %}
                                         <div class="d-flex align-items-center mb-2">
                                             <span class="badge color-badge me-2" style="background-color: {{ crop.color }}; color: white; font-size: 0.7rem;">
                                                 {{ crop.color }}

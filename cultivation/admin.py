@@ -4,8 +4,9 @@ from .models import CultivationLayout, CultivationSection, CultivationPlan, Cult
 
 @admin.register(Crop)
 class CropAdmin(admin.ModelAdmin):
-    list_display = ('name', 'color')
-    search_fields = ('name',)
+    list_display = ('name', 'organization', 'color')
+    list_filter = ('organization',)
+    search_fields = ('name', 'organization__name')
 
 @admin.register(CultivationLayout)
 class CultivationLayoutAdmin(admin.ModelAdmin):

@@ -176,7 +176,7 @@
 .stat-card-empty { border-left: 4px solid #17a2b8; }
 
 .floor-plan-section {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: #37474f;
     color: white;
     border-radius: 15px;
     padding: 25px;
@@ -254,6 +254,17 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb-bar">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}"><i class="fas fa-seedling me-1"></i>栽培管理</a></li>
+      <li class="breadcrumb-item active">棚区画管理</li>
+    </ol>
+  </nav>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -538,9 +549,6 @@
                         </a>
                         <a href="{% url 'cultivation:plot_edit' plot_detail.plot.id %}" class="btn btn-sm btn-outline-secondary" title="編集">
                             <i class="fas fa-edit"></i>
-                        </a>
-                        <a href="{% url 'cultivation:crop_create' plot_detail.plot.id %}" class="btn btn-sm btn-outline-success" title="作物追加">
-                            <i class="fas fa-plus"></i>
                         </a>
                         <a href="{% url 'cultivation:plot_delete' plot_detail.plot.id %}" class="btn btn-sm btn-outline-danger" title="削除">
                             <i class="fas fa-trash"></i>

@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('cultivation', '0014_alter_plot_unique_together_and_more'),
-        ('shift_management', '0019_alter_shifttemplatedetail_unique_together_and_more'),
+        ('shift_management', '0018_add_organization_to_shift_template'),
     ]
 
     operations = [

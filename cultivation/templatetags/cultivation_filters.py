@@ -66,3 +66,16 @@ def get_item(dictionary, key):
         {% with row=grid|get_item:level %}
     """
     return dictionary.get(key)
+
+
+@register.filter
+def abs_value(value):
+    """絶対値を返す。収穫遅延日数の表示などに使用。
+
+    使用例:
+        {{ days_until_harvest|abs_value }}
+    """
+    try:
+        return abs(value)
+    except (TypeError, ValueError):
+        return value

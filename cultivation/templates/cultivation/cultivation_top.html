@@ -219,9 +219,6 @@
                     <p class="lead mb-0">効率的な栽培計画と区画管理で、最適な収穫を実現します</p>
                 </div>
                 <div class="col-12 col-md-4 text-center text-md-end mt-3 mt-md-0">
-                    <a href="{% url 'cultivation:layout_create' %}" class="btn btn-light btn-lg">
-                        <i class="fas fa-plus me-2"></i>新規レイアウト作成
-                    </a>
                 </div>
             </div>
         </div>
@@ -266,23 +263,24 @@
         <a href="{% url 'cultivation:shelf_grid' %}" class="btn btn-success action-btn">
             <i class="fas fa-th me-1"></i>棚割りグリッド
         </a>
-        <a href="{% url 'cultivation:crop_list' %}" class="btn btn-info action-btn">
-            <i class="fas fa-seedling me-1"></i>作物名管理
-        </a>
         <a href="{% url 'cultivation:plot_management' %}" class="btn btn-secondary action-btn">
             <i class="fas fa-warehouse me-1"></i>棚区画管理
         </a>
         <a href="{% url 'cultivation:gantt_chart' %}" class="btn btn-warning action-btn">
             <i class="fas fa-project-diagram me-1"></i>ガントチャート
         </a>
+        <a href="{% url 'cultivation:kpi_dashboard' %}" class="btn btn-info action-btn">
+            <i class="fas fa-chart-bar me-1"></i>KPIダッシュボード
+        </a>
         <a href="{% url 'cultivation:lane_master_settings' %}" class="btn btn-dark action-btn">
             <i class="fas fa-sliders-h me-1"></i>レーン設定
         </a>
-        {% if layouts %}
-            <a href="{% url 'cultivation:layout_detail' layouts.0.id %}" class="btn btn-info action-btn">
-                <i class="fas fa-eye me-1"></i>最新レイアウト表示
-            </a>
-        {% endif %}
+        <a href="{% url 'cultivation:alert_list' %}" class="btn btn-danger action-btn position-relative">
+            <i class="fas fa-bell me-1"></i>アラート
+        </a>
+        <a href="{% url 'cultivation:monthly_report' %}" class="btn btn-outline-success action-btn">
+            <i class="fas fa-file-alt me-1"></i>月次レポート
+        </a>
     </div>
 
     <!-- レイアウト一覧 -->

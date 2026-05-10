@@ -726,7 +726,11 @@
 
 <script>
 // Djangoテンプレート変数をJavaScriptに渡す
-{% if floor_plan_data_json %}
+// plots_floor_plan_data_json: セクション表示時に棚データが別変数で来る場合を優先
+{% if plots_floor_plan_data_json %}
+window.floorPlanData = {{ plots_floor_plan_data_json|safe }};
+console.log('Floor plan data (plots_floor_plan) — plots count:', window.floorPlanData && window.floorPlanData.plots ? window.floorPlanData.plots.length : 'no .plots key');
+{% elif floor_plan_data_json %}
 window.floorPlanData = {{ floor_plan_data_json|safe }};
 console.log('Floor plan data loaded — plots count:', window.floorPlanData && window.floorPlanData.plots ? window.floorPlanData.plots.length : 'no .plots key', '| keys:', window.floorPlanData ? Object.keys(window.floorPlanData) : 'null');
 {% else %}

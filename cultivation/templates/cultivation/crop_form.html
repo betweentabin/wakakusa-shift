@@ -87,6 +87,43 @@
                             {% endif %}
                         </div>
 
+                        <!-- 標準工程日数 -->
+                        <hr class="my-3">
+                        <h6 class="text-muted mb-3">
+                            <i class="fas fa-calendar-alt me-1"></i>標準工程日数
+                            <span class="fw-normal" style="font-size:0.8rem;">（播種日を基準に日付を自動計算）</span>
+                        </h6>
+                        <div class="row g-2">
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label mb-1" style="font-size:0.85rem;">
+                                    播種 → 仮植
+                                    <span class="text-muted" style="font-size:0.75rem;">（0=仮植なし）</span>
+                                </label>
+                                {{ form.days_to_pre_planting }}
+                                {% if form.days_to_pre_planting.errors %}
+                                <div class="text-danger small">{% for e in form.days_to_pre_planting.errors %}<div>{{ e }}</div>{% endfor %}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label mb-1" style="font-size:0.85rem;">播種 → 定植</label>
+                                {{ form.days_to_planting }}
+                                {% if form.days_to_planting.errors %}
+                                <div class="text-danger small">{% for e in form.days_to_planting.errors %}<div>{{ e }}</div>{% endfor %}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <label class="form-label mb-1" style="font-size:0.85rem;">播種 → 収穫予定</label>
+                                {{ form.days_to_harvest }}
+                                {% if form.days_to_harvest.errors %}
+                                <div class="text-danger small">{% for e in form.days_to_harvest.errors %}<div>{{ e }}</div>{% endfor %}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="text-muted mt-2" style="font-size:0.78rem;">
+                            <i class="fas fa-lightbulb me-1"></i>
+                            例）バジル：仮植7日・定植14日・収穫45日 → 播種日を入力するだけで3つの日付が自動入力されます
+                        </div>
+
                         {% elif available_crops %}
                         <!-- ===== 棚への作物追加フォーム (crop_create_for_level) — 手動フィールド ===== -->
 

@@ -6,11 +6,38 @@ from django.dispatch import receiver
 from shift_management.models import Organization
 
 class Crop(models.Model):
-    """作物"""
-    name = models.CharField("作物名", max_length=100, unique=True)
+    """作物（品種マスタ）"""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='crops',
+        null=True,
+        blank=True,
+    )
+    name = models.CharField("作物名", max_length=100)
     color = models.CharField("色コード", max_length=7, default="#808080", help_text="例: #FFFFFF")
 
+    # 標準工程日数（播種日を起点に自動計算）
+    days_to_pre_planting = models.PositiveIntegerField(
+        "播種→仮植 標準日数", default=0, blank=True,
+        help_text="播種日から仮植日までの標準日数（0=仮植なし）")
+    days_to_planting = models.PositiveIntegerField(
+        "播種→定植 標準日数", default=0, blank=True,
+        help_text="播種日から定植日までの標準日数（0=未設定）")
+    days_to_harvest = models.PositiveIntegerField(
+        "播種→収穫 標準日数", default=0, blank=True,
+        help_text="播種日から収穫予定日までの標準日数（0=未設定）")
+
+    class Meta:
+        verbose_name = "作物"
+        verbose_name_plural = "作物"
+        unique_together = ['organization', 'name']
+        ordering = ['organization', 'name']
+
     def __str__(self):
+        if self.organization:
+            return f"{self.name} ({self.organization.name})"
         return self.name
 
 class CultivationLayout(models.Model):
@@ -355,6 +382,12 @@ class ShelfCrop(models.Model):
     planting_date = models.DateField("定植日", blank=True, null=True)
     expected_harvest_date = models.DateField("収穫予定日", blank=True, null=True)
     harvest_date = models.DateField("収穫日", blank=True, null=True)
+    harvest_quantity = models.DecimalField(
+        "収穫量", max_digits=8, decimal_places=2, blank=True, null=True,
+        help_text="実際の収穫量")
+    harvest_unit = models.CharField(
+        "収穫単位", max_length=20, default="kg", blank=True,
+        help_text="例: kg, 箱, 束")
     plate_count = models.PositiveIntegerField("プレート数", default=0, help_text="このレーン・段に入れているプレートの枚数")
     plot = models.ForeignKey(Plot, on_delete=models.CASCADE, related_name='shelf_crops', verbose_name="棚区画")
     organization = models.ForeignKey(
@@ -435,6 +468,82 @@ class ShelfCrop(models.Model):
         elapsed_days = (timezone.now().date() - self.planting_date).days
         progress = min(100, max(0, (elapsed_days / total_days) * 100))
         return round(progress, 1)
+
+
+class CultivationAlert(models.Model):
+    """栽培アラート通知"""
+    TYPE_OVERDUE        = 'overdue'
+    TYPE_HARVEST_TODAY  = 'harvest_today'
+    TYPE_PLANTING_TODAY = 'planting_today'
+    TYPE_SOWING_TODAY   = 'sowing_today'
+    TYPE_PRE_TODAY      = 'pre_planting_today'
+    TYPE_CHOICES = [
+        (TYPE_OVERDUE,        '収穫遅延'),
+        (TYPE_HARVEST_TODAY,  '本日収穫予定'),
+        (TYPE_PLANTING_TODAY, '本日定植予定'),
+        (TYPE_SOWING_TODAY,   '本日播種予定'),
+        (TYPE_PRE_TODAY,      '本日仮植予定'),
+    ]
+    PRIORITY_HIGH   = 'high'
+    PRIORITY_NORMAL = 'normal'
+    PRIORITY_CHOICES = [
+        (PRIORITY_HIGH,   '高'),
+        (PRIORITY_NORMAL, '通常'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE,
+        related_name='cultivation_alerts', verbose_name='組織',
+    )
+    alert_type = models.CharField('種別', max_length=30, choices=TYPE_CHOICES)
+    priority   = models.CharField('優先度', max_length=10, choices=PRIORITY_CHOICES,
+                                  default=PRIORITY_NORMAL)
+    alert_date = models.DateField('対象日')
+    variety    = models.CharField('品種', max_length=100)
+    shelf_number = models.CharField('棚番号', max_length=100, blank=True)
+    level      = models.PositiveIntegerField('段数', null=True, blank=True)
+    overdue_days = models.IntegerField('遅延日数', default=0)
+    message    = models.CharField('メッセージ', max_length=255)
+    is_read    = models.BooleanField('既読', default=False)
+    shelf_crop = models.ForeignKey(
+        'ShelfCrop', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='alerts',
+    )
+    created_at = models.DateTimeField('生成日時', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '栽培アラート'
+        verbose_name_plural = '栽培アラート'
+        ordering = ['-priority', '-alert_date', 'alert_type']
+        unique_together = [['organization', 'alert_type', 'alert_date',
+                            'shelf_crop']]
+
+    def __str__(self):
+        return f"[{self.get_alert_type_display()}] {self.variety} {self.alert_date}"
+
+
+class HarvestTarget(models.Model):
+    """品種×月の収穫目標"""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        verbose_name="組織",
+        related_name='harvest_targets',
+    )
+    crop_name = models.CharField("品種名", max_length=100)
+    year  = models.PositiveIntegerField("年")
+    month = models.PositiveIntegerField("月")
+    target_quantity = models.DecimalField("目標量", max_digits=10, decimal_places=2)
+    unit = models.CharField("単位", max_length=20, default="kg")
+
+    class Meta:
+        verbose_name = "収穫目標"
+        verbose_name_plural = "収穫目標"
+        unique_together = [['organization', 'crop_name', 'year', 'month']]
+        ordering = ['year', 'month', 'crop_name']
+
+    def __str__(self):
+        return f"{self.crop_name} {self.year}/{self.month:02d} 目標{self.target_quantity}{self.unit}"
 
 
 class CropImage(models.Model):

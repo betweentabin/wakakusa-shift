@@ -371,6 +371,38 @@
     }
   </style>
   {% block extra_css %}{% endblock %}
+  <style>
+    /* パンくずリスト */
+    .breadcrumb-bar {
+      background: #fff;
+      border-bottom: 1px solid #e9ecef;
+      padding: 8px 16px;
+      font-size: 0.82rem;
+    }
+    .breadcrumb-bar .breadcrumb {
+      margin: 0;
+      background: none;
+      padding: 0;
+    }
+    .breadcrumb-bar .breadcrumb-item + .breadcrumb-item::before {
+      content: "›";
+      color: #adb5bd;
+    }
+    .breadcrumb-bar .breadcrumb-item a {
+      color: #6c757d;
+      text-decoration: none;
+    }
+    .breadcrumb-bar .breadcrumb-item a:hover { color: #343a40; }
+    .breadcrumb-bar .breadcrumb-item.active { color: #343a40; font-weight: 600; }
+
+    /* ナビバー active スタイル */
+    .navbar-dark .navbar-nav .nav-link.active {
+      background: rgba(255,255,255,0.18);
+      border-radius: 6px;
+      color: #fff !important;
+      font-weight: 600;
+    }
+  </style>
 </head>
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -384,55 +416,64 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
+        {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
         <ul class="navbar-nav me-auto">
           {% if user.is_authenticated %}
             {# 利用者以外はシフト管理メニューを表示 #}
             {% if user.is_superuser or user.staff.role_type != 'user' %}
               <li class="nav-item">
-                <a class="nav-link" href="{% url 'shift_management:calendar' %}">
-                  <i class="fas fa-calendar-alt me-1"></i>
-                  シフト管理
+                <a class="nav-link {% if app == 'shift_management' and url_name == 'calendar' %}active{% endif %}"
+                   href="{% url 'shift_management:calendar' %}">
+                  <i class="fas fa-calendar-alt me-1"></i>シフト管理
                 </a>
               </li>
             {% endif %}
 
             {# 栽培管理は全員表示 #}
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'cultivation:cultivation_top' %}">
-                <i class="fas fa-seedling me-1"></i>
-                栽培管理
+              <a class="nav-link {% if app == 'cultivation' %}active{% endif %}"
+                 href="{% url 'cultivation:cultivation_top' %}">
+                <i class="fas fa-seedling me-1"></i>栽培管理
               </a>
             </li>
 
-            {# 発注管理はアルバイト以上または在庫権限がある人 #}
+            {# 発注管理 #}
             {% if user.is_superuser or user.staff.role_type == 'global_admin' or user.staff.role_type == 'manager' or user.staff.role_type == 'staff' or user.staff.role_type == 'part_time' or user.staff.inventory_permission != 'none' %}
               <li class="nav-item">
-                <a class="nav-link" href="{% url 'shift_management:inventory_dashboard' %}">
-                  <i class="fas fa-warehouse me-1"></i>
-                  発注管理
+                <a class="nav-link {% if app == 'shift_management' and 'inventory' in url_name or app == 'shift_management' and 'order' in url_name or app == 'shift_management' and 'delivery' in url_name or app == 'shift_management' and 'invoice' in url_name %}active{% endif %}"
+                   href="{% url 'shift_management:inventory_dashboard' %}">
+                  <i class="fas fa-warehouse me-1"></i>発注管理
                 </a>
               </li>
             {% endif %}
 
-            {# シフト確認は全員表示 #}
+            {# シフト確認 #}
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'shift_management:staff_view' %}">
-                <i class="fas fa-eye me-1"></i>
-                シフト確認
+              <a class="nav-link {% if app == 'shift_management' and url_name == 'staff_view' %}active{% endif %}"
+                 href="{% url 'shift_management:staff_view' %}">
+                <i class="fas fa-eye me-1"></i>シフト確認
               </a>
             </li>
 
-            {# シフト打診は全員表示（職員・アルバイト用） #}
+            {# シフト打診 #}
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'shift_management:shift_proposal_list' %}">
-                <i class="fas fa-hand-pointer me-1"></i>
-                シフト打診
+              <a class="nav-link {% if app == 'shift_management' and 'shift_proposal' in url_name %}active{% endif %}"
+                 href="{% url 'shift_management:shift_proposal_list' %}">
+                <i class="fas fa-hand-pointer me-1"></i>シフト打診
               </a>
             </li>
           {% endif %}
         </ul>
+        {% endwith %}
         <ul class="navbar-nav">
           {% if user.is_authenticated %}
+            <li class="nav-item me-1">
+              <a class="nav-link position-relative" href="{% url 'cultivation:alert_list' %}" title="栽培アラート">
+                <i class="fas fa-bell"></i>
+                <span id="nav-alert-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                      style="font-size:0.6rem; display:none;"></span>
+              </a>
+            </li>
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-user me-1"></i>
@@ -490,6 +531,9 @@
           {% endfor %}
         {% endif %}
 
+        <!-- パンくずリスト -->
+        {% block breadcrumbs %}{% endblock %}
+
         <!-- メインコンテンツ -->
         <div class="content">
           {% block content %}{% endblock %}
@@ -500,6 +544,32 @@
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  {% if user.is_authenticated %}
+  <script>
+  (function() {
+    var _lastAlertCount = null;
+    function updateAlertBadge() {
+      fetch('/cultivation/api/alerts/unread-count/')
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+          if (data.count === _lastAlertCount) return;
+          _lastAlertCount = data.count;
+          var badge = document.getElementById('nav-alert-badge');
+          if (!badge) return;
+          if (data.count > 0) {
+            badge.textContent = data.count > 99 ? '99+' : data.count;
+            badge.style.display = '';
+          } else {
+            badge.style.display = 'none';
+          }
+        })
+        .catch(function(){});
+    }
+    updateAlertBadge();
+    setInterval(updateAlertBadge, 60000);
+  })();
+  </script>
+  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

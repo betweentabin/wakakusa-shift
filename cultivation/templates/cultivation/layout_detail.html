@@ -700,6 +700,17 @@
 </style>
 {% endblock %}
 
+{% block breadcrumbs %}
+<div class="breadcrumb-bar">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'cultivation:cultivation_top' %}"><i class="fas fa-seedling me-1"></i>栽培管理</a></li>
+      <li class="breadcrumb-item active">{{ layout.name }}</li>
+    </ol>
+  </nav>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4 page-header">
@@ -916,10 +927,10 @@
             
             <!-- 3D情報パネル -->
             <div class="three-d-info-panel" id="three-d-info-panel" style="display: none;">
-                <div class="info-title"><strong>3D栽培区画配置図</strong></div>
+                <div class="info-title"><strong>3D棚配置図</strong></div>
                 <div class="info-content">
-                    <div>総区画数: <span id="total-sections">{{ sections_count }}</span></div>
-                    <div>栽培中: <span id="active-sections">{{ active_plans_count }}</span></div>
+                    <div>棚数: <span id="total-sections">-</span></div>
+                    <div>栽培中: <span id="active-sections">-</span></div>
                     <div>視点: <span id="camera-info">デフォルト</span></div>
                 </div>
                 <div class="info-controls mt-2">
@@ -1062,7 +1073,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
+<script id="plots-data" type="application/json">{{ floor_plan_data_json|default:"null"|safe }}</script>
+
 <script>
+// 棚データ
+window.plotsData = JSON.parse(document.getElementById('plots-data').textContent);
+// 3D JS (plot_floor_plan_simple.js) は window.floorPlanData を参照するため同期
+window.floorPlanData = window.plotsData;
+
 // 2D/3D切り替え機能（グローバルスコープ）
 window.switchView = function(viewType) {
     const view2dBtn = document.getElementById('view-2d');
@@ -1098,664 +1116,454 @@ window.switchView = function(viewType) {
 
 // Three.js 3D表示システム
 let scene, camera, renderer, controls;
-let sections = [];
+let plotMeshes = [];   // レベルメッシュ（raycasting用）
 let raycaster, mouse;
 let animationId;
+let autoRotateEnabled = false;
+let flyModeEnabled = false;
 
-// 3D表示の初期化（グローバルスコープ）
+// ステータスカラーマップ（16進数）
+const STATUS_HEX = {
+    empty:         0xf0f0f0,
+    sowing:        0xd0d8dc,
+    pre_planted:   0xfff59d,
+    planted:       0xa5d6a7,
+    harvest_ready: 0xffcc80,
+    harvested:     0xbdbdbd,
+};
+
+// 3D表示の初期化
 function init3DView() {
-    console.log('Initializing Three.js 3D view for sections...');
-    
     const container = document.getElementById('three-d-container-scene');
-    const loading = document.getElementById('three-d-loading');
+    const loading   = document.getElementById('three-d-loading');
     const infoPanel = document.getElementById('three-d-info-panel');
-    
-    if (!container) {
-        console.error('3D container not found');
-        return;
-    }
-    
-    // 既存のレンダラーがあれば削除
+    if (!container) return;
+
     if (renderer) {
         container.removeChild(renderer.domElement);
         renderer.dispose();
     }
-    
-    // シーンの初期化
+
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // スカイブルー
-    
-    // カメラの設定
-    camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
-    camera.position.set(15, 10, 15);
-    
-    // レンダラーの設定
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    scene.background = new THREE.Color(0x1a2634);
+
+    camera = new THREE.PerspectiveCamera(55, container.offsetWidth / container.offsetHeight, 0.1, 500);
+    camera.position.set(20, 16, 20);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.offsetWidth, container.offsetHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    
     container.appendChild(renderer.domElement);
-    
-    // OrbitControls（カメラ操作）
+
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 5;
-    controls.maxDistance = 50;
-    controls.maxPolarAngle = Math.PI / 2;
-    
-    // ライティングの設定
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 3;
+    controls.maxDistance = 80;
+
     setupLighting();
-    
-    // 地面の作成
     createGround();
-    
-    // 栽培区画の作成
-    createSections();
-    
-    // インタラクション設定
+    createPlots();
     setupInteraction();
-    
-    // コントロールボタンの設定
     setupControls();
-    
-    // ローディング表示を隠してパネルを表示
-    if (loading) loading.style.display = 'none';
+
+    if (loading)   loading.style.display = 'none';
     if (infoPanel) infoPanel.style.display = 'block';
-    
-    // アニメーションループ開始
+
     animate();
-    
-    console.log('3D view initialized successfully');
 }
 
-// ライティングの設定
+// ライティング
 function setupLighting() {
-    // 環境光
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-    scene.add(ambientLight);
-    
-    // 主光源（太陽光）
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(50, 50, 50);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 500;
-    directionalLight.shadow.camera.left = -50;
-    directionalLight.shadow.camera.right = 50;
-    directionalLight.shadow.camera.top = 50;
-    directionalLight.shadow.camera.bottom = -50;
-    scene.add(directionalLight);
-    
-    // 補助光源
-    const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x362d1a, 0.5);
-    scene.add(hemisphereLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(30, 40, 30);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+    sun.shadow.camera.top  =  30; sun.shadow.camera.bottom = -30;
+    scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0x87ceeb, 0x223322, 0.4));
 }
 
-// 地面の作成
+// 床
 function createGround() {
-    const groundGeometry = new THREE.PlaneGeometry(100, 100);
-    const groundMaterial = new THREE.MeshLambertMaterial({ 
-        color: 0x90EE90,
-        transparent: true,
-        opacity: 0.8
-    });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(120, 120),
+        new THREE.MeshLambertMaterial({ color: 0x1e3a2f })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
-    
-    // グリッドヘルパー
-    const gridHelper = new THREE.GridHelper(100, 20, 0x888888, 0xcccccc);
-    gridHelper.material.transparent = true;
-    gridHelper.material.opacity = 0.3;
-    scene.add(gridHelper);
+    const grid = new THREE.GridHelper(120, 30, 0x2d4a3e, 0x2d4a3e);
+    grid.material.transparent = true;
+    grid.material.opacity = 0.5;
+    scene.add(grid);
 }
 
-// 栽培区画の作成
-function createSections() {
-    sections = [];
-    const sectionCells = document.querySelectorAll('.shelf-cell[data-section-id]');
-    
-    sectionCells.forEach((cell, index) => {
-        const sectionId = cell.dataset.sectionId;
-        const sectionName = cell.dataset.sectionName;
-        const row = parseInt(cell.dataset.row);
-        const column = parseInt(cell.dataset.column);
-        const cropName = cell.dataset.crop || '空き';
-        
-        if (!sectionId) return;
-        
-        // 位置を計算（グリッド座標を3D座標に変換）
-        const x = (column - 1) * 3 - 6; // 列を3Dのx座標に
-        const z = (row - 1) * 3 - 6;    // 行を3Dのz座標に
-        const y = 0.5; // 高さは固定
-        
-        // 状態に応じた色を決定
-        let color = 0xe9ecef; // デフォルト（空き）
-        if (cell.classList.contains('has-crop')) {
-            color = 0x28a745; // 栽培中：緑
-        }
-        if (cell.classList.contains('harvest-ready')) {
-            color = 0xffc107; // 収穫可能：黄
-        }
-        if (cell.classList.contains('overdue')) {
-            color = 0xdc3545; // 期限超過：赤
-        }
-        
-        // 区画ボックスの作成
-        const geometry = new THREE.BoxGeometry(2.5, 1, 2.5);
-        const material = new THREE.MeshLambertMaterial({ 
-            color: color,
-            transparent: true,
-            opacity: 0.8
+// 棚（レーン）を段構造で描画
+function createPlots() {
+    plotMeshes = [];
+    const data = window.plotsData;
+    if (!data || !data.plots || data.plots.length === 0) return;
+
+    const LEVEL_H  = 0.45;  // 1段の高さ
+    const SHELF_T  = 0.06;  // 棚板厚
+    const RACK_W   = 1.6;   // 幅
+    const RACK_D   = 0.7;   // 奥行き
+    const SCALE    = 4.5;   // Three.js座標スケール
+    const pillarMat = new THREE.MeshLambertMaterial({ color: 0x546e7a });
+
+    data.plots.forEach(function(plot) {
+        var bx = (plot.threejs_x || 0) * SCALE;
+        var bz = (plot.threejs_z || 0) * SCALE;
+        var levels  = plot.levels || 1;
+        var details = plot.level_details || [];
+        var totalH  = levels * (LEVEL_H + SHELF_T);
+
+        var group = new THREE.Group();
+        group.position.set(bx, 0, bz);
+
+        // 4本の柱
+        var pillarGeo = new THREE.BoxGeometry(0.07, totalH + 0.1, 0.07);
+        [[-RACK_W/2, -RACK_D/2], [RACK_W/2, -RACK_D/2],
+         [-RACK_W/2,  RACK_D/2], [RACK_W/2,  RACK_D/2]].forEach(function(o) {
+            var p = new THREE.Mesh(pillarGeo, pillarMat);
+            p.position.set(o[0], totalH / 2, o[1]);
+            p.castShadow = true;
+            group.add(p);
         });
-        
-        const sectionMesh = new THREE.Mesh(geometry, material);
-        sectionMesh.position.set(x, y, z);
-        sectionMesh.castShadow = true;
-        sectionMesh.receiveShadow = true;
-        
-        // ユーザーデータを設定
-        sectionMesh.userData = {
-            isSection: true,
-            sectionId: sectionId,
-            sectionName: sectionName,
-            row: row,
-            column: column,
-            cropName: cropName,
-            status: cropName === '空き' ? 'empty' : 'growing'
-        };
-        
-        scene.add(sectionMesh);
-        sections.push(sectionMesh);
-        
-        // 区画名ラベルの作成
-        createSectionLabel(sectionName, x, y + 1, z);
-        
-        // 作物がある場合は作物オブジェクトを追加
-        if (cropName !== '空き') {
-            createCropObject(cropName, x, y + 1.5, z, color);
-        }
+
+        // 段ごとの棚板＋スロット
+        details.forEach(function(ld, idx) {
+            var y = idx * (LEVEL_H + SHELF_T);
+
+            // 棚板
+            var board = new THREE.Mesh(
+                new THREE.BoxGeometry(RACK_W, SHELF_T, RACK_D),
+                new THREE.MeshLambertMaterial({ color: 0x37474f })
+            );
+            board.position.set(0, y + SHELF_T / 2, 0);
+            board.castShadow = true;
+            group.add(board);
+
+            // 作物スロット（ステータス色）
+            var color   = STATUS_HEX[ld.status] || 0xf0f0f0;
+            var isEmpty = ld.status === 'empty';
+            var hasCrop = !isEmpty && ld.status !== 'harvested';
+            var slot = new THREE.Mesh(
+                new THREE.BoxGeometry(RACK_W - 0.12, LEVEL_H, RACK_D - 0.08),
+                new THREE.MeshLambertMaterial({ color: color, transparent: true, opacity: hasCrop ? 0.35 : (isEmpty ? 0.22 : 0.5) })
+            );
+            slot.position.set(0, y + SHELF_T + LEVEL_H / 2, 0);
+            slot.castShadow = true;
+            slot.receiveShadow = true;
+            slot.userData = {
+                isLevel:    true,
+                plotId:     plot.id,
+                plotName:   plot.shelf_number,
+                level:      ld.level,
+                status:     ld.status,
+                cropName:   ld.crop_name,
+                plateCount: ld.plate_count || 0,
+            };
+            group.add(slot);
+            plotMeshes.push(slot);
+
+            // 作物オブジェクト（スロット底面から生やす）
+            if (hasCrop) {
+                addCropObject(group, ld.status, y + SHELF_T, LEVEL_H);
+            }
+        });
+
+        scene.add(group);
+
+        // ビルボードラベル（Spriteは自動でカメラ向き）
+        var label = makeBillboard(plot.shelf_number);
+        label.position.set(bx, totalH + 0.7, bz);
+        scene.add(label);
     });
-    
-    console.log(`Created ${sections.length} sections`);
 }
 
-// 区画ラベルの作成
-function createSectionLabel(text, x, y, z) {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 256;
-    canvas.height = 128;
-    
-    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.fillStyle = '#333333';
-    context.font = 'bold 32px Arial';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(text, canvas.width / 2, canvas.height / 2);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const labelMaterial = new THREE.MeshBasicMaterial({ 
-        map: texture, 
-        transparent: true 
-    });
-    const labelGeometry = new THREE.PlaneGeometry(2, 1);
-    const labelMesh = new THREE.Mesh(labelGeometry, labelMaterial);
-    
-    labelMesh.position.set(x, y, z);
-    labelMesh.lookAt(camera.position);
-    
-    scene.add(labelMesh);
+// 作物オブジェクト（スロット内に植物を配置）
+// baseY: スロット底面のY座標, slotH: スロットの高さ
+function addCropObject(group, status, baseY, slotH) {
+    // stemH/leafR をスロット高さに対する割合で指定
+    var frac = {
+        sowing:        { ratio: 0.45, stems: 4,  spread: 0.30, leafRatio: 0.12, leafColor: 0x9ccc65, stemColor: 0x558b2f },
+        pre_planted:   { ratio: 0.60, stems: 5,  spread: 0.38, leafRatio: 0.15, leafColor: 0x66bb6a, stemColor: 0x388e3c },
+        planted:       { ratio: 0.80, stems: 6,  spread: 0.42, leafRatio: 0.18, leafColor: 0x43a047, stemColor: 0x2e7d32 },
+        harvest_ready: { ratio: 0.92, stems: 7,  spread: 0.46, leafRatio: 0.22, leafColor: 0x2e7d32, stemColor: 0x1b5e20 },
+    };
+    var f       = frac[status] || frac.planted;
+    var stemH   = slotH * f.ratio;
+    var stemR   = 0.028;
+    var leafR   = slotH * f.leafRatio;
+
+    for (var i = 0; i < f.stems; i++) {
+        var angle = (i / f.stems) * Math.PI * 2;
+        var ox = Math.cos(angle) * f.spread;
+        var oz = Math.sin(angle) * f.spread;
+
+        // 茎
+        var stem = new THREE.Mesh(
+            new THREE.CylinderGeometry(stemR * 0.5, stemR, stemH, 5),
+            new THREE.MeshLambertMaterial({ color: f.stemColor })
+        );
+        stem.position.set(ox, baseY + stemH / 2, oz);
+        stem.castShadow = true;
+        group.add(stem);
+
+        // 葉（扁平な球）
+        var leaf = new THREE.Mesh(
+            new THREE.SphereGeometry(leafR, 7, 5),
+            new THREE.MeshLambertMaterial({ color: f.leafColor })
+        );
+        leaf.scale.set(1.4, 0.65, 1.4);
+        leaf.position.set(ox, baseY + stemH + leafR * 0.5, oz);
+        leaf.castShadow = true;
+        group.add(leaf);
+    }
 }
 
-// 作物オブジェクトの作成
-function createCropObject(cropName, x, y, z, baseColor) {
-    // 簡単な植物のような形状を作成
-    const trunkGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.8);
-    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, y, z);
-    trunk.castShadow = true;
-    scene.add(trunk);
-    
-    // 葉っぱ部分
-    const leavesGeometry = new THREE.SphereGeometry(0.8, 8, 6);
-    const leavesMaterial = new THREE.MeshLambertMaterial({ color: baseColor });
-    const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
-    leaves.position.set(x, y + 0.6, z);
-    leaves.castShadow = true;
-    scene.add(leaves);
+// ビルボードラベル
+function makeBillboard(text) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 256, 64, 10);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 32);
+    var tex = new THREE.CanvasTexture(canvas);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+    sprite.scale.set(2.2, 0.55, 1);
+    return sprite;
 }
 
 // インタラクション設定
 function setupInteraction() {
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
-    
-    const container = document.getElementById('three-d-container-scene');
-    
+    var container = document.getElementById('three-d-container-scene');
     container.addEventListener('mousemove', onMouseMove);
     container.addEventListener('click', onMouseClick);
 }
 
-// マウス移動イベント
+var statusLabel = {
+    empty: '空き', sowing: '播種済み', pre_planted: '仮植済み',
+    planted: '定植済み', harvest_ready: '収穫可能', harvested: '収穫済み',
+};
+
 function onMouseMove(event) {
-    const container = document.getElementById('three-d-container-scene');
-    const rect = container.getBoundingClientRect();
-    
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
+    var container = document.getElementById('three-d-container-scene');
+    var rect = container.getBoundingClientRect();
+    mouse.x =  ((event.clientX - rect.left) / rect.width)  * 2 - 1;
+    mouse.y = -((event.clientY - rect.top)  / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(sections);
-    
-    const tooltip = document.getElementById('shelf-tooltip');
-    
-    if (intersects.length > 0) {
-        const intersected = intersects[0].object;
-        const userData = intersected.userData;
-        
-        if (userData.isSection) {
-            // ツールチップ表示
-            tooltip.style.display = 'block';
-            tooltip.style.left = event.clientX + 10 + 'px';
-            tooltip.style.top = event.clientY - 10 + 'px';
-            
-            tooltip.querySelector('.tooltip-content').innerHTML = `
-                <strong>${userData.sectionName}</strong><br>
-                作物: ${userData.cropName}<br>
-                位置: 行${userData.row}, 列${userData.column}
-            `;
-            
-            container.style.cursor = 'pointer';
-        }
+    var hits    = raycaster.intersectObjects(plotMeshes);
+    var tooltip = document.getElementById('shelf-tooltip');
+    if (hits.length > 0) {
+        var d = hits[0].object.userData;
+        var label = statusLabel[d.status] || d.status;
+        var html  = '<strong>' + d.plotName + '</strong> ' + d.level + '段<br>状態: ' + label;
+        if (d.cropName && d.cropName !== '空き') html += '<br>作物: ' + d.cropName;
+        if (d.plateCount > 0) html += '<br>プレート: ' + d.plateCount + '枚';
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 12) + 'px';
+        tooltip.style.top  = (event.clientY - 12) + 'px';
+        tooltip.querySelector('.tooltip-content').innerHTML = html;
+        container.style.cursor = 'pointer';
     } else {
         tooltip.style.display = 'none';
         container.style.cursor = 'default';
     }
 }
 
-// マウスクリックイベント
 function onMouseClick(event) {
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(sections);
-    
-    if (intersects.length > 0) {
-        const intersected = intersects[0].object;
-        const userData = intersected.userData;
-        
-        if (userData.isSection) {
-            // 区画詳細ページに遷移
-            window.location.href = `/cultivation/sections/${userData.sectionId}/`;
-        }
+    var hits = raycaster.intersectObjects(plotMeshes);
+    if (hits.length > 0) {
+        var d = hits[0].object.userData;
+        if (d.plotId) window.location.href = '/cultivation/plots/' + d.plotId + '/';
     }
 }
 
-// 3D制御機能の実装
-let autoRotateEnabled = false;
-let flyModeEnabled = false;
-
-// カメラ視点の設定
+// カメラ視点
 function setCameraView(viewType) {
     if (!camera || !controls) return;
-    
-    const distance = 30;
-    let position, target;
-    
-    switch(viewType) {
-        case 'top':
-            position = { x: 0, y: distance, z: 0 };
-            target = { x: 0, y: 0, z: 0 };
-            updateCameraInfo('上面図');
-            break;
-        case 'front':
-            position = { x: 0, y: 10, z: distance };
-            target = { x: 0, y: 5, z: 0 };
-            updateCameraInfo('正面図');
-            break;
-        case 'side':
-            position = { x: distance, y: 10, z: 0 };
-            target = { x: 0, y: 5, z: 0 };
-            updateCameraInfo('側面図');
-            break;
-        default:
-            position = { x: 15, y: 15, z: 15 };
-            target = { x: 0, y: 5, z: 0 };
-            updateCameraInfo('デフォルト');
-    }
-    
-    // スムーズなカメラ移動
-    animateCamera(position, target);
+    var dist = 30;
+    var views = {
+        top:     { pos: {x:0, y:dist, z:0.01}, tgt: {x:0, y:0, z:0},    label: '上面図' },
+        front:   { pos: {x:0, y:8,    z:dist}, tgt: {x:0, y:4, z:0},    label: '正面図' },
+        side:    { pos: {x:dist, y:8, z:0},    tgt: {x:0, y:4, z:0},    label: '側面図' },
+        'default': { pos: {x:20, y:16, z:20},  tgt: {x:0, y:3, z:0},   label: 'デフォルト' },
+    };
+    var v = views[viewType] || views['default'];
+    animateCamera(v.pos, v.tgt);
+    updateCameraInfo(v.label);
 }
 
-// カメラアニメーション
-function animateCamera(targetPosition, targetLookAt, duration = 1000) {
+function animateCamera(tPos, tLook, duration) {
+    duration = duration || 800;
     if (!camera || !controls) return;
-    
-    const startPosition = camera.position.clone();
-    const startLookAt = controls.target.clone();
-    const startTime = Date.now();
-    
-    function animate() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function (easeInOutCubic)
-        const easeProgress = progress < 0.5 
-            ? 4 * progress * progress * progress 
-            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-        
-        // 位置の補間
-        camera.position.lerpVectors(startPosition, new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z), easeProgress);
-        controls.target.lerpVectors(startLookAt, new THREE.Vector3(targetLookAt.x, targetLookAt.y, targetLookAt.z), easeProgress);
-        
+    var startPos  = camera.position.clone();
+    var startLook = controls.target.clone();
+    var t0 = Date.now();
+    function step() {
+        var p = Math.min((Date.now() - t0) / duration, 1);
+        var e = p < 0.5 ? 4*p*p*p : 1 - Math.pow(-2*p+2, 3)/2;
+        camera.position.lerpVectors(startPos, new THREE.Vector3(tPos.x, tPos.y, tPos.z), e);
+        controls.target.lerpVectors(startLook, new THREE.Vector3(tLook.x, tLook.y, tLook.z), e);
         controls.update();
-        
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        }
+        if (p < 1) requestAnimationFrame(step);
     }
-    
-    animate();
+    step();
 }
 
-// ズーム機能
-function zoomCamera(direction) {
+function zoomCamera(dir) {
     if (!camera || !controls) return;
-    
-    const zoomStep = 2;
-    const currentDistance = camera.position.distanceTo(controls.target);
-    
-    if (direction === 'in' && currentDistance > 5) {
-        const factor = currentDistance / (currentDistance + zoomStep);
-        camera.position.lerp(controls.target, 1 - factor);
-    } else if (direction === 'out' && currentDistance < 50) {
-        const direction = camera.position.clone().sub(controls.target).normalize();
-        camera.position.add(direction.multiplyScalar(zoomStep));
+    var step = 3;
+    var d = camera.position.distanceTo(controls.target);
+    if (dir === 'in' && d > 3) {
+        camera.position.lerp(controls.target, 1 - d/(d + step));
+    } else if (dir === 'out' && d < 80) {
+        camera.position.add(camera.position.clone().sub(controls.target).normalize().multiplyScalar(step));
     }
-    
     controls.update();
 }
 
-// 全体表示（すべての区画が見えるようにフィット）
 function focusAll() {
-    if (!camera || !controls || !scene) return;
-    
-    // 全区画の境界ボックスを計算
-    const box = new THREE.Box3();
-    scene.traverse((child) => {
-        if (child.userData && child.userData.isSection) {
-            box.expandByObject(child);
-        }
-    });
-    
+    if (!scene || !camera || !controls) return;
+    var box = new THREE.Box3();
+    plotMeshes.forEach(function(m) { box.expandByObject(m); });
     if (box.isEmpty()) return;
-    
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const distance = maxDim * 1.5;
-    
-    const position = {
-        x: center.x + distance * 0.7,
-        y: center.y + distance * 0.7,
-        z: center.z + distance * 0.7
-    };
-    
-    animateCamera(position, center);
+    var center = box.getCenter(new THREE.Vector3());
+    var size   = box.getSize(new THREE.Vector3());
+    var dist   = Math.max(size.x, size.y, size.z) * 1.8;
+    animateCamera({ x: center.x + dist*0.6, y: center.y + dist*0.6, z: center.z + dist*0.6 }, center);
     updateCameraInfo('全体表示');
 }
 
-// 自動回転の切り替え
 function toggleAutoRotate() {
     if (!controls) return;
-    
     autoRotateEnabled = !autoRotateEnabled;
     controls.autoRotate = autoRotateEnabled;
-    controls.autoRotateSpeed = 1.0;
-    
-    const btn = document.getElementById('auto-rotate-btn');
-    if (btn) {
-        if (autoRotateEnabled) {
-            btn.classList.add('active');
-            btn.style.backgroundColor = '#0d6efd';
-            btn.style.color = 'white';
-        } else {
-            btn.classList.remove('active');
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-        }
-    }
+    controls.autoRotateSpeed = 1.5;
+    var btn = document.getElementById('auto-rotate-btn');
+    if (btn) { btn.style.backgroundColor = autoRotateEnabled ? '#0d6efd' : ''; btn.style.color = autoRotateEnabled ? '#fff' : ''; }
 }
 
-// フライモードの切り替え
 function toggleFlyMode() {
     if (!controls) return;
-    
     flyModeEnabled = !flyModeEnabled;
-    
-    const btn = document.getElementById('fly-mode-btn');
-    if (btn) {
-        if (flyModeEnabled) {
-            btn.classList.add('active');
-            btn.style.backgroundColor = '#0d6efd';
-            btn.style.color = 'white';
-            controls.enablePan = true;
-            controls.enableRotate = true;
-            controls.enableZoom = true;
-            controls.mouseButtons = {
-                LEFT: THREE.MOUSE.PAN,
-                MIDDLE: THREE.MOUSE.DOLLY,
-                RIGHT: THREE.MOUSE.ROTATE
-            };
-        } else {
-            btn.classList.remove('active');
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-            controls.mouseButtons = {
-                LEFT: THREE.MOUSE.ROTATE,
-                MIDDLE: THREE.MOUSE.DOLLY,
-                RIGHT: THREE.MOUSE.PAN
-            };
-        }
-    }
+    var btn = document.getElementById('fly-mode-btn');
+    if (btn) { btn.style.backgroundColor = flyModeEnabled ? '#0d6efd' : ''; btn.style.color = flyModeEnabled ? '#fff' : ''; }
+    controls.mouseButtons = flyModeEnabled
+        ? { LEFT: THREE.MOUSE.PAN,    MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+        : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 }
 
-// キーボードショートカットの実装
-function setupKeyboardControls() {
-    document.addEventListener('keydown', (event) => {
-        // 入力フィールドにフォーカスがある場合はスキップ
-        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-            return;
-        }
-        
-        // 3D表示中のみ有効
-        const threeDContainer = document.getElementById('three-d-container');
-        if (!threeDContainer || threeDContainer.style.display === 'none') {
-            return;
-        }
-        
-        switch(event.key.toLowerCase()) {
-            case 't':
-                event.preventDefault();
-                setCameraView('top');
-                break;
-            case 'f':
-                event.preventDefault();
-                setCameraView('front');
-                break;
-            case 's':
-                event.preventDefault();
-                setCameraView('side');
-                break;
-            case '+':
-            case '=':
-                event.preventDefault();
-                zoomCamera('in');
-                break;
-            case '-':
-                event.preventDefault();
-                zoomCamera('out');
-                break;
-            case 'a':
-                event.preventDefault();
-                focusAll();
-                break;
-            case 'r':
-                event.preventDefault();
-                setCameraView('default');
-                break;
-            case ' ':
-                event.preventDefault();
-                toggleAutoRotate();
-                break;
-        }
-        
-        // Ctrlキーでフライモード
-        if (event.ctrlKey && !event.repeat) {
-            event.preventDefault();
-            toggleFlyMode();
-        }
-    });
-    
-    // Ctrlキーが離されたときにフライモードを解除
-    document.addEventListener('keyup', (event) => {
-        if (event.key === 'Control' && flyModeEnabled) {
-            toggleFlyMode();
-        }
-    });
-}
-
-// 3D制御ボタンのイベントリスナー設定
-function setup3DControlEvents() {
-    // 視点コントロール
-    const viewTopBtn = document.getElementById('view-top-btn');
-    const viewFrontBtn = document.getElementById('view-front-btn');
-    const viewSideBtn = document.getElementById('view-side-btn');
-    
-    if (viewTopBtn) viewTopBtn.addEventListener('click', () => setCameraView('top'));
-    if (viewFrontBtn) viewFrontBtn.addEventListener('click', () => setCameraView('front'));
-    if (viewSideBtn) viewSideBtn.addEventListener('click', () => setCameraView('side'));
-    
-    // カメラコントロール
-    const zoomInBtn = document.getElementById('zoom-in-3d-btn');
-    const zoomOutBtn = document.getElementById('zoom-out-3d-btn');
-    const focusAllBtn = document.getElementById('focus-all-btn');
-    const resetBtn = document.getElementById('reset-3d-btn');
-    
-    if (zoomInBtn) zoomInBtn.addEventListener('click', () => zoomCamera('in'));
-    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => zoomCamera('out'));
-    if (focusAllBtn) focusAllBtn.addEventListener('click', focusAll);
-    if (resetBtn) resetBtn.addEventListener('click', () => setCameraView('default'));
-    
-    // アニメーションコントロール
-    const autoRotateBtn = document.getElementById('auto-rotate-btn');
-    const flyModeBtn = document.getElementById('fly-mode-btn');
-    
-    if (autoRotateBtn) autoRotateBtn.addEventListener('click', toggleAutoRotate);
-    if (flyModeBtn) flyModeBtn.addEventListener('click', toggleFlyMode);
-}
-
-// コントロールボタンの設定
 function setupControls() {
-    // 新しい3D制御システムを初期化
     setup3DControlEvents();
-    
-    // キーボードショートカットを初期化
     setupKeyboardControls();
-    
-    // 統計情報を更新
     updateStats();
 }
 
-// アニメーションループ
+function setup3DControlEvents() {
+    var map = {
+        'view-top-btn':   function() { setCameraView('top'); },
+        'view-front-btn': function() { setCameraView('front'); },
+        'view-side-btn':  function() { setCameraView('side'); },
+        'zoom-in-3d-btn': function() { zoomCamera('in'); },
+        'zoom-out-3d-btn':function() { zoomCamera('out'); },
+        'focus-all-btn':  focusAll,
+        'reset-3d-btn':   function() { setCameraView('default'); },
+        'auto-rotate-btn':toggleAutoRotate,
+        'fly-mode-btn':   toggleFlyMode,
+    };
+    Object.keys(map).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('click', map[id]);
+    });
+}
+
+function setupKeyboardControls() {
+    document.addEventListener('keydown', function(e) {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+        var c = document.getElementById('three-d-container');
+        if (!c || c.style.display === 'none') return;
+        var keyMap = { t: function(){setCameraView('top');}, f: function(){setCameraView('front');},
+            s: function(){setCameraView('side');}, a: focusAll, r: function(){setCameraView('default');},
+            ' ': toggleAutoRotate, '+': function(){zoomCamera('in');}, '=': function(){zoomCamera('in');},
+            '-': function(){zoomCamera('out');} };
+        if (keyMap[e.key.toLowerCase()]) { e.preventDefault(); keyMap[e.key.toLowerCase()](); }
+        if (e.ctrlKey && !e.repeat) { e.preventDefault(); toggleFlyMode(); }
+    });
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Control' && flyModeEnabled) toggleFlyMode();
+    });
+}
+
 function animate() {
     animationId = requestAnimationFrame(animate);
-    
-    // OrbitControlsの自動回転を使用（新しいシステム）
-    if (controls) {
-        controls.update();
-    }
-    
-    if (renderer && scene && camera) {
-        renderer.render(scene, camera);
-    }
+    if (controls) controls.update();
+    if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
-// 統計情報の更新
 function updateStats() {
-    const totalSectionsElement = document.getElementById('total-sections');
-    if (totalSectionsElement) {
-        totalSectionsElement.textContent = sections.length;
+    var data = window.plotsData;
+    if (!data || !data.plots) return;
+    var totalEl  = document.getElementById('total-sections');
+    var activeEl = document.getElementById('active-sections');
+    if (totalEl) totalEl.textContent = data.plots.length + '棚';
+    if (activeEl) {
+        var active = 0;
+        data.plots.forEach(function(p) {
+            (p.level_details || []).forEach(function(l) {
+                if (l.status !== 'empty' && l.status !== 'harvested') active++;
+            });
+        });
+        activeEl.textContent = active + '段';
     }
 }
 
-// カメラ情報の更新
-function updateCameraInfo(viewName) {
-    const cameraInfoElement = document.getElementById('camera-info');
-    if (cameraInfoElement) {
-        cameraInfoElement.textContent = viewName;
-    }
+function updateCameraInfo(name) {
+    var el = document.getElementById('camera-info');
+    if (el) el.textContent = name;
 }
 
-// ウィンドウリサイズ対応
 function onWindowResize() {
-    const container = document.getElementById('three-d-container-scene');
+    var container = document.getElementById('three-d-container-scene');
     if (!container || !camera || !renderer) return;
-    
     camera.aspect = container.offsetWidth / container.offsetHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.offsetWidth, container.offsetHeight);
 }
-
 window.addEventListener('resize', onWindowResize);
 
-// OrbitControls がロードされるまで待機
 function waitForOrbitControls(callback) {
-    if (window.THREE && window.THREE.OrbitControls) {
-        callback();
-    } else {
-        setTimeout(() => waitForOrbitControls(callback), 100);
-    }
+    if (window.THREE && window.THREE.OrbitControls) callback();
+    else setTimeout(function() { waitForOrbitControls(callback); }, 100);
 }
 
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Layout detail page loaded');
-    
-    // 初期表示を2Dに設定
     window.switchView('2d');
-    
-    // 2D/3Dボタンのイベントリスナーを追加
-    const view2dBtn = document.getElementById('view-2d');
-    const view3dBtn = document.getElementById('view-3d');
-    
-    if (view2dBtn) {
-        view2dBtn.addEventListener('click', function() {
-            console.log('2D button clicked');
-            window.switchView('2d');
-        });
-    }
-    
-    if (view3dBtn) {
-        view3dBtn.addEventListener('click', function() {
-            console.log('3D button clicked');
-            window.switchView('3d');
-        });
-    }
-    
-    // OrbitControlsのロードを待ってから初期化
-    waitForOrbitControls(() => {
-        console.log('OrbitControls loaded, ready for 3D initialization');
-    });
+
+    var v2 = document.getElementById('view-2d');
+    var v3 = document.getElementById('view-3d');
+    if (v2) v2.addEventListener('click', function() { window.switchView('2d'); });
+    if (v3) v3.addEventListener('click', function() { window.switchView('3d'); });
+
+    waitForOrbitControls(function() {});
 });
 </script>
 {% endblock %} 

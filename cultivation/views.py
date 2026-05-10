@@ -2,9 +2,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.core.paginator import Paginator
+from django.urls import reverse
 import json
+from urllib.parse import urlencode
 from .models import CultivationLayout, CultivationSection, CultivationPlan, CultivationLog, Crop, Plot, ShelfCrop, CultivationAlert, HarvestTarget
 from .forms import CultivationLayoutForm, CultivationPlanForm, CultivationLogForm, PlotForm, ShelfCropForm, CultivationSectionForm, CropImageForm, CropForm, PlotInlineForm, BulkAddLanesForm
 from .utils import process_import_file
@@ -71,7 +74,32 @@ def get_plot_level_details(plot):
 
 def is_admin_user(user):
     """管理者権限をチェックする関数"""
-    return user.is_authenticated and (user.is_staff or user.is_superuser)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+
+    from shift_management.models import Staff
+    return Staff.objects.filter(
+        user=user,
+        role_type__in=['manager', 'global_admin'],
+        is_active=True,
+        approval_status='approved',
+    ).exists()
+
+
+def redirect_to_organization_select(request):
+    """組織選択後に元の栽培管理ページへ戻す"""
+    url = reverse('shift_management:organization_select')
+    return redirect(f'{url}?{urlencode({"next": request.get_full_path()})}')
+
+
+def crop_queryset_for_organization(organization):
+    """現在組織で利用できる作物マスタを返す"""
+    crops = Crop.objects.all()
+    if organization:
+        crops = crops.filter(Q(organization=organization) | Q(organization__isnull=True))
+    return crops.order_by('name')
 
 def cultivation_top(request):
     """栽培計画トップページ"""
@@ -80,7 +108,7 @@ def cultivation_top(request):
 
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     # 組織フィルタリング
     if is_global_admin(request.user):
@@ -186,7 +214,7 @@ def _layout_list_unused(request):
 
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     # 組織フィルタリング
     if is_global_admin(request.user):
@@ -271,7 +299,7 @@ def layout_create(request):
 
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     if request.method == 'POST':
         form = CultivationLayoutForm(request.POST, request.FILES)
@@ -506,7 +534,7 @@ def plot_management(request):
 
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     # レイアウトごとに棚を分類
     layout_id = request.GET.get('layout_id')
@@ -1022,9 +1050,10 @@ def section_detail(request, section_id):
 def plan_create(request, section_id):
     """栽培計画作成"""
     section = get_object_or_404(CultivationSection, id=section_id)
+    organization = section.layout.organization if section.layout else get_current_organization(request)
     
     if request.method == 'POST':
-        form = CultivationPlanForm(request.POST)
+        form = CultivationPlanForm(request.POST, organization=organization)
         if form.is_valid():
             plan = form.save(commit=False)
             plan.section = section
@@ -1032,7 +1061,7 @@ def plan_create(request, section_id):
             messages.success(request, f'{section.name}の栽培計画を作成しました')
             return redirect('cultivation:section_detail', section_id=section.id)
     else:
-        form = CultivationPlanForm()
+        form = CultivationPlanForm(organization=organization)
     
     context = {
         'form': form,
@@ -1044,15 +1073,16 @@ def plan_create(request, section_id):
 def plan_edit(request, plan_id):
     """栽培計画編集"""
     plan = get_object_or_404(CultivationPlan, id=plan_id)
+    organization = plan.section.layout.organization if plan.section and plan.section.layout else get_current_organization(request)
     
     if request.method == 'POST':
-        form = CultivationPlanForm(request.POST, instance=plan)
+        form = CultivationPlanForm(request.POST, instance=plan, organization=organization)
         if form.is_valid():
             form.save()
             messages.success(request, f'{plan.section.name}の栽培計画を更新しました')
             return redirect('cultivation:section_detail', section_id=plan.section.id)
     else:
-        form = CultivationPlanForm(instance=plan)
+        form = CultivationPlanForm(instance=plan, organization=organization)
     
     context = {
         'form': form,
@@ -1114,6 +1144,7 @@ def section_crop_manage(request, section_id, level):
     section = get_object_or_404(CultivationSection, id=section_id)
     plot = section.plot
     level = int(level)
+    current_organization = get_current_organization(request) or section.layout.organization
     
     # 該当段の現在の作物を取得（最新のもの）
     current_crop = plot.shelf_crops.filter(level=level).order_by('-planting_date').first()
@@ -1130,7 +1161,7 @@ def section_crop_manage(request, section_id, level):
             if crop_id:
                 from datetime import datetime, timedelta
                 
-                crop = get_object_or_404(Crop, id=crop_id)
+                crop = get_object_or_404(crop_queryset_for_organization(current_organization), id=crop_id)
                 # 作物名は登録済み作物から自動取得
                 variety = crop.name
                 planting_date = datetime.strptime(planting_date, '%Y-%m-%d').date() if planting_date else timezone.now().date()
@@ -1144,8 +1175,8 @@ def section_crop_manage(request, section_id, level):
                 # 新しい作物を作成
                 ShelfCrop.objects.create(
                     plot=plot,
-                    crop=crop,
                     variety=variety,
+                    organization=current_organization or plot.organization,
                     level=level,
                     planting_date=planting_date,
                     expected_harvest_date=expected_harvest_date
@@ -1162,7 +1193,7 @@ def section_crop_manage(request, section_id, level):
         return redirect('cultivation:section_detail', section_id=section.id)
     
     # 利用可能な作物リストを取得
-    available_crops = Crop.objects.all()
+    available_crops = crop_queryset_for_organization(current_organization)
     
     context = {
         'section': section,
@@ -1910,7 +1941,7 @@ def plot_create(request):
 
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     if request.method == 'POST':
         form = PlotForm(request.POST)
@@ -2180,7 +2211,15 @@ def visual_section_create(request, layout_id):
 @user_passes_test(is_admin_user, login_url='/login/')
 def crop_list(request):
     """作物名一覧表示"""
-    crops = Crop.objects.all().order_by('name')
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect_to_organization_select(request)
+
+    if is_global_admin(request.user):
+        crops = Crop.objects.select_related('organization').all().order_by('organization__name', 'name')
+    else:
+        crops = crop_queryset_for_organization(current_organization).select_related('organization')
     
     # 検索機能
     search_query = request.GET.get('search', '')
@@ -2195,6 +2234,7 @@ def crop_list(request):
     context = {
         'crops': crops,
         'search_query': search_query,
+        'show_organization': is_global_admin(request.user),
     }
     return render(request, 'cultivation/crop_list.html', context)
 
@@ -2202,10 +2242,17 @@ def crop_list(request):
 @user_passes_test(is_admin_user, login_url='/login/')
 def crop_create_form(request):
     """作物名新規作成"""
+    current_organization = get_current_organization(request)
+    if not current_organization:
+        messages.info(request, '組織を選択してください。')
+        return redirect_to_organization_select(request)
+
     if request.method == 'POST':
         form = CropForm(request.POST)
         if form.is_valid():
-            crop = form.save()
+            crop = form.save(commit=False)
+            crop.organization = current_organization
+            crop.save()
             messages.success(request, f'作物「{crop.name}」を追加しました')
             return redirect('cultivation:crop_list')
     else:
@@ -2222,8 +2269,10 @@ def crop_create_form(request):
 @user_passes_test(is_admin_user, login_url='/login/')
 def crop_edit_form(request, crop_id):
     """作物名編集"""
+    current_organization = get_current_organization(request)
+    crops = Crop.objects.all() if is_global_admin(request.user) else crop_queryset_for_organization(current_organization)
     try:
-        crop = get_object_or_404(Crop, id=crop_id)
+        crop = get_object_or_404(crops, id=crop_id)
     except Crop.DoesNotExist:
         messages.error(request, f'作物ID {crop_id} が見つかりません。既に削除されている可能性があります。')
         return redirect('cultivation:crop_list')
@@ -2249,7 +2298,9 @@ def crop_edit_form(request, crop_id):
 @user_passes_test(is_admin_user, login_url='/login/')
 def crop_delete(request, crop_id):
     """作物名削除"""
-    crop = get_object_or_404(Crop, id=crop_id)
+    current_organization = get_current_organization(request)
+    crops = Crop.objects.all() if is_global_admin(request.user) else crop_queryset_for_organization(current_organization)
+    crop = get_object_or_404(crops, id=crop_id)
     
     # 使用状況を確認
     usage_count = CultivationPlan.objects.filter(crop=crop).count()
@@ -2855,6 +2906,7 @@ def crop_create_for_level(request, plot_id, level):
     """特定レベルへの作物の新規作成"""
     from .models import Plot, ShelfCrop
     plot = get_object_or_404(Plot, id=plot_id)
+    current_organization = get_current_organization(request) or plot.organization
     
     # レベルが有効な範囲内かチェック
     if level < 1 or level > plot.levels:
@@ -2883,10 +2935,9 @@ def crop_create_for_level(request, plot_id, level):
 
         if crop_id:
             try:
-                selected_crop = Crop.objects.get(id=crop_id)
+                selected_crop = crop_queryset_for_organization(current_organization).get(id=crop_id)
                 variety = selected_crop.name
 
-                current_organization = get_current_organization(request)
                 ShelfCrop.objects.create(
                     plot=plot,
                     level=level,
@@ -2913,7 +2964,7 @@ def crop_create_for_level(request, plot_id, level):
         form_data = {}
 
     # 利用可能な作物を取得
-    available_crops = Crop.objects.all().order_by('name')
+    available_crops = crop_queryset_for_organization(current_organization)
 
     context = {
         'plot': plot,
@@ -3142,17 +3193,25 @@ def schedule_view_plot(request, plot_id):
 def schedule_templates(request):
     """栽培テンプレート管理画面"""
     from .models import CropTemplate, Crop, CropProcess
+    current_organization = get_current_organization(request)
+    if not current_organization and not is_global_admin(request.user):
+        messages.info(request, '組織を選択してください。')
+        return redirect_to_organization_select(request)
 
     # すべてのテンプレートを取得
     templates = CropTemplate.objects.all().prefetch_related(
         'processes', 'processes__process'
     ).select_related('crop').order_by('crop__name', 'name')
+    if not is_global_admin(request.user):
+        templates = templates.filter(Q(crop__organization=current_organization) | Q(crop__organization__isnull=True))
 
     # 作物マスターを取得（テンプレート作成用）
-    crops = Crop.objects.all().order_by('name')
+    crops = Crop.objects.all().order_by('name') if is_global_admin(request.user) else crop_queryset_for_organization(current_organization)
 
     # 工程マスターを取得（テンプレート作成用）
     processes = CropProcess.objects.all().order_by('display_order')
+    if not is_global_admin(request.user):
+        processes = processes.filter(Q(organization=current_organization) | Q(organization__isnull=True))
 
     context = {
         'templates': templates,
@@ -3252,7 +3311,7 @@ def gantt_chart_view(request, layout_id=None):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     # クエリパラメータから日付範囲を取得（デフォルトは今日から90日間）
     today = datetime.now().date()
@@ -3551,7 +3610,7 @@ def shelf_grid_view(request, layout_id=None):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     today = date_type.today()
 
@@ -3672,7 +3731,7 @@ def lane_master_settings(request, layout_id=None):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     # レイアウト一覧
     if is_global_admin(request.user):
@@ -3900,7 +3959,7 @@ def alert_list(request):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     today = date_type.today()
 
@@ -3970,7 +4029,7 @@ def kpi_dashboard(request):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     today = date_type.today()
     year  = int(request.GET.get('year',  today.year))
@@ -4053,7 +4112,7 @@ def kpi_dashboard(request):
 
     # 登録済み品種サジェスト（目標入力フォーム用）
     known_varieties = list(
-        Crop.objects.values_list('name', flat=True).order_by('name')
+        crop_queryset_for_organization(current_organization).values_list('name', flat=True).order_by('name')
     )
 
     # POST: 目標を保存
@@ -4101,7 +4160,8 @@ def variety_master_api(request):
     """品種マスタ一覧をJSON返却（セルモーダルの自動補完・標準日数取得用）"""
     from django.http import JsonResponse
     try:
-        crops = Crop.objects.all().order_by('name')
+        current_organization = get_current_organization(request)
+        crops = crop_queryset_for_organization(current_organization)
         data = [
             {
                 'name': c.name,
@@ -4371,7 +4431,7 @@ def monthly_report(request):
     current_organization = get_current_organization(request)
     if not current_organization and not is_global_admin(request.user):
         messages.info(request, '組織を選択してください。')
-        return redirect('shift_management:organization_select')
+        return redirect_to_organization_select(request)
 
     context = _build_monthly_report_context(request, year, month)
     return render(request, 'cultivation/monthly_report.html', context)
