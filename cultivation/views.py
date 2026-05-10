@@ -101,6 +101,97 @@ def crop_queryset_for_organization(organization):
         crops = crops.filter(Q(organization=organization) | Q(organization__isnull=True))
     return crops.order_by('name')
 
+
+def build_excel_floor_plan_rows(floor_plan_data):
+    """Excelのレーン表に近い行列データを作る"""
+    plots = sorted(
+        floor_plan_data.get('plots', []),
+        key=lambda item: (
+            item.get('plot', {}).get('y_position') or 0,
+            item.get('plot', {}).get('x_position') or 0,
+            item.get('shelf_number') or '',
+        )
+    )
+
+    rows = []
+    current_y = object()
+    current_row = None
+    for plot_info in plots:
+        y_position = plot_info.get('plot', {}).get('y_position') or 0
+        if y_position != current_y:
+            current_y = y_position
+            current_row = {
+                'y_position': y_position,
+                'plots': [],
+            }
+            rows.append(current_row)
+        current_row['plots'].append(plot_info)
+
+    max_columns = max((len(row['plots']) for row in rows), default=3)
+    return rows, max(max_columns, 3)
+
+
+def apply_floor_plan_crop_info(level_info, crop):
+    """棚配置平面図向けに段ごとの作物表示情報を追加する"""
+    status_labels = {
+        'empty': '空き',
+        'sowing': '播種',
+        'pre_planted': '仮植',
+        'planted': '定植',
+        'harvest_ready': '収穫',
+        'harvested': '収穫済',
+        'overdue': '期限超過',
+    }
+
+    if not crop:
+        level_info.update({
+            'crop_id': None,
+            'plate_count': 0,
+            'stage_status': 'empty',
+            'status_label': status_labels['empty'],
+            'today_actions': [],
+            'date_items': [],
+        })
+        return level_info
+
+    stage_status = crop.get_growth_status()
+    if crop.days_overdue() > 0:
+        stage_status = 'overdue'
+
+    today_actions = crop.is_today_action()
+    action_labels = []
+    if today_actions['is_sowing_today']:
+        action_labels.append('播種')
+    if today_actions['is_pre_planting_today']:
+        action_labels.append('仮植')
+    if today_actions['is_planting_today']:
+        action_labels.append('定植')
+    if today_actions['is_harvest_today']:
+        action_labels.append('収穫')
+
+    date_items = [
+        {'label': '播', 'date': crop.sowing_date},
+        {'label': '仮', 'date': crop.pre_planting_date},
+        {'label': '定', 'date': crop.planting_date},
+        {'label': '収', 'date': crop.expected_harvest_date},
+    ]
+
+    level_info.update({
+        'crop_id': crop.id,
+        'crop_name': crop.variety,
+        'plate_count': crop.plate_count,
+        'stage_status': stage_status,
+        'status_label': status_labels.get(stage_status, '栽培中'),
+        'today_actions': action_labels,
+        'has_today_action': today_actions['any'],
+        'date_items': date_items,
+        'sowing_date': crop.sowing_date,
+        'pre_planting_date': crop.pre_planting_date,
+        'planting_date': crop.planting_date,
+        'expected_harvest_date': crop.expected_harvest_date,
+    })
+    return level_info
+
 def cultivation_top(request):
     """栽培計画トップページ"""
     # 組織フィルタリングを適用
@@ -747,8 +838,7 @@ def plot_floor_plan_with_layout(request, layout_id):
             
             if level_crops:
                 crop = level_crops[0]
-                level_info['crop_id'] = crop.id
-                level_info['crop_name'] = crop.variety
+                apply_floor_plan_crop_info(level_info, crop)
                 
                 if crop.days_until_harvest() is not None:
                     level_info['days_until_harvest'] = crop.days_until_harvest()
@@ -767,6 +857,7 @@ def plot_floor_plan_with_layout(request, layout_id):
                     level_info['status'] = 'growing'
                     growing_count += 1
             else:
+                apply_floor_plan_crop_info(level_info, None)
                 empty_count += 1
             
             # レベルのY座標を事前計算
@@ -785,10 +876,12 @@ def plot_floor_plan_with_layout(request, layout_id):
                 'shelf_number': plot.shelf_number,
                 'x_position': plot.x_position,
                 'y_position': plot.y_position,
+                'max_plates': plot.max_plates,
                 'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None,
             },
             'shelf_number': plot.shelf_number,
             'levels': plot.levels,
+            'max_plates': plot.max_plates,
             'level_details': level_details,
             'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None,
             'svg_x': svg_x,
@@ -832,9 +925,13 @@ def plot_floor_plan_with_layout(request, layout_id):
         print(traceback.format_exc())
         floor_plan_data_json = '{"plots":[]}'
 
+    excel_layout_rows, excel_layout_columns = build_excel_floor_plan_rows(floor_plan_data)
+
     context = {
         'floor_plan_data': floor_plan_data,
         'floor_plan_data_json': floor_plan_data_json,
+        'excel_layout_rows': excel_layout_rows,
+        'excel_layout_columns': excel_layout_columns,
         'statistics': statistics,
         'display_type': 'plots',
         'selected_layout': selected_layout,  # レイアウト指定
@@ -891,8 +988,7 @@ def plot_floor_plan(request):
             
             if level_crops:
                 crop = level_crops[0]
-                level_info['crop_id'] = crop.id
-                level_info['crop_name'] = crop.variety
+                apply_floor_plan_crop_info(level_info, crop)
                 
                 if crop.days_until_harvest() is not None:
                     level_info['days_until_harvest'] = crop.days_until_harvest()
@@ -911,6 +1007,7 @@ def plot_floor_plan(request):
                     level_info['status'] = 'growing'
                     growing_count += 1
             else:
+                apply_floor_plan_crop_info(level_info, None)
                 empty_count += 1
             
             # レベルのY座標を事前計算
@@ -929,10 +1026,12 @@ def plot_floor_plan(request):
                 'shelf_number': plot.shelf_number,
                 'x_position': plot.x_position,
                 'y_position': plot.y_position,
+                'max_plates': plot.max_plates,
                 'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None,
             },
             'shelf_number': plot.shelf_number,
             'levels': plot.levels,
+            'max_plates': plot.max_plates,
             'level_details': level_details,
             'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None,
             'svg_x': svg_x,
@@ -968,9 +1067,13 @@ def plot_floor_plan(request):
         print(traceback.format_exc())
         floor_plan_data_json = '{"plots":[]}'
 
+    excel_layout_rows, excel_layout_columns = build_excel_floor_plan_rows(floor_plan_data)
+
     context = {
         'floor_plan_data': floor_plan_data,
         'floor_plan_data_json': floor_plan_data_json,
+        'excel_layout_rows': excel_layout_rows,
+        'excel_layout_columns': excel_layout_columns,
         'statistics': statistics,
         'display_type': 'plots',
         'selected_layout': None,  # 全レイアウト表示

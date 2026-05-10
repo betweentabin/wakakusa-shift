@@ -5,20 +5,47 @@ console.log('Loading simple 3D functionality...');
 function switchView(viewType) {
     console.log('switchView called with:', viewType);
     
+    const viewExcelBtn = document.getElementById('view-excel');
     const view2dBtn = document.getElementById('view-2d');
     const view3dBtn = document.getElementById('view-3d');
+    const excelContainer = document.getElementById('excel-floor-container');
     const twoDContainer = document.getElementById('two-d-container');
     const threeDContainer = document.getElementById('three-d-container');
     
     console.log('Elements found:', {
+        viewExcelBtn: !!viewExcelBtn,
         view2dBtn: !!view2dBtn,
         view3dBtn: !!view3dBtn,
+        excelContainer: !!excelContainer,
         twoDContainer: !!twoDContainer,
         threeDContainer: !!threeDContainer
     });
     
-    if (viewType === '2d') {
+    if (viewType === 'excel') {
+        if (viewExcelBtn) {
+            viewExcelBtn.classList.remove('btn-outline-primary');
+            viewExcelBtn.classList.add('btn-primary');
+        }
+        if (view2dBtn) {
+            view2dBtn.classList.remove('btn-primary');
+            view2dBtn.classList.add('btn-outline-primary');
+        }
+        if (view3dBtn) {
+            view3dBtn.classList.remove('btn-primary');
+            view3dBtn.classList.add('btn-outline-primary');
+        }
+
+        if (excelContainer) excelContainer.style.display = 'block';
+        if (twoDContainer) twoDContainer.style.display = 'none';
+        if (threeDContainer) threeDContainer.style.display = 'none';
+
+        console.log('Switched to Excel floor plan view');
+    } else if (viewType === '2d') {
         // 2D表示
+        if (viewExcelBtn) {
+            viewExcelBtn.classList.remove('btn-primary');
+            viewExcelBtn.classList.add('btn-outline-primary');
+        }
         if (view2dBtn) {
             view2dBtn.classList.remove('btn-outline-primary');
             view2dBtn.classList.add('btn-primary');
@@ -28,12 +55,17 @@ function switchView(viewType) {
             view3dBtn.classList.add('btn-outline-primary');
         }
         
+        if (excelContainer) excelContainer.style.display = 'none';
         if (twoDContainer) twoDContainer.style.display = 'block';
         if (threeDContainer) threeDContainer.style.display = 'none';
         
         console.log('Switched to 2D view');
     } else if (viewType === '3d') {
         // 3D表示
+        if (viewExcelBtn) {
+            viewExcelBtn.classList.remove('btn-primary');
+            viewExcelBtn.classList.add('btn-outline-primary');
+        }
         if (view3dBtn) {
             view3dBtn.classList.remove('btn-outline-primary');
             view3dBtn.classList.add('btn-primary');
@@ -43,6 +75,7 @@ function switchView(viewType) {
             view2dBtn.classList.add('btn-outline-primary');
         }
         
+        if (excelContainer) excelContainer.style.display = 'none';
         if (twoDContainer) twoDContainer.style.display = 'none';
         if (threeDContainer) threeDContainer.style.display = 'block';
         
@@ -287,8 +320,18 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded - setting up button events');
     
     // ボタンイベント設定
+    const viewExcelBtn = document.getElementById('view-excel');
     const view2dBtn = document.getElementById('view-2d');
     const view3dBtn = document.getElementById('view-3d');
+
+    if (viewExcelBtn) {
+        viewExcelBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Excel floor plan button clicked');
+            switchView('excel');
+        });
+        console.log('Excel floor plan button event listener added');
+    }
     
     if (view2dBtn) {
         view2dBtn.addEventListener('click', function(e) {
@@ -312,8 +355,8 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('3D button not found');
     }
     
-    // 初期状態を2Dに
-    switchView('2d');
+    // 初期状態をExcel風レーン表に
+    switchView(viewExcelBtn ? 'excel' : '2d');
     
     // ドラッグ機能を設定（少し遅らせて実行）
     setTimeout(() => {

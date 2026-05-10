@@ -167,10 +167,190 @@
     .plot-group {
         cursor: pointer;
     }
+
+    .excel-floor-container {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+
+    .excel-floor-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .excel-floor-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 1.35fr) minmax(240px, 1fr) minmax(240px, 1fr);
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .excel-row-label {
+        grid-column: 1 / -1;
+        color: #6c757d;
+        font-size: 0.82rem;
+        font-weight: 700;
+        padding: 6px 2px 0;
+    }
+
+    .excel-lane-card {
+        border: 2px solid #d7dde3;
+        border-radius: 6px;
+        background: #fbfcfd;
+        overflow: hidden;
+        min-height: 170px;
+    }
+
+    .excel-lane-card.plates-14 {
+        border-color: #7b8794;
+    }
+
+    .excel-lane-card.plates-8 {
+        border-color: #9aa6b2;
+    }
+
+    .excel-lane-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #eef2f5;
+        border-bottom: 1px solid #d7dde3;
+    }
+
+    .excel-lane-title {
+        color: #263238;
+        font-weight: 800;
+        font-size: 0.95rem;
+        text-decoration: none;
+    }
+
+    .excel-lane-meta {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+    }
+
+    .excel-meta-badge {
+        border-radius: 4px;
+        background: #ffffff;
+        border: 1px solid #c7d0d9;
+        color: #37474f;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        white-space: nowrap;
+    }
+
+    .excel-level-list {
+        display: flex;
+        flex-direction: column-reverse;
+    }
+
+    .excel-level-row {
+        display: grid;
+        grid-template-columns: 34px minmax(92px, 1.4fr) 42px 52px minmax(88px, 1fr);
+        gap: 6px;
+        align-items: center;
+        min-height: 38px;
+        padding: 5px 8px;
+        border-bottom: 1px solid #e2e7eb;
+        color: #263238;
+        text-decoration: none;
+        background: #f5f6f7;
+    }
+
+    .excel-level-row:hover {
+        outline: 2px solid #1976d2;
+        outline-offset: -2px;
+        color: #263238;
+        text-decoration: none;
+    }
+
+    .excel-level-row.level-empty { background: #f5f6f7; color: #78909c; }
+    .excel-level-row.level-sowing { background: #e8eef2; }
+    .excel-level-row.level-pre_planted { background: #fff8d5; }
+    .excel-level-row.level-planted { background: #e4f4e7; }
+    .excel-level-row.level-harvest_ready { background: #ffe8c7; }
+    .excel-level-row.level-overdue { background: #ffd9d9; }
+    .excel-level-row.level-harvested { background: #eceff1; color: #607d8b; }
+    .excel-level-row.today-task {
+        box-shadow: inset 5px 0 0 #d32f2f;
+        font-weight: 700;
+    }
+
+    .excel-level-no {
+        font-weight: 800;
+        text-align: center;
+    }
+
+    .excel-crop-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    .excel-plate-count,
+    .excel-status-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .excel-date-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        justify-content: flex-end;
+    }
+
+    .excel-date-chip {
+        background: rgba(255,255,255,0.82);
+        border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 3px;
+        padding: 1px 3px;
+        font-size: 0.66rem;
+        white-space: nowrap;
+    }
+
+    .excel-today-chip {
+        background: #d32f2f;
+        color: #ffffff;
+        border-radius: 3px;
+        padding: 2px 5px;
+        font-size: 0.68rem;
+        font-weight: 800;
+    }
     
     @media (max-width: 768px) {
         .floor-plan-svg {
             height: 400px;
+        }
+
+        .excel-floor-header {
+            flex-direction: column;
+        }
+
+        .excel-floor-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .excel-level-row {
+            grid-template-columns: 30px minmax(84px, 1fr) 38px 48px;
+        }
+
+        .excel-date-list {
+            grid-column: 2 / -1;
+            justify-content: flex-start;
         }
     }
 </style>
@@ -282,7 +462,10 @@
 
     <!-- ビュー切り替えボタン -->
     <div class="view-toggle">
-        <button class="btn btn-primary" id="view-2d">
+        <button class="btn btn-primary" id="view-excel">
+            <i class="fas fa-table me-2"></i>Excel風レーン表
+        </button>
+        <button class="btn btn-outline-primary" id="view-2d">
             <i class="fas fa-map me-2"></i>2D平面図
         </button>
         <button class="btn btn-outline-primary" id="view-3d">
@@ -290,10 +473,78 @@
         </button>
     </div>
 
+    <!-- Excel風レーン表 -->
+    {% if excel_layout_rows %}
+    <div id="excel-floor-container" class="excel-floor-container">
+        <div class="excel-floor-header">
+            <div>
+                <h3 class="mb-1">
+                    <i class="fas fa-table me-2"></i>{% if selected_layout %}{{ selected_layout.name }} - {% endif %}Excel風レーン表
+                </h3>
+                <div class="text-muted small">レーンごとの段、品種、プレート数、作業日を一覧表示します。</div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap justify-content-end">
+                <span class="excel-meta-badge">左列: 14P想定</span>
+                <span class="excel-meta-badge">中/右列: 8P想定</span>
+                <span class="excel-today-chip">今日作業</span>
+            </div>
+        </div>
+
+        <div class="excel-floor-grid">
+            {% for row in excel_layout_rows %}
+                <div class="excel-row-label">配置行 {{ forloop.counter }}</div>
+                {% for plot_info in row.plots %}
+                <div class="excel-lane-card plates-{{ plot_info.plot.max_plates|default:plot_info.max_plates }}">
+                    <div class="excel-lane-header">
+                        <a href="{% url 'cultivation:plot_detail' plot_info.plot.id %}" class="excel-lane-title">
+                            {{ plot_info.shelf_number }}
+                        </a>
+                        <div class="excel-lane-meta">
+                            <span class="excel-meta-badge">{{ plot_info.plot.max_plates|default:plot_info.max_plates }}P</span>
+                            <span class="excel-meta-badge">{{ plot_info.levels }}段</span>
+                        </div>
+                    </div>
+                    <div class="excel-level-list">
+                        {% for level_info in plot_info.level_details %}
+                            {% if level_info.crop_id %}
+                            <a href="{% url 'cultivation:crop_edit' level_info.crop_id %}"
+                               class="excel-level-row level-{{ level_info.stage_status }} {% if level_info.has_today_action %}today-task{% endif %}"
+                               title="{{ plot_info.shelf_number }} {{ level_info.level }}段 {{ level_info.crop_name }}">
+                            {% else %}
+                            <a href="{% url 'cultivation:crop_create_for_level' plot_info.plot.id level_info.level %}"
+                               class="excel-level-row level-empty"
+                               title="{{ plot_info.shelf_number }} {{ level_info.level }}段に作物を追加">
+                            {% endif %}
+                                <span class="excel-level-no">{{ level_info.level }}</span>
+                                <span class="excel-crop-name">{{ level_info.crop_name }}</span>
+                                <span class="excel-plate-count">
+                                    {% if level_info.plate_count %}{{ level_info.plate_count }}P{% else %}-{% endif %}
+                                </span>
+                                <span class="excel-status-label">{{ level_info.status_label }}</span>
+                                <span class="excel-date-list">
+                                    {% for action in level_info.today_actions %}
+                                        <span class="excel-today-chip">{{ action }}</span>
+                                    {% endfor %}
+                                    {% for date_item in level_info.date_items %}
+                                        {% if date_item.date %}
+                                            <span class="excel-date-chip">{{ date_item.label }} {{ date_item.date|date:"n/j" }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
 
     <!-- 2D平面図 -->
     {% if floor_plan_data %}
-    <div id="two-d-container" class="floor-plan-container">
+    <div id="two-d-container" class="floor-plan-container" style="display: none;">
         <h3 class="mb-3">
             <i class="fas fa-map me-2"></i>{% if selected_layout %}{{ selected_layout.name }} - {% endif %}棚配置平面図
         </h3>
