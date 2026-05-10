@@ -337,6 +337,7 @@ class ShelfCropForm(forms.ModelForm):
             'expected_harvest_date',
             'harvest_date',
             'plate_count',
+            'start_plate',
             'level',
             'notes',
         ]
@@ -369,6 +370,11 @@ class ShelfCropForm(forms.ModelForm):
                 'class': 'form-control',
                 'min': '0',
                 'placeholder': '例: 10'
+            }),
+            'start_plate': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'placeholder': '例: 1'
             }),
             'level': forms.NumberInput(attrs={
                 'class': 'form-control',

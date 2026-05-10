@@ -389,6 +389,12 @@ class ShelfCrop(models.Model):
         "収穫単位", max_length=20, default="kg", blank=True,
         help_text="例: kg, 箱, 束")
     plate_count = models.PositiveIntegerField("プレート数", default=0, help_text="このレーン・段に入れているプレートの枚数")
+    start_plate = models.PositiveIntegerField(
+        "開始プレート位置",
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="棚割り表で何番目のプレート位置から配置するか"
+    )
     plot = models.ForeignKey(Plot, on_delete=models.CASCADE, related_name='shelf_crops', verbose_name="棚区画")
     organization = models.ForeignKey(
         Organization,

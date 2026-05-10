@@ -103,6 +103,110 @@
     border-color: #2e7d32;
 }
 
+/* ===== 棚割りExcel表 ===== */
+.allocation-section {
+    margin-bottom: 18px;
+}
+.allocation-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.allocation-title {
+    font-weight: 800;
+    color: #263238;
+    margin: 0;
+}
+.allocation-scroll {
+    overflow: auto;
+    max-height: 72vh;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #fff;
+}
+.allocation-table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    margin-bottom: 22px;
+    table-layout: fixed;
+}
+.allocation-table th,
+.allocation-table td {
+    border: 1px solid #222;
+    padding: 0;
+    height: 30px;
+}
+.allocation-info {
+    width: 118px;
+    min-width: 118px;
+    border-left: 0 !important;
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+    vertical-align: middle;
+    padding: 6px !important;
+    background: #fff;
+}
+.allocation-info .no {
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+.allocation-info .meta {
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+.allocation-day {
+    width: 92px;
+    min-width: 92px;
+    background: #dfb9b5;
+    color: #1976d2;
+    font-weight: 800;
+    text-align: center;
+    font-size: 1rem;
+}
+.allocation-level {
+    width: 36px;
+    min-width: 36px;
+    background: #f1d8bd;
+    text-align: center;
+    font-weight: 800;
+}
+.allocation-plate-head {
+    width: 48px;
+    min-width: 48px;
+    background: #ffffad;
+    text-align: center;
+    font-weight: 800;
+}
+.allocation-cell {
+    height: 30px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.allocation-empty { background: #ffffff; }
+.allocation-sowing { background: #e9eef2; }
+.allocation-pre_planted { background: #fff94d; }
+.allocation-planted { background: #4caf5b; color: #050505; }
+.allocation-harvest_ready { background: #f7c248; }
+.allocation-overdue { background: #ffcdd2; }
+.allocation-harvested { background: #eeeeee; color: #607d8b; }
+.allocation-today {
+    outline: 3px solid #d32f2f;
+    outline-offset: -3px;
+}
+.allocation-caption {
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
 /* ===== グリッドラッパー ===== */
 .shelf-grid-wrapper {
     overflow: auto;
@@ -656,6 +760,63 @@ tr.row-all-hidden { display: none; }
     </div>
 
     {% if plot_list %}
+    <div class="allocation-section">
+        <div class="allocation-toolbar">
+            <div>
+                <h2 class="h5 allocation-title">
+                    <i class="fas fa-table me-1"></i>棚割り表
+                </h2>
+                <div class="allocation-caption">Excel棚割りに近い、段別・プレート位置別の配置表です。</div>
+            </div>
+            <div class="allocation-caption">
+                左から右へ開始プレート位置を並べています。色は工程状態です。
+            </div>
+        </div>
+        <div class="allocation-scroll">
+            {% for table in allocation_tables %}
+            <table class="allocation-table">
+                <thead>
+                    <tr>
+                        <td class="allocation-info" rowspan="{{ table.plot.levels|add:1 }}">
+                            <div class="no">No. {{ table.index }}</div>
+                            <div class="meta">{{ table.plot.shelf_number }}</div>
+                            {% if table.plot.layout %}<div class="meta">{{ table.plot.layout.name }}</div>{% endif %}
+                            <div class="meta">{{ table.max_plates }}P / {{ table.plot.levels }}段</div>
+                        </td>
+                        <th class="allocation-day">作業日</th>
+                        <th class="allocation-level">段</th>
+                        {% for plate_no in table.plate_numbers %}
+                        <th class="allocation-plate-head">{{ plate_no }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for level_row in table.level_rows %}
+                    <tr>
+                        <td class="allocation-day"></td>
+                        <td class="allocation-level">{{ level_row.level }}</td>
+                        {% for segment in level_row.segments %}
+                            {% if segment.type == 'crop' %}
+                            <td colspan="{{ segment.span }}"
+                                class="allocation-cell allocation-{{ segment.status }} {% if segment.is_today %}allocation-today{% endif %}"
+                                onclick="openCellModalFromValues({{ table.plot.id }}, {{ level_row.level }}, {{ segment.crop_id }})"
+                                title="{{ table.plot.shelf_number }} {{ level_row.level }}段 {{ segment.text }}">
+                                {{ segment.text }}
+                            </td>
+                            {% else %}
+                            <td colspan="{{ segment.span }}" class="allocation-cell allocation-empty"
+                                onclick="openCellModalFromValues({{ table.plot.id }}, {{ level_row.level }}, null, {{ segment.start_plate }})"
+                                title="{{ table.plot.shelf_number }} {{ level_row.level }}段に追加"></td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endfor %}
+        </div>
+    </div>
+
     <div class="shelf-grid-wrapper">
         <table class="shelf-grid-table">
             <!-- 列ヘッダー -->
@@ -785,6 +946,7 @@ tr.row-all-hidden { display: none; }
         <form id="cell-modal-form" autocomplete="off">
           <input type="hidden" id="cm-plot-id">
           <input type="hidden" id="cm-level">
+          <input type="hidden" id="cm-crop-id">
           <input type="hidden" id="cm-action" value="create">
 
           <div class="mb-2">
@@ -821,6 +983,11 @@ tr.row-all-hidden { display: none; }
           <div class="mb-2">
             <label class="form-label mb-1" style="font-size:0.82rem;">プレート枚数</label>
             <input type="number" class="form-control form-control-sm" id="cm-plate-count" min="0" value="0">
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label mb-1" style="font-size:0.82rem;">開始プレート位置</label>
+            <input type="number" class="form-control form-control-sm" id="cm-start-plate" min="1" value="1">
           </div>
         </form>
       </div>
@@ -1076,6 +1243,18 @@ function cellApiUrl(plotId, level) {
     return '/cultivation/api/cell/' + plotId + '/' + level + '/';
 }
 
+function openCellModalFromValues(plotId, level, cropId, startPlate) {
+    const el = document.createElement('div');
+    el.dataset.plot = plotId;
+    el.dataset.level = level;
+    if (cropId) el.dataset.cropId = cropId;
+    if (startPlate) {
+        el.dataset.forceCreate = '1';
+        el.dataset.startPlate = startPlate;
+    }
+    openCellModal(el);
+}
+
 // セルクリック → GETでデータ取得 → モーダル表示
 function openCellModal(cellEl) {
     const plotId = cellEl.dataset.plot;
@@ -1103,7 +1282,13 @@ function openCellModal(cellEl) {
     }
     _cellModal.show();
 
-    fetch(cellApiUrl(plotId, level), {
+    const params = new URLSearchParams();
+    if (cellEl.dataset.cropId) params.set('crop_id', cellEl.dataset.cropId);
+    if (cellEl.dataset.forceCreate === '1') params.set('force_create', '1');
+    if (cellEl.dataset.startPlate) params.set('start_plate', cellEl.dataset.startPlate);
+    const url = cellApiUrl(plotId, level) + (params.toString() ? '?' + params.toString() : '');
+
+    fetch(url, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(r => r.json())
@@ -1132,6 +1317,7 @@ function populateCellModal(cell, plotId, level) {
         isEdit ? ('作物を編集 — ' + shelfLabel) : ('作物を登録 — ' + shelfLabel);
     document.getElementById('cm-plot-id').value = plotId;
     document.getElementById('cm-level').value = level;
+    document.getElementById('cm-crop-id').value = cell.crop_id || '';
     document.getElementById('cm-action').value = isEdit ? 'update' : 'create';
 
     const form = cell.crop_form || {};
@@ -1141,6 +1327,7 @@ function populateCellModal(cell, plotId, level) {
     document.getElementById('cm-planting-date').value = form.planting_date || '';
     document.getElementById('cm-expected-harvest-date').value = form.expected_harvest_date || '';
     document.getElementById('cm-plate-count').value = form.plate_count || 0;
+    document.getElementById('cm-start-plate').value = form.start_plate || cell.start_plate || 1;
 
     // 編集時のみ収穫ボタン・詳細リンクを表示
     const harvestBtn = document.getElementById('cm-harvest-btn');
@@ -1178,8 +1365,10 @@ function submitCellModal() {
 
     const payload = {
         action: action,
+        crop_id: document.getElementById('cm-crop-id').value,
         variety: variety,
         plate_count: parseInt(document.getElementById('cm-plate-count').value || 0),
+        start_plate: parseInt(document.getElementById('cm-start-plate').value || 1),
         sowing_date: document.getElementById('cm-sowing-date').value,
         pre_planting_date: document.getElementById('cm-pre-planting-date').value,
         planting_date: document.getElementById('cm-planting-date').value,
@@ -1207,7 +1396,7 @@ function submitCellModal() {
             return;
         }
         _cellModal.hide();
-        rebuildCell(_cellModalEl, res.cell);
+        window.location.reload();
     })
     .catch(function(err) {
         showModalError('通信エラー: ' + err.message);

@@ -572,45 +572,8 @@ def layout_create_simple(request):
 
 @login_required(login_url='/login/')
 def layout_detail(request, layout_id):
-    """レイアウト詳細表示 - 区画または棚区画2D/3D平面図を表示"""
-    # 組織フィルタリングを適用
-    current_organization = get_current_organization(request)
-
-    # layout_idをクエリパラメータとして設定し、plot_grid_viewを呼び出す
-    request.GET = request.GET.copy()
-    request.GET['layout'] = layout_id
-    request.GET['mode'] = 'floor_plan'
-
-    # 表示タイプを決定（棚区画を優先）
-    try:
-        layout = get_object_or_404(CultivationLayout, id=layout_id)
-
-        # 組織チェック：グローバル管理者でない場合、自組織のレイアウトのみ表示可能
-        if not is_global_admin(request.user) and current_organization:
-            if layout.organization != current_organization:
-                messages.error(request, 'このレイアウトにアクセスする権限がありません。')
-                return redirect('cultivation:cultivation_top')
-
-        plots = Plot.objects.filter(layout=layout)
-        sections = layout.sections.all()
-        
-        # URLパラメータでdisplayが指定されている場合はそれを使用
-        display_param = request.GET.get('display')
-        if display_param in ['plots', 'sections']:
-            request.GET['display'] = display_param
-        elif plots.exists():
-            # 棚区画があれば棚区画を表示
-            request.GET['display'] = 'plots'
-        elif sections.exists():
-            # 栽培区画のみがあれば栽培区画を表示
-            request.GET['display'] = 'sections'
-        else:
-            # どちらもない場合は棚区画表示
-            request.GET['display'] = 'plots'
-    except:
-        request.GET['display'] = 'plots'
-    
-    return plot_grid_view(request)
+    """レイアウト詳細表示 - 棚配置平面図ページにリダイレクト"""
+    return redirect('cultivation:plot_floor_plan_with_layout', layout_id=layout_id)
 
 @login_required(login_url='/login/')
 def layout_floor_plan(request, layout_id):
@@ -1918,18 +1881,21 @@ def plot_grid_view(request):
                     level_info['crop_name'] = crop.variety
                     level_info['planting_date'] = crop.planting_date.isoformat() if crop.planting_date else None
                     level_info['expected_harvest_date'] = crop.expected_harvest_date.isoformat() if crop.expected_harvest_date else None
-                    
+                    apply_floor_plan_crop_info(level_info, crop)
+
                     if crop.days_until_harvest() is not None:
                         level_info['days_until_harvest'] = crop.days_until_harvest()
                         level_info['progress_percentage'] = crop.growth_progress_percentage()
-                        
+
                         if crop.days_overdue() > 0:
                             level_info['status'] = 'overdue'
                         elif crop.days_until_harvest() <= 0:
                             level_info['status'] = 'harvest_ready'
                         else:
                             level_info['status'] = 'growing'
-                
+                else:
+                    apply_floor_plan_crop_info(level_info, None)
+
                 level_details.append(level_info)
             
             # SVG座標の計算（保存された位置を使用、なければデフォルト位置）
@@ -1953,6 +1919,7 @@ def plot_grid_view(request):
                 'id': plot.id,
                 'shelf_number': plot.shelf_number,
                 'levels': plot.levels,
+                'max_plates': plot.max_plates,
                 'level_details': level_details,
                 'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None,
                 'svg_x': svg_x,
@@ -1965,6 +1932,7 @@ def plot_grid_view(request):
                     'x_position': plot.x_position,
                     'y_position': plot.y_position,
                     'levels': plot.levels,
+                    'max_plates': plot.max_plates,
                     'width': plot.width,
                     'depth': plot.depth,
                     'layout_id': plot.layout_id if hasattr(plot, 'layout_id') and plot.layout_id else None
@@ -1988,7 +1956,10 @@ def plot_grid_view(request):
         except Exception as e:
             print(f"ERROR: Failed to serialize plots_floor_plan_data: {e}")
             context['plots_floor_plan_data_json'] = '{"plots":[]}'
-    
+        excel_layout_rows, excel_layout_columns = build_excel_floor_plan_rows(plots_floor_plan_data)
+        context['excel_layout_rows'] = excel_layout_rows
+        context['excel_layout_columns'] = excel_layout_columns
+
     # テンプレートを選択（平面図は統合済み）
     if view_mode == 'floor_plan':
         template_name = 'cultivation/plot_floor_plan.html'
@@ -3039,17 +3010,6 @@ def crop_create_for_level(request, plot_id, level):
         messages.error(request, f'レベル{level}は無効です。')
         return redirect('cultivation:plot_management')
     
-    # 既存の作物をチェック（収穫予定日が過去でない作物）
-    from django.utils import timezone
-    existing_crop = ShelfCrop.objects.filter(
-        plot=plot, 
-        level=level, 
-        expected_harvest_date__gt=timezone.now().date()
-    ).first()
-    if existing_crop:
-        messages.warning(request, f'レベル{level}には既に作物「{existing_crop.variety}」が存在します。')
-        return redirect('cultivation:plot_management')
-    
     if request.method == 'POST':
         crop_id = request.POST.get('crop_id')
         sowing_date = request.POST.get('sowing_date') or None
@@ -3057,12 +3017,24 @@ def crop_create_for_level(request, plot_id, level):
         planting_date = request.POST.get('planting_date') or None
         expected_harvest_date = request.POST.get('expected_harvest_date') or None
         plate_count = request.POST.get('plate_count') or 0
+        start_plate = request.POST.get('start_plate') or 1
         notes = request.POST.get('notes', '')
 
         if crop_id:
             try:
                 selected_crop = crop_queryset_for_organization(current_organization).get(id=crop_id)
                 variety = selected_crop.name
+                plate_count_int = int(plate_count)
+                start_plate_int = int(start_plate)
+
+                if plot.max_plates and start_plate_int + plate_count_int - 1 > plot.max_plates:
+                    messages.error(request, '開始位置とプレート数がレーン容量を超えています。')
+                    form_data = request.POST
+                    raise ValueError('plate range exceeds max plates')
+                if _has_plate_overlap(plot, level, start_plate_int, plate_count_int):
+                    messages.error(request, '指定したプレート範囲は既存の棚割りと重なっています。')
+                    form_data = request.POST
+                    raise ValueError('plate range overlaps')
 
                 ShelfCrop.objects.create(
                     plot=plot,
@@ -3073,13 +3045,16 @@ def crop_create_for_level(request, plot_id, level):
                     pre_planting_date=pre_planting_date,
                     planting_date=planting_date,
                     expected_harvest_date=expected_harvest_date,
-                    plate_count=int(plate_count),
+                    plate_count=plate_count_int,
+                    start_plate=start_plate_int,
                     notes=notes,
                 )
                 messages.success(request, f'作物「{variety}」を棚「{plot.shelf_number}」の{level}段に追加しました')
                 return redirect('cultivation:plot_management')
             except Crop.DoesNotExist:
                 messages.error(request, '選択された作物が見つかりません。')
+            except ValueError:
+                pass
         else:
             messages.error(request, '作物を選択してください。')
 
@@ -3729,6 +3704,130 @@ def _get_today_actions(plots, today):
     return actions
 
 
+def _build_shelf_allocation_tables(plots, today):
+    """スクショの棚割りExcelに近い、レーン別の24列棚割り表を作る"""
+    from .models import ShelfCrop
+    from collections import defaultdict
+
+    plot_list = list(plots)
+    plot_ids = [plot.id for plot in plot_list]
+    if not plot_ids:
+        return []
+
+    crops = (
+        ShelfCrop.objects
+        .filter(plot_id__in=plot_ids, harvest_date__isnull=True)
+        .select_related('plot')
+        .order_by('plot_id', 'level', 'start_plate', 'created_at')
+    )
+
+    crops_by_plot_level = defaultdict(list)
+    for crop in crops:
+        crops_by_plot_level[(crop.plot_id, crop.level)].append(crop)
+
+    status_labels = {
+        'sowing': '播',
+        'pre_planted': '仮植',
+        'planted': '定植',
+        'harvest_ready': '収穫',
+        'harvested': '収穫済',
+        'overdue': '遅延',
+        'empty': '空き',
+    }
+
+    def date_label(crop):
+        labels = []
+        if crop.pre_planting_date:
+            labels.append(f"仮{crop.pre_planting_date.month}/{crop.pre_planting_date.day}")
+        if crop.planting_date:
+            labels.append(f"定{crop.planting_date.month}/{crop.planting_date.day}")
+        if crop.expected_harvest_date:
+            labels.append(f"収{crop.expected_harvest_date.month}/{crop.expected_harvest_date.day}")
+        return '　'.join(labels)
+
+    tables = []
+    for index, plot in enumerate(plot_list, start=1):
+        max_plates = max(plot.max_plates or 24, 1)
+        plate_numbers = list(range(max_plates, 0, -1))
+        level_rows = []
+
+        for level in range(plot.levels, 0, -1):
+            level_crops = crops_by_plot_level.get((plot.id, level), [])
+            segments = []
+            cursor = 1
+
+            for crop in level_crops:
+                start = max(1, min(crop.start_plate or 1, max_plates))
+                width = max(1, min(crop.plate_count or 1, max_plates - start + 1))
+
+                if start > cursor:
+                    segments.append({
+                        'type': 'empty',
+                        'span': start - cursor,
+                        'start_plate': cursor,
+                    })
+
+                status = crop.get_growth_status()
+                if crop.days_overdue() > 0:
+                    status = 'overdue'
+                today_info = crop.is_today_action()
+
+                segments.append({
+                    'type': 'crop',
+                    'span': width,
+                    'crop': crop,
+                    'crop_id': crop.id,
+                    'status': status,
+                    'status_label': status_labels.get(status, ''),
+                    'text': f"{crop.variety}　{crop.plate_count}P　{date_label(crop)}".strip(),
+                    'is_today': today_info['any'],
+                    'today_types': [k.replace('is_', '').replace('_today', '') for k, v in today_info.items() if v and k != 'any'],
+                })
+                cursor = start + width
+
+            if cursor <= max_plates:
+                segments.append({
+                    'type': 'empty',
+                    'span': max_plates - cursor + 1,
+                    'start_plate': cursor,
+                })
+
+            level_rows.append({
+                'level': level,
+                'segments': segments,
+            })
+
+        tables.append({
+            'index': index,
+            'plot': plot,
+            'plate_numbers': plate_numbers,
+            'level_rows': level_rows,
+            'max_plates': max_plates,
+        })
+
+    return tables
+
+
+def _has_plate_overlap(plot, level, start_plate, plate_count, exclude_crop_id=None):
+    """同じレーン・段の棚割り範囲が重なるかを確認する"""
+    if plate_count <= 0:
+        return False
+    end_plate = start_plate + plate_count - 1
+    qs = ShelfCrop.objects.filter(
+        plot=plot,
+        level=level,
+        harvest_date__isnull=True,
+    )
+    if exclude_crop_id:
+        qs = qs.exclude(id=exclude_crop_id)
+    for crop in qs:
+        crop_start = crop.start_plate or 1
+        crop_end = crop_start + max(crop.plate_count or 1, 1) - 1
+        if start_plate <= crop_end and end_plate >= crop_start:
+            return True
+    return False
+
+
 @login_required(login_url='/login/')
 def shelf_grid_view(request, layout_id=None):
     """棚割りグリッド表示 - タンク別タブ、段×レーンのマス目で状態を一覧表示"""
@@ -3772,6 +3871,7 @@ def shelf_grid_view(request, layout_id=None):
 
     grid, plot_list = _build_shelf_grid(plots, today)
     today_actions = _get_today_actions(plots, today)
+    allocation_tables = _build_shelf_allocation_tables(plots, today)
 
     max_levels = max((p.levels for p in plot_list), default=0)
 
@@ -3837,6 +3937,7 @@ def shelf_grid_view(request, layout_id=None):
         'current_layout': current_layout,
         'plot_list': plot_list,
         'grid': grid,
+        'allocation_tables': allocation_tables,
         'level_range': range(1, max_levels + 1),
         'today_actions': today_actions,
         'today': today,
@@ -3978,6 +4079,7 @@ def _build_cell_data(plot, level, crop, today):
             'has_crop': False,
             'max_plates': plot.max_plates,
             'shelf_number': plot.shelf_number,
+            'start_plate': 1,
         }
 
     status = crop.get_growth_status()
@@ -3998,6 +4100,7 @@ def _build_cell_data(plot, level, crop, today):
         'crop_id': crop.id,
         'variety': crop.variety,
         'plate_count': crop.plate_count,
+        'start_plate': crop.start_plate,
         'sowing_date': fmt(crop.sowing_date),
         'pre_planting_date': fmt(crop.pre_planting_date),
         'planting_date': fmt(crop.planting_date),
@@ -4316,11 +4419,21 @@ def cell_api(request, plot_id, level):
     today = date_type.today()
 
     if request.method == 'GET':
-        crop = ShelfCrop.objects.filter(
-            plot=plot, level=level, harvest_date__isnull=True
-        ).order_by('-planting_date').first()
+        crop = None
+        if request.GET.get('force_create') != '1':
+            crop_id = request.GET.get('crop_id')
+            if crop_id:
+                crop = ShelfCrop.objects.filter(
+                    id=crop_id, plot=plot, level=level, harvest_date__isnull=True
+                ).first()
+            else:
+                crop = ShelfCrop.objects.filter(
+                    plot=plot, level=level, harvest_date__isnull=True
+                ).order_by('-planting_date').first()
 
         data = _build_cell_data(plot, level, crop, today)
+        if request.GET.get('start_plate'):
+            data['start_plate'] = request.GET.get('start_plate')
         if crop:
             # モーダルフォーム用に ISO 形式の日付も返す
             data['crop_form'] = {
@@ -4330,6 +4443,7 @@ def cell_api(request, plot_id, level):
                 'planting_date': crop.planting_date.isoformat() if crop.planting_date else '',
                 'expected_harvest_date': crop.expected_harvest_date.isoformat() if crop.expected_harvest_date else '',
                 'plate_count': crop.plate_count,
+                'start_plate': crop.start_plate,
             }
         return JsonResponse({'success': True, 'cell': data})
 
@@ -4379,6 +4493,13 @@ def cell_api(request, plot_id, level):
         return JsonResponse({'success': False, 'error': '品種名を入力してください'}, status=400)
 
     plate_count = int(body.get('plate_count') or 0)
+    start_plate = int(body.get('start_plate') or 1)
+    if start_plate < 1:
+        start_plate = 1
+    if plot.max_plates and start_plate > plot.max_plates:
+        return JsonResponse({'success': False, 'error': '開始プレート位置が最大プレート数を超えています'}, status=400)
+    if plot.max_plates and plate_count > 0 and start_plate + plate_count - 1 > plot.max_plates:
+        return JsonResponse({'success': False, 'error': '開始位置とプレート枚数がレーン容量を超えています'}, status=400)
     sowing_date = parse_date(body.get('sowing_date'))
     pre_planting_date = parse_date(body.get('pre_planting_date'))
     planting_date = parse_date(body.get('planting_date'))
@@ -4386,11 +4507,15 @@ def cell_api(request, plot_id, level):
 
     # ── 新規作成 ──
     if action == 'create':
+        if _has_plate_overlap(plot, level, start_plate, plate_count):
+            return JsonResponse({'success': False, 'error': '指定したプレート範囲は既存の棚割りと重なっています'}, status=400)
         crop = ShelfCrop(
             plot=plot,
             level=level,
             variety=variety,
+            organization=plot.organization,
             plate_count=plate_count,
+            start_plate=start_plate,
             sowing_date=sowing_date,
             pre_planting_date=pre_planting_date,
             planting_date=planting_date,
@@ -4401,13 +4526,22 @@ def cell_api(request, plot_id, level):
 
     # ── 更新 ──
     if action == 'update':
-        crop = ShelfCrop.objects.filter(
-            plot=plot, level=level, harvest_date__isnull=True
-        ).order_by('-planting_date').first()
+        crop_id = body.get('crop_id')
+        if crop_id:
+            crop = ShelfCrop.objects.filter(
+                id=crop_id, plot=plot, level=level, harvest_date__isnull=True
+            ).first()
+        else:
+            crop = ShelfCrop.objects.filter(
+                plot=plot, level=level, harvest_date__isnull=True
+            ).order_by('-planting_date').first()
         if not crop:
             return JsonResponse({'success': False, 'error': '対象の作物が見つかりません'}, status=404)
+        if _has_plate_overlap(plot, level, start_plate, plate_count, exclude_crop_id=crop.id):
+            return JsonResponse({'success': False, 'error': '指定したプレート範囲は既存の棚割りと重なっています'}, status=400)
         crop.variety = variety
         crop.plate_count = plate_count
+        crop.start_plate = start_plate
         crop.sowing_date = sowing_date
         crop.pre_planting_date = pre_planting_date
         crop.planting_date = planting_date
