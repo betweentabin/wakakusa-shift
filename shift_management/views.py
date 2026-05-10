@@ -309,6 +309,7 @@ def staff_create(request):
             # 職員以上が作成する場合は自動承認、それ以外は承認待ち
             if current_staff and current_staff.role_type in ['staff', 'manager', 'global_admin']:
                 staff.approval_status = 'approved'
+                staff.is_active = True
             else:
                 staff.approval_status = 'pending'
             staff.save()

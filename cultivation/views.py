@@ -192,6 +192,7 @@ def apply_floor_plan_crop_info(level_info, crop):
     })
     return level_info
 
+@login_required(login_url='/login/')
 def cultivation_top(request):
     """栽培計画トップページ"""
     # 組織フィルタリングを適用
@@ -293,6 +294,7 @@ def cultivation_top(request):
     }
     return render(request, 'cultivation/cultivation_top.html', context)
 
+@login_required(login_url='/login/')
 def layout_list(request):
     """栽培レイアウト一覧 → cultivation_top に統合済み"""
     return redirect('cultivation:cultivation_top')
@@ -384,6 +386,7 @@ def _layout_list_unused(request):
     }
     return render(request, 'cultivation/layout_list.html', context)
 
+@login_required(login_url='/login/')
 def layout_create(request):
     """改良されたレイアウト作成"""
     current_organization = get_current_organization(request)
@@ -562,10 +565,12 @@ def create_sections_from_template(layout, template_type):
     
     return created_count
 
+@login_required(login_url='/login/')
 def layout_create_simple(request):
     """シンプルなレイアウト作成 → layout_create に統合済み"""
     return redirect('cultivation:layout_create')
 
+@login_required(login_url='/login/')
 def layout_detail(request, layout_id):
     """レイアウト詳細表示 - 区画または棚区画2D/3D平面図を表示"""
     # 組織フィルタリングを適用
@@ -607,6 +612,7 @@ def layout_detail(request, layout_id):
     
     return plot_grid_view(request)
 
+@login_required(login_url='/login/')
 def layout_floor_plan(request, layout_id):
     """レイアウトの2D平面図表示（plot_grid_viewをラップ）"""
     # layout_idをクエリパラメータとして設定し、plot_grid_viewを呼び出す
@@ -615,6 +621,7 @@ def layout_floor_plan(request, layout_id):
     request.GET['mode'] = 'floor_plan'
     return plot_grid_view(request)
 
+@login_required(login_url='/login/')
 def plot_management(request):
     """棚区画管理の一元化ページ"""
     from .models import Plot, CultivationLayout
@@ -939,6 +946,7 @@ def plot_floor_plan_with_layout(request, layout_id):
     
     return render(request, 'cultivation/plot_floor_plan.html', context)
 
+@login_required(login_url='/login/')
 def plot_floor_plan(request):
     """棚区画の2D平面図表示"""
     from .models import Plot
@@ -1081,6 +1089,7 @@ def plot_floor_plan(request):
     
     return render(request, 'cultivation/plot_floor_plan.html', context)
 
+@login_required(login_url='/login/')
 def layout_delete(request, layout_id):
     """栽培レイアウトの削除"""
     layout = get_object_or_404(CultivationLayout, id=layout_id)
@@ -1104,6 +1113,7 @@ def layout_delete(request, layout_id):
     }
     return render(request, 'cultivation/layout_confirm_delete.html', context)
 
+@login_required(login_url='/login/')
 def section_detail(request, section_id):
     """区画詳細ページ - 棚設定も含む"""
     from .models import CultivationSection, Plot, ShelfCrop
@@ -1150,6 +1160,7 @@ def section_detail(request, section_id):
     }
     return render(request, 'cultivation/section_detail.html', context)
 
+@login_required(login_url='/login/')
 def plan_create(request, section_id):
     """栽培計画作成"""
     section = get_object_or_404(CultivationSection, id=section_id)
@@ -1173,6 +1184,7 @@ def plan_create(request, section_id):
     }
     return render(request, 'cultivation/plan_form.html', context)
 
+@login_required(login_url='/login/')
 def plan_edit(request, plan_id):
     """栽培計画編集"""
     plan = get_object_or_404(CultivationPlan, id=plan_id)
@@ -1307,6 +1319,7 @@ def section_crop_manage(request, section_id, level):
     }
     return render(request, 'cultivation/section_crop_manage.html', context)
 
+@login_required(login_url='/login/')
 def log_create(request, plan_id):
     """栽培ログ作成"""
     plan = get_object_or_404(CultivationPlan, id=plan_id)
@@ -1329,6 +1342,7 @@ def log_create(request, plan_id):
     }
     return render(request, 'cultivation/log_form.html', context)
 
+@login_required(login_url='/login/')
 def section_edit(request, section_id):
     """区画編集"""
     section = get_object_or_404(CultivationSection, id=section_id)
@@ -1349,6 +1363,7 @@ def section_edit(request, section_id):
     }
     return render(request, 'cultivation/section_form.html', context)
 
+@login_required(login_url='/login/')
 def section_delete(request, section_id):
     """区画削除"""
     section = get_object_or_404(CultivationSection, id=section_id)
@@ -1372,6 +1387,7 @@ def section_delete(request, section_id):
     }
     return render(request, 'cultivation/section_confirm_delete.html', context)
 
+@login_required(login_url='/login/')
 def section_create(request, layout_id):
     """区画作成"""
     layout = get_object_or_404(CultivationLayout, id=layout_id)
@@ -1426,6 +1442,7 @@ def section_create(request, layout_id):
     }
     return render(request, 'cultivation/section_form.html', context)
 
+@login_required(login_url='/login/')
 def bulk_section_create(request, layout_id):
     """一括区画作成"""
     layout = get_object_or_404(CultivationLayout, id=layout_id)
@@ -2256,6 +2273,7 @@ def crop_edit(request, crop_id):
     return render(request, 'cultivation/crop_form.html', context)
 
 
+@login_required(login_url='/login/')
 def visual_section_create(request, layout_id):
     """視覚的区画作成"""
     layout = get_object_or_404(CultivationLayout, id=layout_id)
@@ -2438,14 +2456,17 @@ from django.views.decorators.http import require_http_methods
 @user_passes_test(is_admin_user, login_url='/login/')
 # ===== 新しいOCRワークフロー =====
 
+@login_required(login_url='/login/')
 def layout_create_ocr_step1(request):
     """OCRレイアウト作成 - ステップ1: 画像アップロード"""
     return render(request, 'cultivation/layout_create_ocr_step1.html')
 
+@login_required(login_url='/login/')
 def layout_create_ocr_step2(request):
     """OCRレイアウト作成 - ステップ2: 画像カット"""
     return render(request, 'cultivation/layout_create_ocr_step2.html')
 
+@login_required(login_url='/login/')
 def layout_create_ocr_step3(request):
     """OCRレイアウト作成 - ステップ3: OCR読み取り"""
     return render(request, 'cultivation/layout_create_ocr_step3.html')
@@ -2722,11 +2743,13 @@ def suggest_layout_from_text(text, sections):
 
 # ===== 既存のOCRビュー =====
 
+@login_required(login_url='/login/')
 def layout_create_with_ocr(request):
     """旧OCR作成 → 新OCRワークフロー(step1)に統合済み"""
     return redirect('cultivation:layout_create_ocr_step1')
 
 
+@login_required(login_url='/login/')
 def ocr_preview(request):
     """OCR結果のプレビュー表示"""
     # 権限チェック
@@ -3706,6 +3729,7 @@ def _get_today_actions(plots, today):
     return actions
 
 
+@login_required(login_url='/login/')
 def shelf_grid_view(request, layout_id=None):
     """棚割りグリッド表示 - タンク別タブ、段×レーンのマス目で状態を一覧表示"""
     from datetime import date as date_type, timedelta
